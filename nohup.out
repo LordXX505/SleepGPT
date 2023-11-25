@@ -1,0 +1,1807 @@
+[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.
+[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.
+[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.
+[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.
+[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.
+[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.
+[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.
+[Warning] Fused window process have not been installed. Please refer to get_started.md for installation.
+WARNING - root - Changed type of config entry "data_dir" from str to DogmaticList
+WARNING - root - Changed type of config entry "lr_policy" from int to str
+WARNING - root - Changed type of config entry "mask_ratio" from int to NoneType
+WARNING - root - Changed type of config entry "pool" from str to NoneType
+WARNING - Sleep - No observers have been added to this run
+INFO - Sleep - Running command 'main'
+INFO - Sleep - Started
+[rank: 3] Global seed set to 8678
+{'extra_name': 'finetune_MASS_Spindle', 'exp_name': 'sleep', 'seed': 8678, 'precision': '16-mixed', 'mode': 'Spindledetection', 'kfold': 5, 'batch_size': 128, 'max_epoch': 100, 'max_steps': -1, 'accum_iter': 2, 'datasets': ['MASS'], 'data_dir': ['/data/data/MASS/SS2'], 'dropout': 0, 'loss_names': {'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}, 'transform_keys': {'keys': [[0, 1, 2, 3, 4, 6]], 'mode': ['shuffle']}, 'start_epoch': 0, 'num_workers': 96, 'drop_path_rate': 0.5, 'spindle': False, 'lr': 5e-05, 'blr': 1.5e-05, 'min_lr': 0, 'lr_mult': 20, 'end_lr': 0, 'warmup_lr': 0, 'warmup_steps': 0.1, 'patch_size': 200, 'output_dir': './checkpoint/2201210064/experiments', 'log_dir': './checkpoint/2201210064/experiments', 'load_path': '/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt', 'lr_policy': 'cosine', 'optim': 'adamw', 'clip_grad': False, 'weight_decay': 0.05, 'device': 'cuda', 'deepspeed': False, 'dist_on_itp': True, 'num_gpus': 8, 'num_nodes': 1, 'dist_eval': False, 'eval': False, 'fast_dev_run': 7, 'val_check_interval': 1.0, 'model_arch': 'backbone_large_patch200', 'epoch_duration': 30, 'fs': 100, 'mask_ratio': None, 'max_time_len': 1, 'random_choose_channels': 8, 'get_recall_metric': False, 'limit_val_batches': 1.0, 'limit_train_batches': 1.0, 'check_val_every_n_epoch': 1, 'time_only': False, 'fft_only': False, 'loss_function': 'l1', 'physio_settings': ['ECG'], 'shhs_settings': ['SHHS'], 'resume_during_training': None, 'use_pooling': None, 'mixup': 0, 'use_relative_pos_emb': False, 'all_time': True, 'time_size': 1, 'decoder_features': 128, 'pool': None, 'smoothing': 0.0, 'decoder_heads': 12, 'use_global_fft': False, 'use_all_label': 'all', 'split_len': 1, 'use_multiway': False, 'get_param_method': 'no_layer_decay', 'use_g_mid': False, 'local_pooling': False, 'multi_y': ['tf'], 'poly': False, 'num_encoder_layers': 2, 'layer_decay': 0.75, 'Lambda': 1.0, 'use_cb': True, 'actual_channels': None, 'kfold_test': None, 'expert': 'E2', 'IOU_th': 0.2, 'sp_prob': 0.55, 'patch_time': 20, 'mass_settings': ['MASS']}
+WARNING - root - Changed type of config entry "data_dir" from str to DogmaticList
+WARNING - root - Changed type of config entry "lr_policy" from int to str
+WARNING - root - Changed type of config entry "mask_ratio" from int to NoneType
+WARNING - root - Changed type of config entry "pool" from str to NoneType
+WARNING - Sleep - No observers have been added to this run
+/home/hwx/Sleep/main/modules/multiway_transformer.py:486: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
+INFO - Sleep - Running command 'main'
+INFO - Sleep - Started
+[rank: 0] Global seed set to 8678
+{'extra_name': 'finetune_MASS_Spindle', 'exp_name': 'sleep', 'seed': 8678, 'precision': '16-mixed', 'mode': 'Spindledetection', 'kfold': 5, 'batch_size': 128, 'max_epoch': 100, 'max_steps': -1, 'accum_iter': 2, 'datasets': ['MASS'], 'data_dir': ['/data/data/MASS/SS2'], 'dropout': 0, 'loss_names': {'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}, 'transform_keys': {'keys': [[0, 1, 2, 3, 4, 6]], 'mode': ['shuffle']}, 'start_epoch': 0, 'num_workers': 96, 'drop_path_rate': 0.5, 'spindle': False, 'lr': 5e-05, 'blr': 1.5e-05, 'min_lr': 0, 'lr_mult': 20, 'end_lr': 0, 'warmup_lr': 0, 'warmup_steps': 0.1, 'patch_size': 200, 'output_dir': './checkpoint/2201210064/experiments', 'log_dir': './checkpoint/2201210064/experiments', 'load_path': '/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt', 'lr_policy': 'cosine', 'optim': 'adamw', 'clip_grad': False, 'weight_decay': 0.05, 'device': 'cuda', 'deepspeed': False, 'dist_on_itp': True, 'num_gpus': 8, 'num_nodes': 1, 'dist_eval': False, 'eval': False, 'fast_dev_run': 7, 'val_check_interval': 1.0, 'model_arch': 'backbone_large_patch200', 'epoch_duration': 30, 'fs': 100, 'mask_ratio': None, 'max_time_len': 1, 'random_choose_channels': 8, 'get_recall_metric': False, 'limit_val_batches': 1.0, 'limit_train_batches': 1.0, 'check_val_every_n_epoch': 1, 'time_only': False, 'fft_only': False, 'loss_function': 'l1', 'physio_settings': ['ECG'], 'shhs_settings': ['SHHS'], 'resume_during_training': None, 'use_pooling': None, 'mixup': 0, 'use_relative_pos_emb': False, 'all_time': True, 'time_size': 1, 'decoder_features': 128, 'pool': None, 'smoothing': 0.0, 'decoder_heads': 12, 'use_global_fft': False, 'use_all_label': 'all', 'split_len': 1, 'use_multiway': False, 'get_param_method': 'no_layer_decay', 'use_g_mid': False, 'local_pooling': False, 'multi_y': ['tf'], 'poly': False, 'num_encoder_layers': 2, 'layer_decay': 0.75, 'Lambda': 1.0, 'use_cb': True, 'actual_channels': None, 'kfold_test': None, 'expert': 'E2', 'IOU_th': 0.2, 'sp_prob': 0.55, 'patch_time': 20, 'mass_settings': ['MASS']}
+Using k fold: now is 0
+dpr_backbone: 0.5
+drop path rate: 0.5
+/home/hwx/Sleep/main/modules/multiway_transformer.py:486: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
+dpr: [0.0, 0.04545454680919647, 0.09090909361839294, 0.13636364042758942, 0.1818181872367859, 0.22727273404598236, 0.27272725105285645, 0.3181818127632141, 0.3636363744735718, 0.40909090638160706, 0.45454543828964233, 0.5]
+choose max_time_len: 8, self.max_time_len: 120
+max_time_len: 120
+max_time_len: 120
+WARNING - root - Changed type of config entry "data_dir" from str to DogmaticList
+WARNING - root - Changed type of config entry "lr_policy" from int to str
+WARNING - root - Changed type of config entry "mask_ratio" from int to NoneType
+WARNING - root - Changed type of config entry "pool" from str to NoneType
+WARNING - Sleep - No observers have been added to this run
+max_time_len: 120
+WARNING - root - Changed type of config entry "data_dir" from str to DogmaticList
+WARNING - root - Changed type of config entry "lr_policy" from int to str
+WARNING - root - Changed type of config entry "mask_ratio" from int to NoneType
+WARNING - root - Changed type of config entry "pool" from str to NoneType
+WARNING - Sleep - No observers have been added to this run
+WARNING - root - Changed type of config entry "data_dir" from str to DogmaticList
+WARNING - root - Changed type of config entry "lr_policy" from int to str
+WARNING - root - Changed type of config entry "mask_ratio" from int to NoneType
+WARNING - root - Changed type of config entry "pool" from str to NoneType
+WARNING - Sleep - No observers have been added to this run
+INFO - Sleep - Running command 'main'
+INFO - Sleep - Started
+[rank: 6] Global seed set to 8678
+{'extra_name': 'finetune_MASS_Spindle', 'exp_name': 'sleep', 'seed': 8678, 'precision': '16-mixed', 'mode': 'Spindledetection', 'kfold': 5, 'batch_size': 128, 'max_epoch': 100, 'max_steps': -1, 'accum_iter': 2, 'datasets': ['MASS'], 'data_dir': ['/data/data/MASS/SS2'], 'dropout': 0, 'loss_names': {'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}, 'transform_keys': {'keys': [[0, 1, 2, 3, 4, 6]], 'mode': ['shuffle']}, 'start_epoch': 0, 'num_workers': 96, 'drop_path_rate': 0.5, 'spindle': False, 'lr': 5e-05, 'blr': 1.5e-05, 'min_lr': 0, 'lr_mult': 20, 'end_lr': 0, 'warmup_lr': 0, 'warmup_steps': 0.1, 'patch_size': 200, 'output_dir': './checkpoint/2201210064/experiments', 'log_dir': './checkpoint/2201210064/experiments', 'load_path': '/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt', 'lr_policy': 'cosine', 'optim': 'adamw', 'clip_grad': False, 'weight_decay': 0.05, 'device': 'cuda', 'deepspeed': False, 'dist_on_itp': True, 'num_gpus': 8, 'num_nodes': 1, 'dist_eval': False, 'eval': False, 'fast_dev_run': 7, 'val_check_interval': 1.0, 'model_arch': 'backbone_large_patch200', 'epoch_duration': 30, 'fs': 100, 'mask_ratio': None, 'max_time_len': 1, 'random_choose_channels': 8, 'get_recall_metric': False, 'limit_val_batches': 1.0, 'limit_train_batches': 1.0, 'check_val_every_n_epoch': 1, 'time_only': False, 'fft_only': False, 'loss_function': 'l1', 'physio_settings': ['ECG'], 'shhs_settings': ['SHHS'], 'resume_during_training': None, 'use_pooling': None, 'mixup': 0, 'use_relative_pos_emb': False, 'all_time': True, 'time_size': 1, 'decoder_features': 128, 'pool': None, 'smoothing': 0.0, 'decoder_heads': 12, 'use_global_fft': False, 'use_all_label': 'all', 'split_len': 1, 'use_multiway': False, 'get_param_method': 'no_layer_decay', 'use_g_mid': False, 'local_pooling': False, 'multi_y': ['tf'], 'poly': False, 'num_encoder_layers': 2, 'layer_decay': 0.75, 'Lambda': 1.0, 'use_cb': True, 'actual_channels': None, 'kfold_test': None, 'expert': 'E2', 'IOU_th': 0.2, 'sp_prob': 0.55, 'patch_time': 20, 'mass_settings': ['MASS']}
+/home/hwx/Sleep/main/modules/multiway_transformer.py:486: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
+INFO - Sleep - Running command 'main'
+INFO - Sleep - Started
+[rank: 5] Global seed set to 8678
+{'extra_name': 'finetune_MASS_Spindle', 'exp_name': 'sleep', 'seed': 8678, 'precision': '16-mixed', 'mode': 'Spindledetection', 'kfold': 5, 'batch_size': 128, 'max_epoch': 100, 'max_steps': -1, 'accum_iter': 2, 'datasets': ['MASS'], 'data_dir': ['/data/data/MASS/SS2'], 'dropout': 0, 'loss_names': {'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}, 'transform_keys': {'keys': [[0, 1, 2, 3, 4, 6]], 'mode': ['shuffle']}, 'start_epoch': 0, 'num_workers': 96, 'drop_path_rate': 0.5, 'spindle': False, 'lr': 5e-05, 'blr': 1.5e-05, 'min_lr': 0, 'lr_mult': 20, 'end_lr': 0, 'warmup_lr': 0, 'warmup_steps': 0.1, 'patch_size': 200, 'output_dir': './checkpoint/2201210064/experiments', 'log_dir': './checkpoint/2201210064/experiments', 'load_path': '/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt', 'lr_policy': 'cosine', 'optim': 'adamw', 'clip_grad': False, 'weight_decay': 0.05, 'device': 'cuda', 'deepspeed': False, 'dist_on_itp': True, 'num_gpus': 8, 'num_nodes': 1, 'dist_eval': False, 'eval': False, 'fast_dev_run': 7, 'val_check_interval': 1.0, 'model_arch': 'backbone_large_patch200', 'epoch_duration': 30, 'fs': 100, 'mask_ratio': None, 'max_time_len': 1, 'random_choose_channels': 8, 'get_recall_metric': False, 'limit_val_batches': 1.0, 'limit_train_batches': 1.0, 'check_val_every_n_epoch': 1, 'time_only': False, 'fft_only': False, 'loss_function': 'l1', 'physio_settings': ['ECG'], 'shhs_settings': ['SHHS'], 'resume_during_training': None, 'use_pooling': None, 'mixup': 0, 'use_relative_pos_emb': False, 'all_time': True, 'time_size': 1, 'decoder_features': 128, 'pool': None, 'smoothing': 0.0, 'decoder_heads': 12, 'use_global_fft': False, 'use_all_label': 'all', 'split_len': 1, 'use_multiway': False, 'get_param_method': 'no_layer_decay', 'use_g_mid': False, 'local_pooling': False, 'multi_y': ['tf'], 'poly': False, 'num_encoder_layers': 2, 'layer_decay': 0.75, 'Lambda': 1.0, 'use_cb': True, 'actual_channels': None, 'kfold_test': None, 'expert': 'E2', 'IOU_th': 0.2, 'sp_prob': 0.55, 'patch_time': 20, 'mass_settings': ['MASS']}
+/home/hwx/Sleep/main/modules/multiway_transformer.py:486: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
+max_time_len: 120
+INFO - Sleep - Running command 'main'
+INFO - Sleep - Started
+[rank: 2] Global seed set to 8678
+{'extra_name': 'finetune_MASS_Spindle', 'exp_name': 'sleep', 'seed': 8678, 'precision': '16-mixed', 'mode': 'Spindledetection', 'kfold': 5, 'batch_size': 128, 'max_epoch': 100, 'max_steps': -1, 'accum_iter': 2, 'datasets': ['MASS'], 'data_dir': ['/data/data/MASS/SS2'], 'dropout': 0, 'loss_names': {'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}, 'transform_keys': {'keys': [[0, 1, 2, 3, 4, 6]], 'mode': ['shuffle']}, 'start_epoch': 0, 'num_workers': 96, 'drop_path_rate': 0.5, 'spindle': False, 'lr': 5e-05, 'blr': 1.5e-05, 'min_lr': 0, 'lr_mult': 20, 'end_lr': 0, 'warmup_lr': 0, 'warmup_steps': 0.1, 'patch_size': 200, 'output_dir': './checkpoint/2201210064/experiments', 'log_dir': './checkpoint/2201210064/experiments', 'load_path': '/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt', 'lr_policy': 'cosine', 'optim': 'adamw', 'clip_grad': False, 'weight_decay': 0.05, 'device': 'cuda', 'deepspeed': False, 'dist_on_itp': True, 'num_gpus': 8, 'num_nodes': 1, 'dist_eval': False, 'eval': False, 'fast_dev_run': 7, 'val_check_interval': 1.0, 'model_arch': 'backbone_large_patch200', 'epoch_duration': 30, 'fs': 100, 'mask_ratio': None, 'max_time_len': 1, 'random_choose_channels': 8, 'get_recall_metric': False, 'limit_val_batches': 1.0, 'limit_train_batches': 1.0, 'check_val_every_n_epoch': 1, 'time_only': False, 'fft_only': False, 'loss_function': 'l1', 'physio_settings': ['ECG'], 'shhs_settings': ['SHHS'], 'resume_during_training': None, 'use_pooling': None, 'mixup': 0, 'use_relative_pos_emb': False, 'all_time': True, 'time_size': 1, 'decoder_features': 128, 'pool': None, 'smoothing': 0.0, 'decoder_heads': 12, 'use_global_fft': False, 'use_all_label': 'all', 'split_len': 1, 'use_multiway': False, 'get_param_method': 'no_layer_decay', 'use_g_mid': False, 'local_pooling': False, 'multi_y': ['tf'], 'poly': False, 'num_encoder_layers': 2, 'layer_decay': 0.75, 'Lambda': 1.0, 'use_cb': True, 'actual_channels': None, 'kfold_test': None, 'expert': 'E2', 'IOU_th': 0.2, 'sp_prob': 0.55, 'patch_time': 20, 'mass_settings': ['MASS']}
+/home/hwx/Sleep/main/modules/multiway_transformer.py:486: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
+WARNING - root - Changed type of config entry "data_dir" from str to DogmaticList
+WARNING - root - Changed type of config entry "lr_policy" from int to str
+WARNING - root - Changed type of config entry "mask_ratio" from int to NoneType
+WARNING - root - Changed type of config entry "pool" from str to NoneType
+WARNING - Sleep - No observers have been added to this run
+WARNING - root - Changed type of config entry "data_dir" from str to DogmaticList
+WARNING - root - Changed type of config entry "lr_policy" from int to str
+WARNING - root - Changed type of config entry "mask_ratio" from int to NoneType
+WARNING - root - Changed type of config entry "pool" from str to NoneType
+WARNING - Sleep - No observers have been added to this run
+max_time_len: 120
+INFO - Sleep - Running command 'main'
+INFO - Sleep - Started
+[rank: 4] Global seed set to 8678
+{'extra_name': 'finetune_MASS_Spindle', 'exp_name': 'sleep', 'seed': 8678, 'precision': '16-mixed', 'mode': 'Spindledetection', 'kfold': 5, 'batch_size': 128, 'max_epoch': 100, 'max_steps': -1, 'accum_iter': 2, 'datasets': ['MASS'], 'data_dir': ['/data/data/MASS/SS2'], 'dropout': 0, 'loss_names': {'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}, 'transform_keys': {'keys': [[0, 1, 2, 3, 4, 6]], 'mode': ['shuffle']}, 'start_epoch': 0, 'num_workers': 96, 'drop_path_rate': 0.5, 'spindle': False, 'lr': 5e-05, 'blr': 1.5e-05, 'min_lr': 0, 'lr_mult': 20, 'end_lr': 0, 'warmup_lr': 0, 'warmup_steps': 0.1, 'patch_size': 200, 'output_dir': './checkpoint/2201210064/experiments', 'log_dir': './checkpoint/2201210064/experiments', 'load_path': '/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt', 'lr_policy': 'cosine', 'optim': 'adamw', 'clip_grad': False, 'weight_decay': 0.05, 'device': 'cuda', 'deepspeed': False, 'dist_on_itp': True, 'num_gpus': 8, 'num_nodes': 1, 'dist_eval': False, 'eval': False, 'fast_dev_run': 7, 'val_check_interval': 1.0, 'model_arch': 'backbone_large_patch200', 'epoch_duration': 30, 'fs': 100, 'mask_ratio': None, 'max_time_len': 1, 'random_choose_channels': 8, 'get_recall_metric': False, 'limit_val_batches': 1.0, 'limit_train_batches': 1.0, 'check_val_every_n_epoch': 1, 'time_only': False, 'fft_only': False, 'loss_function': 'l1', 'physio_settings': ['ECG'], 'shhs_settings': ['SHHS'], 'resume_during_training': None, 'use_pooling': None, 'mixup': 0, 'use_relative_pos_emb': False, 'all_time': True, 'time_size': 1, 'decoder_features': 128, 'pool': None, 'smoothing': 0.0, 'decoder_heads': 12, 'use_global_fft': False, 'use_all_label': 'all', 'split_len': 1, 'use_multiway': False, 'get_param_method': 'no_layer_decay', 'use_g_mid': False, 'local_pooling': False, 'multi_y': ['tf'], 'poly': False, 'num_encoder_layers': 2, 'layer_decay': 0.75, 'Lambda': 1.0, 'use_cb': True, 'actual_channels': None, 'kfold_test': None, 'expert': 'E2', 'IOU_th': 0.2, 'sp_prob': 0.55, 'patch_time': 20, 'mass_settings': ['MASS']}
+/home/hwx/Sleep/main/modules/multiway_transformer.py:486: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
+INFO - Sleep - Running command 'main'
+INFO - Sleep - Started
+[rank: 1] Global seed set to 8678
+{'extra_name': 'finetune_MASS_Spindle', 'exp_name': 'sleep', 'seed': 8678, 'precision': '16-mixed', 'mode': 'Spindledetection', 'kfold': 5, 'batch_size': 128, 'max_epoch': 100, 'max_steps': -1, 'accum_iter': 2, 'datasets': ['MASS'], 'data_dir': ['/data/data/MASS/SS2'], 'dropout': 0, 'loss_names': {'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}, 'transform_keys': {'keys': [[0, 1, 2, 3, 4, 6]], 'mode': ['shuffle']}, 'start_epoch': 0, 'num_workers': 96, 'drop_path_rate': 0.5, 'spindle': False, 'lr': 5e-05, 'blr': 1.5e-05, 'min_lr': 0, 'lr_mult': 20, 'end_lr': 0, 'warmup_lr': 0, 'warmup_steps': 0.1, 'patch_size': 200, 'output_dir': './checkpoint/2201210064/experiments', 'log_dir': './checkpoint/2201210064/experiments', 'load_path': '/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt', 'lr_policy': 'cosine', 'optim': 'adamw', 'clip_grad': False, 'weight_decay': 0.05, 'device': 'cuda', 'deepspeed': False, 'dist_on_itp': True, 'num_gpus': 8, 'num_nodes': 1, 'dist_eval': False, 'eval': False, 'fast_dev_run': 7, 'val_check_interval': 1.0, 'model_arch': 'backbone_large_patch200', 'epoch_duration': 30, 'fs': 100, 'mask_ratio': None, 'max_time_len': 1, 'random_choose_channels': 8, 'get_recall_metric': False, 'limit_val_batches': 1.0, 'limit_train_batches': 1.0, 'check_val_every_n_epoch': 1, 'time_only': False, 'fft_only': False, 'loss_function': 'l1', 'physio_settings': ['ECG'], 'shhs_settings': ['SHHS'], 'resume_during_training': None, 'use_pooling': None, 'mixup': 0, 'use_relative_pos_emb': False, 'all_time': True, 'time_size': 1, 'decoder_features': 128, 'pool': None, 'smoothing': 0.0, 'decoder_heads': 12, 'use_global_fft': False, 'use_all_label': 'all', 'split_len': 1, 'use_multiway': False, 'get_param_method': 'no_layer_decay', 'use_g_mid': False, 'local_pooling': False, 'multi_y': ['tf'], 'poly': False, 'num_encoder_layers': 2, 'layer_decay': 0.75, 'Lambda': 1.0, 'use_cb': True, 'actual_channels': None, 'kfold_test': None, 'expert': 'E2', 'IOU_th': 0.2, 'sp_prob': 0.55, 'patch_time': 20, 'mass_settings': ['MASS']}
+/home/hwx/Sleep/main/modules/multiway_transformer.py:486: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
+max_time_len: 120
+WARNING - root - Changed type of config entry "data_dir" from str to DogmaticList
+WARNING - root - Changed type of config entry "lr_policy" from int to str
+WARNING - root - Changed type of config entry "mask_ratio" from int to NoneType
+WARNING - root - Changed type of config entry "pool" from str to NoneType
+WARNING - Sleep - No observers have been added to this run
+INFO - Sleep - Running command 'main'
+INFO - Sleep - Started
+[rank: 7] Global seed set to 8678
+{'extra_name': 'finetune_MASS_Spindle', 'exp_name': 'sleep', 'seed': 8678, 'precision': '16-mixed', 'mode': 'Spindledetection', 'kfold': 5, 'batch_size': 128, 'max_epoch': 100, 'max_steps': -1, 'accum_iter': 2, 'datasets': ['MASS'], 'data_dir': ['/data/data/MASS/SS2'], 'dropout': 0, 'loss_names': {'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}, 'transform_keys': {'keys': [[0, 1, 2, 3, 4, 6]], 'mode': ['shuffle']}, 'start_epoch': 0, 'num_workers': 96, 'drop_path_rate': 0.5, 'spindle': False, 'lr': 5e-05, 'blr': 1.5e-05, 'min_lr': 0, 'lr_mult': 20, 'end_lr': 0, 'warmup_lr': 0, 'warmup_steps': 0.1, 'patch_size': 200, 'output_dir': './checkpoint/2201210064/experiments', 'log_dir': './checkpoint/2201210064/experiments', 'load_path': '/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt', 'lr_policy': 'cosine', 'optim': 'adamw', 'clip_grad': False, 'weight_decay': 0.05, 'device': 'cuda', 'deepspeed': False, 'dist_on_itp': True, 'num_gpus': 8, 'num_nodes': 1, 'dist_eval': False, 'eval': False, 'fast_dev_run': 7, 'val_check_interval': 1.0, 'model_arch': 'backbone_large_patch200', 'epoch_duration': 30, 'fs': 100, 'mask_ratio': None, 'max_time_len': 1, 'random_choose_channels': 8, 'get_recall_metric': False, 'limit_val_batches': 1.0, 'limit_train_batches': 1.0, 'check_val_every_n_epoch': 1, 'time_only': False, 'fft_only': False, 'loss_function': 'l1', 'physio_settings': ['ECG'], 'shhs_settings': ['SHHS'], 'resume_during_training': None, 'use_pooling': None, 'mixup': 0, 'use_relative_pos_emb': False, 'all_time': True, 'time_size': 1, 'decoder_features': 128, 'pool': None, 'smoothing': 0.0, 'decoder_heads': 12, 'use_global_fft': False, 'use_all_label': 'all', 'split_len': 1, 'use_multiway': False, 'get_param_method': 'no_layer_decay', 'use_g_mid': False, 'local_pooling': False, 'multi_y': ['tf'], 'poly': False, 'num_encoder_layers': 2, 'layer_decay': 0.75, 'Lambda': 1.0, 'use_cb': True, 'actual_channels': None, 'kfold_test': None, 'expert': 'E2', 'IOU_th': 0.2, 'sp_prob': 0.55, 'patch_time': 20, 'mass_settings': ['MASS']}
+/home/hwx/Sleep/main/modules/multiway_transformer.py:486: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
+max_time_len: 120
+max_time_len: 120
+max_time_len: 120
+max_time_len: 120
+max_time_len: 120
+max_time_len: 120
+/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+Load ckpt from: /data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
+Read state dict from ckpt[state_dict]. 
+transformer.cls_token = torch.Size([1, 1, 768])
+transformer.fft_cls_token = torch.Size([1, 1, 768])
+transformer.pos_embed = torch.Size([1, 15, 768])
+transformer.cls_token_pos_embed = torch.Size([1, 1, 768])
+transformer.mask_token = torch.Size([1, 1, 768])
+transformer.channel_embed = torch.Size([1, 8, 768])
+transformer.patch_embed.proj.weight = torch.Size([6144, 1, 200])
+transformer.patch_embed.proj.bias = torch.Size([6144])
+transformer.patch_embed.fft_proj.weight = torch.Size([6144, 1, 2, 100])
+transformer.patch_embed.fft_proj.bias = torch.Size([6144])
+transformer.blocks.0.gamma_1 = torch.Size([768])
+transformer.blocks.0.gamma_2 = torch.Size([768])
+transformer.blocks.0.norm1.weight = torch.Size([768])
+transformer.blocks.0.norm1.bias = torch.Size([768])
+transformer.blocks.0.attn.q_bias = torch.Size([768])
+transformer.blocks.0.attn.v_bias = torch.Size([768])
+transformer.blocks.0.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.0.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.0.attn.proj.bias = torch.Size([768])
+transformer.blocks.0.norm2_time.weight = torch.Size([768])
+transformer.blocks.0.norm2_time.bias = torch.Size([768])
+transformer.blocks.0.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.0.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.0.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.0.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.0.norm2_fft.weight = torch.Size([768])
+transformer.blocks.0.norm2_fft.bias = torch.Size([768])
+transformer.blocks.0.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.0.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.0.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.0.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.1.gamma_1 = torch.Size([768])
+transformer.blocks.1.gamma_2 = torch.Size([768])
+transformer.blocks.1.norm1.weight = torch.Size([768])
+transformer.blocks.1.norm1.bias = torch.Size([768])
+transformer.blocks.1.attn.q_bias = torch.Size([768])
+transformer.blocks.1.attn.v_bias = torch.Size([768])
+transformer.blocks.1.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.1.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.1.attn.proj.bias = torch.Size([768])
+transformer.blocks.1.norm2_time.weight = torch.Size([768])
+transformer.blocks.1.norm2_time.bias = torch.Size([768])
+transformer.blocks.1.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.1.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.1.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.1.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.1.norm2_fft.weight = torch.Size([768])
+transformer.blocks.1.norm2_fft.bias = torch.Size([768])
+transformer.blocks.1.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.1.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.1.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.1.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.2.gamma_1 = torch.Size([768])
+transformer.blocks.2.gamma_2 = torch.Size([768])
+transformer.blocks.2.norm1.weight = torch.Size([768])
+transformer.blocks.2.norm1.bias = torch.Size([768])
+transformer.blocks.2.attn.q_bias = torch.Size([768])
+transformer.blocks.2.attn.v_bias = torch.Size([768])
+transformer.blocks.2.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.2.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.2.attn.proj.bias = torch.Size([768])
+transformer.blocks.2.norm2_time.weight = torch.Size([768])
+transformer.blocks.2.norm2_time.bias = torch.Size([768])
+transformer.blocks.2.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.2.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.2.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.2.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.2.norm2_fft.weight = torch.Size([768])
+transformer.blocks.2.norm2_fft.bias = torch.Size([768])
+transformer.blocks.2.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.2.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.2.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.2.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.3.gamma_1 = torch.Size([768])
+transformer.blocks.3.gamma_2 = torch.Size([768])
+transformer.blocks.3.norm1.weight = torch.Size([768])
+transformer.blocks.3.norm1.bias = torch.Size([768])
+transformer.blocks.3.attn.q_bias = torch.Size([768])
+transformer.blocks.3.attn.v_bias = torch.Size([768])
+transformer.blocks.3.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.3.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.3.attn.proj.bias = torch.Size([768])
+transformer.blocks.3.norm2_time.weight = torch.Size([768])
+transformer.blocks.3.norm2_time.bias = torch.Size([768])
+transformer.blocks.3.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.3.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.3.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.3.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.3.norm2_fft.weight = torch.Size([768])
+transformer.blocks.3.norm2_fft.bias = torch.Size([768])
+transformer.blocks.3.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.3.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.3.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.3.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.4.gamma_1 = torch.Size([768])
+transformer.blocks.4.gamma_2 = torch.Size([768])
+transformer.blocks.4.norm1.weight = torch.Size([768])
+transformer.blocks.4.norm1.bias = torch.Size([768])
+transformer.blocks.4.attn.q_bias = torch.Size([768])
+transformer.blocks.4.attn.v_bias = torch.Size([768])
+transformer.blocks.4.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.4.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.4.attn.proj.bias = torch.Size([768])
+transformer.blocks.4.norm2_time.weight = torch.Size([768])
+transformer.blocks.4.norm2_time.bias = torch.Size([768])
+transformer.blocks.4.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.4.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.4.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.4.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.4.norm2_fft.weight = torch.Size([768])
+transformer.blocks.4.norm2_fft.bias = torch.Size([768])
+transformer.blocks.4.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.4.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.4.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.4.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.5.gamma_1 = torch.Size([768])
+transformer.blocks.5.gamma_2 = torch.Size([768])
+transformer.blocks.5.norm1.weight = torch.Size([768])
+transformer.blocks.5.norm1.bias = torch.Size([768])
+transformer.blocks.5.attn.q_bias = torch.Size([768])
+transformer.blocks.5.attn.v_bias = torch.Size([768])
+transformer.blocks.5.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.5.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.5.attn.proj.bias = torch.Size([768])
+transformer.blocks.5.norm2_time.weight = torch.Size([768])
+transformer.blocks.5.norm2_time.bias = torch.Size([768])
+transformer.blocks.5.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.5.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.5.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.5.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.5.norm2_fft.weight = torch.Size([768])
+transformer.blocks.5.norm2_fft.bias = torch.Size([768])
+transformer.blocks.5.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.5.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.5.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.5.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.6.gamma_1 = torch.Size([768])
+transformer.blocks.6.gamma_2 = torch.Size([768])
+transformer.blocks.6.norm1.weight = torch.Size([768])
+transformer.blocks.6.norm1.bias = torch.Size([768])
+transformer.blocks.6.attn.q_bias = torch.Size([768])
+transformer.blocks.6.attn.v_bias = torch.Size([768])
+transformer.blocks.6.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.6.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.6.attn.proj.bias = torch.Size([768])
+transformer.blocks.6.norm2_time.weight = torch.Size([768])
+transformer.blocks.6.norm2_time.bias = torch.Size([768])
+transformer.blocks.6.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.6.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.6.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.6.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.6.norm2_fft.weight = torch.Size([768])
+transformer.blocks.6.norm2_fft.bias = torch.Size([768])
+transformer.blocks.6.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.6.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.6.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.6.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.7.gamma_1 = torch.Size([768])
+transformer.blocks.7.gamma_2 = torch.Size([768])
+transformer.blocks.7.norm1.weight = torch.Size([768])
+transformer.blocks.7.norm1.bias = torch.Size([768])
+transformer.blocks.7.attn.q_bias = torch.Size([768])
+transformer.blocks.7.attn.v_bias = torch.Size([768])
+transformer.blocks.7.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.7.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.7.attn.proj.bias = torch.Size([768])
+transformer.blocks.7.norm2_time.weight = torch.Size([768])
+transformer.blocks.7.norm2_time.bias = torch.Size([768])
+transformer.blocks.7.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.7.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.7.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.7.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.7.norm2_fft.weight = torch.Size([768])
+transformer.blocks.7.norm2_fft.bias = torch.Size([768])
+transformer.blocks.7.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.7.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.7.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.7.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.8.gamma_1 = torch.Size([768])
+transformer.blocks.8.gamma_2 = torch.Size([768])
+transformer.blocks.8.norm1.weight = torch.Size([768])
+transformer.blocks.8.norm1.bias = torch.Size([768])
+transformer.blocks.8.attn.q_bias = torch.Size([768])
+transformer.blocks.8.attn.v_bias = torch.Size([768])
+transformer.blocks.8.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.8.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.8.attn.proj.bias = torch.Size([768])
+transformer.blocks.8.norm2_time.weight = torch.Size([768])
+transformer.blocks.8.norm2_time.bias = torch.Size([768])
+transformer.blocks.8.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.8.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.8.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.8.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.8.norm2_fft.weight = torch.Size([768])
+transformer.blocks.8.norm2_fft.bias = torch.Size([768])
+transformer.blocks.8.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.8.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.8.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.8.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.9.gamma_1 = torch.Size([768])
+transformer.blocks.9.gamma_2 = torch.Size([768])
+transformer.blocks.9.norm1.weight = torch.Size([768])
+transformer.blocks.9.norm1.bias = torch.Size([768])
+transformer.blocks.9.attn.q_bias = torch.Size([768])
+transformer.blocks.9.attn.v_bias = torch.Size([768])
+transformer.blocks.9.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.9.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.9.attn.proj.bias = torch.Size([768])
+transformer.blocks.9.norm2_time.weight = torch.Size([768])
+transformer.blocks.9.norm2_time.bias = torch.Size([768])
+transformer.blocks.9.mlp_time.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.9.mlp_time.fc1.bias = torch.Size([3072])
+transformer.blocks.9.mlp_time.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.9.mlp_time.fc2.bias = torch.Size([768])
+transformer.blocks.9.norm2_fft.weight = torch.Size([768])
+transformer.blocks.9.norm2_fft.bias = torch.Size([768])
+transformer.blocks.9.mlp_fft.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.9.mlp_fft.fc1.bias = torch.Size([3072])
+transformer.blocks.9.mlp_fft.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.9.mlp_fft.fc2.bias = torch.Size([768])
+transformer.blocks.10.gamma_1 = torch.Size([768])
+transformer.blocks.10.gamma_2 = torch.Size([768])
+transformer.blocks.10.norm1.weight = torch.Size([768])
+transformer.blocks.10.norm1.bias = torch.Size([768])
+transformer.blocks.10.attn.q_bias = torch.Size([768])
+transformer.blocks.10.attn.v_bias = torch.Size([768])
+transformer.blocks.10.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.10.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.10.attn.proj.bias = torch.Size([768])
+transformer.blocks.10.mlp_tf.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.10.mlp_tf.fc1.bias = torch.Size([3072])
+transformer.blocks.10.mlp_tf.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.10.mlp_tf.fc2.bias = torch.Size([768])
+transformer.blocks.10.norm2_tf.weight = torch.Size([768])
+transformer.blocks.10.norm2_tf.bias = torch.Size([768])
+transformer.blocks.11.gamma_1 = torch.Size([768])
+transformer.blocks.11.gamma_2 = torch.Size([768])
+transformer.blocks.11.norm1.weight = torch.Size([768])
+transformer.blocks.11.norm1.bias = torch.Size([768])
+transformer.blocks.11.attn.q_bias = torch.Size([768])
+transformer.blocks.11.attn.v_bias = torch.Size([768])
+transformer.blocks.11.attn.qkv.weight = torch.Size([2304, 768])
+transformer.blocks.11.attn.proj.weight = torch.Size([768, 768])
+transformer.blocks.11.attn.proj.bias = torch.Size([768])
+transformer.blocks.11.mlp_tf.fc1.weight = torch.Size([3072, 768])
+transformer.blocks.11.mlp_tf.fc1.bias = torch.Size([3072])
+transformer.blocks.11.mlp_tf.fc2.weight = torch.Size([768, 3072])
+transformer.blocks.11.mlp_tf.fc2.bias = torch.Size([768])
+transformer.blocks.11.norm2_tf.weight = torch.Size([768])
+transformer.blocks.11.norm2_tf.bias = torch.Size([768])
+transformer.norm.weight = torch.Size([768])
+transformer.norm.bias = torch.Size([768])
+token_type_embeddings.weight = torch.Size([2, 768])
+Masked_docoder.decoder.weight = torch.Size([1600, 768, 1])
+Masked_docoder.decoder.bias = torch.Size([1600])
+Masked_docoder_fft.decoder.weight = torch.Size([1600, 768, 1])
+Masked_docoder_fft.decoder.bias = torch.Size([1600])
+{'FpFn': 1, 'CrossEntropy': 0, 'mtm': 0, 'itc': 0, 'itm': 0}
+missing_keys: ['spindle_pred_proj.decoder.weight', 'spindle_pred_proj.decoder.bias']
+unexpected_keys: ['Masked_docoder.decoder.weight', 'Masked_docoder.decoder.bias', 'Masked_docoder_fft.decoder.weight', 'Masked_docoder_fft.decoder.bias', 'transformer.mask_token']
+logger_path: ./checkpoint/2201210064/experiments
+Using 16bit Automatic Mixed Precision (AMP)
+Trainer already configured with model summary callbacks: [<class 'lightning.pytorch.callbacks.model_summary.ModelSummary'>]. Skipping setting a default `ModelSummary` callback.
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+`Trainer(limit_train_batches=1.0)` was configured so 100% of the batches per epoch will be used..
+`Trainer(limit_val_batches=1.0)` was configured so 100% of the batches will be used..
+`Trainer(val_check_interval=1.0)` was configured so validation will run at the end of the training epoch..
+transformer.cls_token	False	torch.Size([1, 1, 768])
+transformer.fft_cls_token	False	torch.Size([1, 1, 768])
+transformer.pos_embed	False	torch.Size([1, 15, 768])
+transformer.cls_token_pos_embed	False	torch.Size([1, 1, 768])
+transformer.channel_embed	False	torch.Size([1, 8, 768])
+transformer.patch_embed.proj.weight	False	torch.Size([6144, 1, 200])
+transformer.patch_embed.proj.bias	False	torch.Size([6144])
+transformer.patch_embed.fft_proj.weight	False	torch.Size([6144, 1, 2, 100])
+transformer.patch_embed.fft_proj.bias	False	torch.Size([6144])
+transformer.blocks.0.gamma_1	False	torch.Size([768])
+transformer.blocks.0.gamma_2	False	torch.Size([768])
+transformer.blocks.0.norm1.weight	False	torch.Size([768])
+transformer.blocks.0.norm1.bias	False	torch.Size([768])
+transformer.blocks.0.attn.q_bias	False	torch.Size([768])
+transformer.blocks.0.attn.v_bias	False	torch.Size([768])
+transformer.blocks.0.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.0.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.0.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.0.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.0.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.0.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.0.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.0.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.0.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.0.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.0.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.0.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.0.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.0.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.0.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.1.gamma_1	False	torch.Size([768])
+transformer.blocks.1.gamma_2	False	torch.Size([768])
+transformer.blocks.1.norm1.weight	False	torch.Size([768])
+transformer.blocks.1.norm1.bias	False	torch.Size([768])
+transformer.blocks.1.attn.q_bias	False	torch.Size([768])
+transformer.blocks.1.attn.v_bias	False	torch.Size([768])
+transformer.blocks.1.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.1.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.1.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.1.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.1.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.1.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.1.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.1.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.1.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.1.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.1.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.1.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.1.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.1.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.1.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.2.gamma_1	False	torch.Size([768])
+transformer.blocks.2.gamma_2	False	torch.Size([768])
+transformer.blocks.2.norm1.weight	False	torch.Size([768])
+transformer.blocks.2.norm1.bias	False	torch.Size([768])
+transformer.blocks.2.attn.q_bias	False	torch.Size([768])
+transformer.blocks.2.attn.v_bias	False	torch.Size([768])
+transformer.blocks.2.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.2.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.2.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.2.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.2.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.2.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.2.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.2.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.2.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.2.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.2.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.2.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.2.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.2.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.2.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.3.gamma_1	False	torch.Size([768])
+transformer.blocks.3.gamma_2	False	torch.Size([768])
+transformer.blocks.3.norm1.weight	False	torch.Size([768])
+transformer.blocks.3.norm1.bias	False	torch.Size([768])
+transformer.blocks.3.attn.q_bias	False	torch.Size([768])
+transformer.blocks.3.attn.v_bias	False	torch.Size([768])
+transformer.blocks.3.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.3.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.3.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.3.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.3.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.3.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.3.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.3.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.3.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.3.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.3.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.3.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.3.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.3.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.3.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.4.gamma_1	False	torch.Size([768])
+transformer.blocks.4.gamma_2	False	torch.Size([768])
+transformer.blocks.4.norm1.weight	False	torch.Size([768])
+transformer.blocks.4.norm1.bias	False	torch.Size([768])
+transformer.blocks.4.attn.q_bias	False	torch.Size([768])
+transformer.blocks.4.attn.v_bias	False	torch.Size([768])
+transformer.blocks.4.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.4.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.4.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.4.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.4.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.4.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.4.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.4.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.4.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.4.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.4.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.4.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.4.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.4.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.4.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.5.gamma_1	False	torch.Size([768])
+transformer.blocks.5.gamma_2	False	torch.Size([768])
+transformer.blocks.5.norm1.weight	False	torch.Size([768])
+transformer.blocks.5.norm1.bias	False	torch.Size([768])
+transformer.blocks.5.attn.q_bias	False	torch.Size([768])
+transformer.blocks.5.attn.v_bias	False	torch.Size([768])
+transformer.blocks.5.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.5.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.5.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.5.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.5.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.5.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.5.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.5.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.5.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.5.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.5.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.5.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.5.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.5.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.5.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.6.gamma_1	False	torch.Size([768])
+transformer.blocks.6.gamma_2	False	torch.Size([768])
+transformer.blocks.6.norm1.weight	False	torch.Size([768])
+transformer.blocks.6.norm1.bias	False	torch.Size([768])
+transformer.blocks.6.attn.q_bias	False	torch.Size([768])
+transformer.blocks.6.attn.v_bias	False	torch.Size([768])
+transformer.blocks.6.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.6.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.6.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.6.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.6.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.6.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.6.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.6.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.6.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.6.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.6.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.6.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.6.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.6.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.6.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.7.gamma_1	False	torch.Size([768])
+transformer.blocks.7.gamma_2	False	torch.Size([768])
+transformer.blocks.7.norm1.weight	False	torch.Size([768])
+transformer.blocks.7.norm1.bias	False	torch.Size([768])
+transformer.blocks.7.attn.q_bias	False	torch.Size([768])
+transformer.blocks.7.attn.v_bias	False	torch.Size([768])
+transformer.blocks.7.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.7.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.7.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.7.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.7.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.7.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.7.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.7.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.7.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.7.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.7.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.7.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.7.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.7.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.7.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.8.gamma_1	False	torch.Size([768])
+transformer.blocks.8.gamma_2	False	torch.Size([768])
+transformer.blocks.8.norm1.weight	False	torch.Size([768])
+transformer.blocks.8.norm1.bias	False	torch.Size([768])
+transformer.blocks.8.attn.q_bias	False	torch.Size([768])
+transformer.blocks.8.attn.v_bias	False	torch.Size([768])
+transformer.blocks.8.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.8.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.8.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.8.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.8.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.8.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.8.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.8.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.8.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.8.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.8.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.8.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.8.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.8.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.8.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.9.gamma_1	False	torch.Size([768])
+transformer.blocks.9.gamma_2	False	torch.Size([768])
+transformer.blocks.9.norm1.weight	False	torch.Size([768])
+transformer.blocks.9.norm1.bias	False	torch.Size([768])
+transformer.blocks.9.attn.q_bias	False	torch.Size([768])
+transformer.blocks.9.attn.v_bias	False	torch.Size([768])
+transformer.blocks.9.attn.qkv.weight	False	torch.Size([2304, 768])
+transformer.blocks.9.attn.proj.weight	False	torch.Size([768, 768])
+transformer.blocks.9.attn.proj.bias	False	torch.Size([768])
+transformer.blocks.9.norm2_time.weight	False	torch.Size([768])
+transformer.blocks.9.norm2_time.bias	False	torch.Size([768])
+transformer.blocks.9.mlp_time.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.9.mlp_time.fc1.bias	False	torch.Size([3072])
+transformer.blocks.9.mlp_time.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.9.mlp_time.fc2.bias	False	torch.Size([768])
+transformer.blocks.9.norm2_fft.weight	False	torch.Size([768])
+transformer.blocks.9.norm2_fft.bias	False	torch.Size([768])
+transformer.blocks.9.mlp_fft.fc1.weight	False	torch.Size([3072, 768])
+transformer.blocks.9.mlp_fft.fc1.bias	False	torch.Size([3072])
+transformer.blocks.9.mlp_fft.fc2.weight	False	torch.Size([768, 3072])
+transformer.blocks.9.mlp_fft.fc2.bias	False	torch.Size([768])
+transformer.blocks.10.gamma_1	True	torch.Size([768])
+transformer.blocks.10.gamma_2	True	torch.Size([768])
+transformer.blocks.10.norm1.weight	True	torch.Size([768])
+transformer.blocks.10.norm1.bias	True	torch.Size([768])
+transformer.blocks.10.attn.q_bias	True	torch.Size([768])
+transformer.blocks.10.attn.v_bias	True	torch.Size([768])
+transformer.blocks.10.attn.qkv.weight	True	torch.Size([2304, 768])
+transformer.blocks.10.attn.proj.weight	True	torch.Size([768, 768])
+transformer.blocks.10.attn.proj.bias	True	torch.Size([768])
+transformer.blocks.10.mlp_tf.fc1.weight	True	torch.Size([3072, 768])
+transformer.blocks.10.mlp_tf.fc1.bias	True	torch.Size([3072])
+transformer.blocks.10.mlp_tf.fc2.weight	True	torch.Size([768, 3072])
+transformer.blocks.10.mlp_tf.fc2.bias	True	torch.Size([768])
+transformer.blocks.10.norm2_tf.weight	True	torch.Size([768])
+transformer.blocks.10.norm2_tf.bias	True	torch.Size([768])
+transformer.blocks.11.gamma_1	True	torch.Size([768])
+transformer.blocks.11.gamma_2	True	torch.Size([768])
+transformer.blocks.11.norm1.weight	True	torch.Size([768])
+transformer.blocks.11.norm1.bias	True	torch.Size([768])
+transformer.blocks.11.attn.q_bias	True	torch.Size([768])
+transformer.blocks.11.attn.v_bias	True	torch.Size([768])
+transformer.blocks.11.attn.qkv.weight	True	torch.Size([2304, 768])
+transformer.blocks.11.attn.proj.weight	True	torch.Size([768, 768])
+transformer.blocks.11.attn.proj.bias	True	torch.Size([768])
+transformer.blocks.11.mlp_tf.fc1.weight	True	torch.Size([3072, 768])
+transformer.blocks.11.mlp_tf.fc1.bias	True	torch.Size([3072])
+transformer.blocks.11.mlp_tf.fc2.weight	True	torch.Size([768, 3072])
+transformer.blocks.11.mlp_tf.fc2.bias	True	torch.Size([768])
+transformer.blocks.11.norm2_tf.weight	True	torch.Size([768])
+transformer.blocks.11.norm2_tf.bias	True	torch.Size([768])
+transformer.norm.weight	True	torch.Size([768])
+transformer.norm.bias	True	torch.Size([768])
+token_type_embeddings.weight	False	torch.Size([2, 768])
+spindle_pred_proj.decoder.weight	True	torch.Size([400, 1536, 1])
+spindle_pred_proj.decoder.bias	True	torch.Size([400])
+[rank: 3] Global seed set to 8678
+Initializing distributed: GLOBAL_RANK: 3, MEMBER: 4/8
+[rank: 0] Global seed set to 8678
+Initializing distributed: GLOBAL_RANK: 0, MEMBER: 1/8
+INFO - torch.distributed.distributed_c10d - Added key: store_based_barrier_key:1 to store for rank: 3
+INFO - torch.distributed.distributed_c10d - Added key: store_based_barrier_key:1 to store for rank: 0
+[rank: 6] Global seed set to 8678
+Initializing distributed: GLOBAL_RANK: 6, MEMBER: 7/8
+[rank: 2] Global seed set to 8678
+Initializing distributed: GLOBAL_RANK: 2, MEMBER: 3/8
+[rank: 5] Global seed set to 8678
+Initializing distributed: GLOBAL_RANK: 5, MEMBER: 6/8
+INFO - torch.distributed.distributed_c10d - Added key: store_based_barrier_key:1 to store for rank: 6
+INFO - torch.distributed.distributed_c10d - Added key: store_based_barrier_key:1 to store for rank: 2
+[rank: 4] Global seed set to 8678
+INFO - torch.distributed.distributed_c10d - Added key: store_based_barrier_key:1 to store for rank: 5
+Initializing distributed: GLOBAL_RANK: 4, MEMBER: 5/8
+INFO - torch.distributed.distributed_c10d - Added key: store_based_barrier_key:1 to store for rank: 4
+[rank: 1] Global seed set to 8678
+Initializing distributed: GLOBAL_RANK: 1, MEMBER: 2/8
+INFO - torch.distributed.distributed_c10d - Added key: store_based_barrier_key:1 to store for rank: 1
+[rank: 7] Global seed set to 8678
+Initializing distributed: GLOBAL_RANK: 7, MEMBER: 8/8
+INFO - torch.distributed.distributed_c10d - Added key: store_based_barrier_key:1 to store for rank: 7
+INFO - torch.distributed.distributed_c10d - Rank 7: Completed store-based barrier for key:store_based_barrier_key:1 with 8 nodes.
+INFO - torch.distributed.distributed_c10d - Rank 0: Completed store-based barrier for key:store_based_barrier_key:1 with 8 nodes.
+----------------------------------------------------------------------------------------------------
+distributed_backend=nccl
+All distributed processes registered. Starting with 8 processes
+----------------------------------------------------------------------------------------------------
+
+INFO - torch.distributed.distributed_c10d - Rank 4: Completed store-based barrier for key:store_based_barrier_key:1 with 8 nodes.
+INFO - torch.distributed.distributed_c10d - Rank 2: Completed store-based barrier for key:store_based_barrier_key:1 with 8 nodes.
+INFO - torch.distributed.distributed_c10d - Rank 5: Completed store-based barrier for key:store_based_barrier_key:1 with 8 nodes.
+INFO - torch.distributed.distributed_c10d - Rank 3: Completed store-based barrier for key:store_based_barrier_key:1 with 8 nodes.
+INFO - torch.distributed.distributed_c10d - Rank 1: Completed store-based barrier for key:store_based_barrier_key:1 with 8 nodes.
+INFO - torch.distributed.distributed_c10d - Rank 6: Completed store-based barrier for key:store_based_barrier_key:1 with 8 nodes.
+VM-0-3-centos:20219:20219 [0] NCCL INFO Bootstrap : Using eth0:172.17.0.3<0>
+VM-0-3-centos:20219:20219 [0] NCCL INFO NET/Plugin : No plugin found (libnccl-net.so), using internal implementation
+VM-0-3-centos:20219:20219 [0] NCCL INFO cudaDriverVersion 12000
+NCCL version 2.14.3+cuda11.7
+VM-0-3-centos:20225:20225 [3] NCCL INFO cudaDriverVersion 12000
+VM-0-3-centos:20226:20226 [4] NCCL INFO cudaDriverVersion 12000
+VM-0-3-centos:20220:20220 [1] NCCL INFO cudaDriverVersion 12000
+VM-0-3-centos:20229:20229 [6] NCCL INFO cudaDriverVersion 12000
+VM-0-3-centos:20231:20231 [7] NCCL INFO cudaDriverVersion 12000
+VM-0-3-centos:20219:20604 [0] NCCL INFO NCCL_IB_DISABLE set by environment to 0.
+VM-0-3-centos:20227:20227 [5] NCCL INFO cudaDriverVersion 12000
+VM-0-3-centos:20223:20223 [2] NCCL INFO cudaDriverVersion 12000
+VM-0-3-centos:20219:20604 [0] NCCL INFO NET/IB : Using [0]mlx5_bond_0:1/RoCE [RO]; OOB eth0:172.17.0.3<0>
+VM-0-3-centos:20219:20604 [0] NCCL INFO Using network IB
+VM-0-3-centos:20226:20226 [4] NCCL INFO Bootstrap : Using eth0:172.17.0.3<0>
+VM-0-3-centos:20226:20226 [4] NCCL INFO NET/Plugin : No plugin found (libnccl-net.so), using internal implementation
+VM-0-3-centos:20225:20225 [3] NCCL INFO Bootstrap : Using eth0:172.17.0.3<0>
+VM-0-3-centos:20225:20225 [3] NCCL INFO NET/Plugin : No plugin found (libnccl-net.so), using internal implementation
+VM-0-3-centos:20229:20229 [6] NCCL INFO Bootstrap : Using eth0:172.17.0.3<0>
+VM-0-3-centos:20229:20229 [6] NCCL INFO NET/Plugin : No plugin found (libnccl-net.so), using internal implementation
+VM-0-3-centos:20231:20231 [7] NCCL INFO Bootstrap : Using eth0:172.17.0.3<0>
+VM-0-3-centos:20231:20231 [7] NCCL INFO NET/Plugin : No plugin found (libnccl-net.so), using internal implementation
+VM-0-3-centos:20220:20220 [1] NCCL INFO Bootstrap : Using eth0:172.17.0.3<0>
+VM-0-3-centos:20220:20220 [1] NCCL INFO NET/Plugin : No plugin found (libnccl-net.so), using internal implementation
+VM-0-3-centos:20227:20227 [5] NCCL INFO Bootstrap : Using eth0:172.17.0.3<0>
+VM-0-3-centos:20227:20227 [5] NCCL INFO NET/Plugin : No plugin found (libnccl-net.so), using internal implementation
+VM-0-3-centos:20223:20223 [2] NCCL INFO Bootstrap : Using eth0:172.17.0.3<0>
+VM-0-3-centos:20223:20223 [2] NCCL INFO NET/Plugin : No plugin found (libnccl-net.so), using internal implementation
+VM-0-3-centos:20226:20614 [4] NCCL INFO NCCL_IB_DISABLE set by environment to 0.
+VM-0-3-centos:20225:20615 [3] NCCL INFO NCCL_IB_DISABLE set by environment to 0.
+VM-0-3-centos:20229:20616 [6] NCCL INFO NCCL_IB_DISABLE set by environment to 0.
+VM-0-3-centos:20231:20617 [7] NCCL INFO NCCL_IB_DISABLE set by environment to 0.
+VM-0-3-centos:20220:20618 [1] NCCL INFO NCCL_IB_DISABLE set by environment to 0.
+VM-0-3-centos:20227:20621 [5] NCCL INFO NCCL_IB_DISABLE set by environment to 0.
+VM-0-3-centos:20223:20622 [2] NCCL INFO NCCL_IB_DISABLE set by environment to 0.
+VM-0-3-centos:20220:20618 [1] NCCL INFO NET/IB : Using [0]mlx5_bond_0:1/RoCE [RO]; OOB eth0:172.17.0.3<0>
+VM-0-3-centos:20220:20618 [1] NCCL INFO Using network IB
+VM-0-3-centos:20229:20616 [6] NCCL INFO NET/IB : Using [0]mlx5_bond_0:1/RoCE [RO]; OOB eth0:172.17.0.3<0>
+VM-0-3-centos:20231:20617 [7] NCCL INFO NET/IB : Using [0]mlx5_bond_0:1/RoCE [RO]; OOB eth0:172.17.0.3<0>
+VM-0-3-centos:20229:20616 [6] NCCL INFO Using network IB
+VM-0-3-centos:20231:20617 [7] NCCL INFO Using network IB
+VM-0-3-centos:20227:20621 [5] NCCL INFO NET/IB : Using [0]mlx5_bond_0:1/RoCE [RO]; OOB eth0:172.17.0.3<0>
+VM-0-3-centos:20227:20621 [5] NCCL INFO Using network IB
+VM-0-3-centos:20225:20615 [3] NCCL INFO NET/IB : Using [0]mlx5_bond_0:1/RoCE [RO]; OOB eth0:172.17.0.3<0>
+VM-0-3-centos:20226:20614 [4] NCCL INFO NET/IB : Using [0]mlx5_bond_0:1/RoCE [RO]; OOB eth0:172.17.0.3<0>
+VM-0-3-centos:20225:20615 [3] NCCL INFO Using network IB
+VM-0-3-centos:20226:20614 [4] NCCL INFO Using network IB
+VM-0-3-centos:20223:20622 [2] NCCL INFO NET/IB : Using [0]mlx5_bond_0:1/RoCE [RO]; OOB eth0:172.17.0.3<0>
+VM-0-3-centos:20223:20622 [2] NCCL INFO Using network IB
+VM-0-3-centos:20227:20621 [5] NCCL INFO NCCL_NET_GDR_LEVEL set by environment to PXB
+VM-0-3-centos:20229:20616 [6] NCCL INFO NCCL_NET_GDR_LEVEL set by environment to PXB
+VM-0-3-centos:20227:20621 [5] NCCL INFO Setting affinity for GPU 5 to ffffff00,0000ffff,ff000000
+VM-0-3-centos:20229:20616 [6] NCCL INFO Setting affinity for GPU 6 to ffffff00,0000ffff,ff000000
+VM-0-3-centos:20223:20622 [2] NCCL INFO NCCL_NET_GDR_LEVEL set by environment to PXB
+VM-0-3-centos:20223:20622 [2] NCCL INFO Setting affinity for GPU 2 to ff,ffff0000,00ffffff
+VM-0-3-centos:20219:20604 [0] NCCL INFO NCCL_NET_GDR_LEVEL set by environment to PXB
+VM-0-3-centos:20220:20618 [1] NCCL INFO NCCL_NET_GDR_LEVEL set by environment to PXB
+VM-0-3-centos:20219:20604 [0] NCCL INFO Setting affinity for GPU 0 to ff,ffff0000,00ffffff
+VM-0-3-centos:20225:20615 [3] NCCL INFO NCCL_NET_GDR_LEVEL set by environment to PXB
+VM-0-3-centos:20220:20618 [1] NCCL INFO Setting affinity for GPU 1 to ff,ffff0000,00ffffff
+VM-0-3-centos:20231:20617 [7] NCCL INFO NCCL_NET_GDR_LEVEL set by environment to PXB
+VM-0-3-centos:20225:20615 [3] NCCL INFO Setting affinity for GPU 3 to ff,ffff0000,00ffffff
+VM-0-3-centos:20231:20617 [7] NCCL INFO Setting affinity for GPU 7 to ffffff00,0000ffff,ff000000
+VM-0-3-centos:20226:20614 [4] NCCL INFO NCCL_NET_GDR_LEVEL set by environment to PXB
+VM-0-3-centos:20226:20614 [4] NCCL INFO Setting affinity for GPU 4 to ffffff00,0000ffff,ff000000
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 00/12 :    0   1   2   3   4   5   6   7
+VM-0-3-centos:20226:20614 [4] NCCL INFO Trees [0] 5/-1/-1->4->3 [1] 5/-1/-1->4->6 [2] 6/-1/-1->4->7 [3] 6/-1/-1->4->5 [4] 3/-1/-1->4->5 [5] 7/-1/-1->4->-1 [6] 5/-1/-1->4->3 [7] 5/-1/-1->4->6 [8] 6/-1/-1->4->7 [9] 6/-1/-1->4->5 [10] 3/-1/-1->4->5 [11] 7/-1/-1->4->-1
+VM-0-3-centos:20225:20615 [3] NCCL INFO Trees [0] 4/-1/-1->3->2 [1] 1/-1/-1->3->2 [2] -1/-1/-1->3->1 [3] 2/-1/-1->3->1 [4] 2/-1/-1->3->4 [5] 1/-1/-1->3->0 [6] 4/-1/-1->3->2 [7] 1/-1/-1->3->2 [8] -1/-1/-1->3->1 [9] 2/-1/-1->3->1 [10] 2/-1/-1->3->4 [11] 1/-1/-1->3->0
+VM-0-3-centos:20227:20621 [5] NCCL INFO Trees [0] 6/-1/-1->5->4 [1] 7/-1/-1->5->4 [2] 7/-1/-1->5->2 [3] 4/-1/-1->5->7 [4] 4/-1/-1->5->7 [5] 2/-1/-1->5->6 [6] 6/-1/-1->5->4 [7] 7/-1/-1->5->4 [8] 7/-1/-1->5->2 [9] 4/-1/-1->5->7 [10] 4/-1/-1->5->7 [11] 2/-1/-1->5->6
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 01/12 :    0   2   3   1   6   4   5   7
+VM-0-3-centos:20229:20616 [6] NCCL INFO Trees [0] 7/-1/-1->6->5 [1] 4/-1/-1->6->1 [2] 1/-1/-1->6->4 [3] 1/-1/-1->6->4 [4] -1/-1/-1->6->1 [5] 5/-1/-1->6->7 [6] 7/-1/-1->6->5 [7] 4/-1/-1->6->1 [8] 1/-1/-1->6->4 [9] 1/-1/-1->6->4 [10] -1/-1/-1->6->1 [11] 5/-1/-1->6->7
+VM-0-3-centos:20231:20617 [7] NCCL INFO Trees [0] -1/-1/-1->7->6 [1] -1/-1/-1->7->5 [2] 4/-1/-1->7->5 [3] 5/-1/-1->7->0 [4] 5/-1/-1->7->0 [5] 6/-1/-1->7->4 [6] -1/-1/-1->7->6 [7] -1/-1/-1->7->5 [8] 4/-1/-1->7->5 [9] 5/-1/-1->7->0 [10] 5/-1/-1->7->0 [11] 6/-1/-1->7->4
+VM-0-3-centos:20223:20622 [2] NCCL INFO Trees [0] 3/-1/-1->2->1 [1] 3/-1/-1->2->0 [2] 5/-1/-1->2->0 [3] -1/-1/-1->2->3 [4] 1/-1/-1->2->3 [5] 0/-1/-1->2->5 [6] 3/-1/-1->2->1 [7] 3/-1/-1->2->0 [8] 5/-1/-1->2->0 [9] -1/-1/-1->2->3 [10] 1/-1/-1->2->3 [11] 0/-1/-1->2->5
+VM-0-3-centos:20220:20618 [1] NCCL INFO Trees [0] 2/-1/-1->1->0 [1] 6/-1/-1->1->3 [2] 3/-1/-1->1->6 [3] 3/-1/-1->1->6 [4] 6/-1/-1->1->2 [5] -1/-1/-1->1->3 [6] 2/-1/-1->1->0 [7] 6/-1/-1->1->3 [8] 3/-1/-1->1->6 [9] 3/-1/-1->1->6 [10] 6/-1/-1->1->2 [11] -1/-1/-1->1->3
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 02/12 :    0   2   5   7   4   6   1   3
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 03/12 :    0   7   5   4   6   1   3   2
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 04/12 :    0   7   6   5   4   3   2   1
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 05/12 :    0   3   1   6   4   7   5   2
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 06/12 :    0   1   2   3   4   5   6   7
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 07/12 :    0   2   3   1   6   4   5   7
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 08/12 :    0   2   5   7   4   6   1   3
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 09/12 :    0   7   5   4   6   1   3   2
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 10/12 :    0   7   6   5   4   3   2   1
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 11/12 :    0   3   1   6   4   7   5   2
+VM-0-3-centos:20219:20604 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 2/-1/-1->0->-1 [2] 2/-1/-1->0->-1 [3] 7/-1/-1->0->-1 [4] 7/-1/-1->0->-1 [5] 3/-1/-1->0->2 [6] 1/-1/-1->0->-1 [7] 2/-1/-1->0->-1 [8] 2/-1/-1->0->-1 [9] 7/-1/-1->0->-1 [10] 7/-1/-1->0->-1 [11] 3/-1/-1->0->2
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 00/0 : 4[88000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 00/0 : 6[b1000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 00/0 : 7[b2000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 00/0 : 1[1b000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 00/0 : 2[3d000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 01/0 : 4[88000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 06/0 : 6[b1000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 01/0 : 7[b2000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 06/0 : 1[1b000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 01/0 : 2[3d000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 06/0 : 4[88000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 00/0 : 3[3e000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 06/0 : 7[b2000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 00/0 : 0[1a000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 06/0 : 2[3d000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 07/0 : 4[88000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 06/0 : 3[3e000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 07/0 : 7[b2000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 06/0 : 0[1a000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 07/0 : 2[3d000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 02/0 : 1[1b000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 00/0 : 5[89000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 03/0 : 1[1b000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 06/0 : 5[89000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 01/0 : 0[1a000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 08/0 : 1[1b000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 02/0 : 0[1a000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 09/0 : 1[1b000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 07/0 : 0[1a000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 08/0 : 0[1a000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 02/0 : 4[88000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 01/0 : 5[89000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 03/0 : 4[88000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 02/0 : 5[89000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 02/0 : 2[3d000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 05/0 : 0[1a000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 08/0 : 4[88000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 07/0 : 5[89000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 08/0 : 2[3d000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 11/0 : 0[1a000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 09/0 : 4[88000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 08/0 : 5[89000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 02/0 : 3[3e000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 08/0 : 3[3e000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 02/0 : 6[b1000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 05/0 : 4[88000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 03/0 : 6[b1000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 11/0 : 4[88000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 08/0 : 6[b1000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 01/0 : 3[3e000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 09/0 : 6[b1000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 05/0 : 3[3e000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 02/0 : 7[b2000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 05/0 : 5[89000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 07/0 : 3[3e000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 08/0 : 7[b2000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 11/0 : 5[89000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 11/0 : 3[3e000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 01/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 03/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 03/0 : 2[3d000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 05/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 05/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 05/0 : 2[3d000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 07/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 09/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 09/0 : 2[3d000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 11/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 11/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 11/0 : 2[3d000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 01/0 : 6[b1000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 05/0 : 6[b1000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 07/0 : 6[b1000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 03/0 : 0[1a000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 03/0 : 5[89000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 11/0 : 6[b1000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 04/0 : 0[1a000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 04/0 : 5[89000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 04/0 : 7[b2000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 09/0 : 0[1a000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 04/0 : 2[3d000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 09/0 : 5[89000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 10/0 : 7[b2000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 10/0 : 0[1a000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 10/0 : 2[3d000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 10/0 : 5[89000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 04/0 : 1[1b000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 03/0 : 3[3e000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 04/0 : 6[b1000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 10/0 : 1[1b000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 04/0 : 3[3e000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 10/0 : 6[b1000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 09/0 : 3[3e000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 04/0 : 4[88000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 10/0 : 3[3e000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 10/0 : 4[88000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Connected all rings
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 04/0 : 1[1b000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Connected all rings
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 10/0 : 1[1b000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Connected all rings
+VM-0-3-centos:20231:20617 [7] NCCL INFO Connected all rings
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 05/0 : 6[b1000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Connected all rings
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 11/0 : 6[b1000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Connected all rings
+VM-0-3-centos:20225:20615 [3] NCCL INFO Connected all rings
+VM-0-3-centos:20226:20614 [4] NCCL INFO Connected all rings
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 03/0 : 7[b2000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 04/0 : 7[b2000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 03/0 : 2[3d000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 09/0 : 7[b2000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 03/0 : 4[88000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 04/0 : 2[3d000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 10/0 : 7[b2000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 04/0 : 4[88000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 09/0 : 2[3d000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 09/0 : 4[88000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 04/0 : 3[3e000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 05/0 : 5[89000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 10/0 : 2[3d000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 10/0 : 4[88000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 10/0 : 3[3e000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 11/0 : 5[89000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 05/0 : 0[1a000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 01/0 : 1[1b000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 11/0 : 0[1a000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 05/0 : 1[1b000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 07/0 : 1[1b000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 01/0 : 4[88000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 03/0 : 5[89000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 11/0 : 1[1b000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 07/0 : 4[88000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 04/0 : 5[89000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 09/0 : 5[89000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 10/0 : 5[89000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 01/0 : 6[b1000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 05/0 : 2[3d000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 02/0 : 4[88000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 04/0 : 6[b1000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 11/0 : 2[3d000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 08/0 : 4[88000] -> 7[b2000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 07/0 : 6[b1000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 10/0 : 6[b1000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 05/0 : 3[3e000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 11/0 : 3[3e000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 02/0 : 3[3e000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 05/0 : 7[b2000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 02/0 : 5[89000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 03/0 : 3[3e000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 11/0 : 7[b2000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 08/0 : 5[89000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 08/0 : 3[3e000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 02/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 09/0 : 3[3e000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 01/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 01/0 : 2[3d000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 03/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 02/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 02/0 : 2[3d000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 04/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 04/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 07/0 : 2[3d000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 08/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 07/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 08/0 : 2[3d000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 09/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 08/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 10/0 : 1[1b000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 10/0 : 7[b2000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 00/0 : 7[b2000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 05/0 : 7[b2000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 02/0 : 6[b1000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 06/0 : 7[b2000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 03/0 : 6[b1000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 11/0 : 7[b2000] -> 6[b1000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 00/0 : 2[3d000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 08/0 : 6[b1000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 00/0 : 5[89000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 09/0 : 6[b1000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 06/0 : 2[3d000] -> 1[1b000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 01/0 : 5[89000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 06/0 : 5[89000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 07/0 : 5[89000] -> 4[88000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 00/0 : 6[b1000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 00/0 : 4[88000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 05/0 : 6[b1000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 06/0 : 4[88000] -> 3[3e000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 06/0 : 6[b1000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 00/0 : 1[1b000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 11/0 : 6[b1000] -> 5[89000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 00/0 : 3[3e000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 06/0 : 1[1b000] -> 0[1a000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 01/0 : 3[3e000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 06/0 : 3[3e000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20219:20604 [0] NCCL INFO Connected all trees
+VM-0-3-centos:20219:20604 [0] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+VM-0-3-centos:20219:20604 [0] NCCL INFO 12 coll channels, 16 p2p channels, 2 p2p channels per peer
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 07/0 : 3[3e000] -> 2[3d000] via P2P/IPC
+VM-0-3-centos:20231:20617 [7] NCCL INFO Connected all trees
+VM-0-3-centos:20231:20617 [7] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+VM-0-3-centos:20231:20617 [7] NCCL INFO 12 coll channels, 16 p2p channels, 2 p2p channels per peer
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 04/1 : 7[b2000] -> 1[1b000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20220:20618 [1] NCCL INFO Connected all trees
+VM-0-3-centos:20220:20618 [1] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+VM-0-3-centos:20220:20618 [1] NCCL INFO 12 coll channels, 16 p2p channels, 2 p2p channels per peer
+VM-0-3-centos:20227:20621 [5] NCCL INFO Connected all trees
+VM-0-3-centos:20227:20621 [5] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+VM-0-3-centos:20227:20621 [5] NCCL INFO 12 coll channels, 16 p2p channels, 2 p2p channels per peer
+VM-0-3-centos:20229:20616 [6] NCCL INFO Connected all trees
+VM-0-3-centos:20229:20616 [6] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+VM-0-3-centos:20229:20616 [6] NCCL INFO 12 coll channels, 16 p2p channels, 2 p2p channels per peer
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 04/1 : 6[b1000] -> 0[1a000] via P2P/indirect/7[b2000]
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 05/1 : 7[b2000] -> 1[1b000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20226:20614 [4] NCCL INFO Connected all trees
+VM-0-3-centos:20226:20614 [4] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+VM-0-3-centos:20226:20614 [4] NCCL INFO 12 coll channels, 16 p2p channels, 2 p2p channels per peer
+VM-0-3-centos:20225:20615 [3] NCCL INFO Connected all trees
+VM-0-3-centos:20225:20615 [3] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+VM-0-3-centos:20225:20615 [3] NCCL INFO 12 coll channels, 16 p2p channels, 2 p2p channels per peer
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 04/1 : 3[3e000] -> 5[89000] via P2P/indirect/4[88000]
+VM-0-3-centos:20223:20622 [2] NCCL INFO Connected all trees
+VM-0-3-centos:20223:20622 [2] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+VM-0-3-centos:20223:20622 [2] NCCL INFO 12 coll channels, 16 p2p channels, 2 p2p channels per peer
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 04/1 : 2[3d000] -> 4[88000] via P2P/indirect/5[89000]
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 12/1 : 1[1b000] -> 4[88000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 12/1 : 7[b2000] -> 2[3d000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 05/1 : 6[b1000] -> 0[1a000] via P2P/indirect/7[b2000]
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 05/1 : 2[3d000] -> 4[88000] via P2P/indirect/5[89000]
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 05/1 : 3[3e000] -> 5[89000] via P2P/indirect/4[88000]
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 13/1 : 1[1b000] -> 4[88000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 13/1 : 7[b2000] -> 2[3d000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 12/1 : 5[89000] -> 0[1a000] via P2P/indirect/7[b2000]
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 12/1 : 3[3e000] -> 6[b1000] via P2P/indirect/1[1b000]
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 13/1 : 3[3e000] -> 6[b1000] via P2P/indirect/1[1b000]
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 13/1 : 5[89000] -> 0[1a000] via P2P/indirect/7[b2000]
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 02/1 : 1[1b000] -> 5[89000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 02/1 : 7[b2000] -> 3[3e000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 02/1 : 2[3d000] -> 6[b1000] via P2P/indirect/1[1b000]
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 02/1 : 4[88000] -> 0[1a000] via P2P/indirect/7[b2000]
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 03/1 : 1[1b000] -> 5[89000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 03/1 : 4[88000] -> 0[1a000] via P2P/indirect/7[b2000]
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 03/1 : 2[3d000] -> 6[b1000] via P2P/indirect/1[1b000]
+VM-0-3-centos:20231:20617 [7] NCCL INFO Channel 03/1 : 7[b2000] -> 3[3e000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 02/1 : 5[89000] -> 1[1b000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 02/1 : 0[1a000] -> 4[88000] via P2P/indirect/3[3e000]
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 02/1 : 6[b1000] -> 2[3d000] via P2P/indirect/5[89000]
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 02/1 : 3[3e000] -> 7[b2000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 03/1 : 5[89000] -> 1[1b000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 03/1 : 6[b1000] -> 2[3d000] via P2P/indirect/5[89000]
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 03/1 : 0[1a000] -> 4[88000] via P2P/indirect/3[3e000]
+VM-0-3-centos:20225:20615 [3] NCCL INFO Channel 03/1 : 3[3e000] -> 7[b2000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 10/1 : 2[3d000] -> 7[b2000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 10/1 : 6[b1000] -> 3[3e000] via P2P/indirect/1[1b000]
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 10/1 : 4[88000] -> 1[1b000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 10/1 : 0[1a000] -> 5[89000] via P2P/indirect/7[b2000]
+VM-0-3-centos:20223:20622 [2] NCCL INFO Channel 11/1 : 2[3d000] -> 7[b2000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20229:20616 [6] NCCL INFO Channel 11/1 : 6[b1000] -> 3[3e000] via P2P/indirect/1[1b000]
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 11/1 : 4[88000] -> 1[1b000] via P2P/indirect/6[b1000]
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 11/1 : 0[1a000] -> 5[89000] via P2P/indirect/7[b2000]
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 06/1 : 4[88000] -> 2[3d000] via P2P/indirect/3[3e000]
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 06/1 : 1[1b000] -> 7[b2000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20226:20614 [4] NCCL INFO Channel 07/1 : 4[88000] -> 2[3d000] via P2P/indirect/3[3e000]
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 06/1 : 5[89000] -> 3[3e000] via P2P/indirect/2[3d000]
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 06/1 : 0[1a000] -> 6[b1000] via P2P/indirect/1[1b000]
+VM-0-3-centos:20220:20618 [1] NCCL INFO Channel 07/1 : 1[1b000] -> 7[b2000] via P2P/indirect/0[1a000]
+VM-0-3-centos:20227:20621 [5] NCCL INFO Channel 07/1 : 5[89000] -> 3[3e000] via P2P/indirect/2[3d000]
+VM-0-3-centos:20219:20604 [0] NCCL INFO Channel 07/1 : 0[1a000] -> 6[b1000] via P2P/indirect/1[1b000]
+VM-0-3-centos:20227:20621 [5] NCCL INFO comm 0x41a18480 rank 5 nranks 8 cudaDev 5 busId 89000 - Init COMPLETE
+VM-0-3-centos:20231:20617 [7] NCCL INFO comm 0x429e2e60 rank 7 nranks 8 cudaDev 7 busId b2000 - Init COMPLETE
+VM-0-3-centos:20229:20616 [6] NCCL INFO comm 0x415c8b50 rank 6 nranks 8 cudaDev 6 busId b1000 - Init COMPLETE
+VM-0-3-centos:20226:20614 [4] NCCL INFO comm 0x41a1ae80 rank 4 nranks 8 cudaDev 4 busId 88000 - Init COMPLETE
+VM-0-3-centos:20219:20604 [0] NCCL INFO comm 0x411f6c10 rank 0 nranks 8 cudaDev 0 busId 1a000 - Init COMPLETE
+VM-0-3-centos:20223:20622 [2] NCCL INFO comm 0x4142e420 rank 2 nranks 8 cudaDev 2 busId 3d000 - Init COMPLETE
+VM-0-3-centos:20225:20615 [3] NCCL INFO comm 0x41bfd400 rank 3 nranks 8 cudaDev 3 busId 3e000 - Init COMPLETE
+VM-0-3-centos:20220:20618 [1] NCCL INFO comm 0x419e0420 rank 1 nranks 8 cudaDev 1 busId 1b000 - Init COMPLETE
+Dataset all_num: 6414
+MASS s
+MASS s***************Using 1 train datasets****************
+
+***************len of train datasets:6414 ****************
+***************Using 1 val datasets****************
+***************len of val datasets:674 ****************
+***************Using 1 train datasets****************
+***************len of train datasets:6414 ****************
+***************Using 1 val datasets****************
+MASS s***************len of val datasets:674 ****************
+MASS s
+MASS sMASS s
+setup s
+
+MASS s
+***************Using 1 train datasets****************
+
+***************len of train datasets:6414 *******************************Using 1 train datasets****************setup s
+***************Using 1 train datasets****************
+***************Using 1 train datasets****************
+
+***************Using 1 val datasets*******************************len of train datasets:6414 ****************
+***************Using 1 train datasets*******************************len of train datasets:6414 ****************
+
+***************len of train datasets:6414 ****************
+
+***************len of val datasets:674 ****************
+***************len of train datasets:6414 *******************************Using 1 val datasets****************
+***************Using 1 val datasets****************
+
+***************Using 1 val datasets****************
+***************len of val datasets:674 ****************
+***************Using 1 val datasets*******************************len of val datasets:674 ****************transforms: Multi_Transform(
+    Compose(
+    default()
+)
+)
+
+***************len of val datasets:674 ****************
+
+
+***************len of val datasets:674 ****************
+setup s
+Dataset all_num: 674
+setup s
+setup s
+setup ssetup s
+
+MASS s
+***************Using 1 train datasets****************
+***************len of train datasets:6414 ****************
+***************Using 1 val datasets****************
+***************len of val datasets:674 ****************
+setup s
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0,1,2,3,4,5,6,7]
+LOCAL_RANK: 1 - CUDA_VISIBLE_DEVICES: [0,1,2,3,4,5,6,7]
+LOCAL_RANK: 2 - CUDA_VISIBLE_DEVICES: [0,1,2,3,4,5,6,7]
+LOCAL_RANK: 4 - CUDA_VISIBLE_DEVICES: [0,1,2,3,4,5,6,7]
+LOCAL_RANK: 3 - CUDA_VISIBLE_DEVICES: [0,1,2,3,4,5,6,7]
+LOCAL_RANK: 7 - CUDA_VISIBLE_DEVICES: [0,1,2,3,4,5,6,7]
+LOCAL_RANK: 5 - CUDA_VISIBLE_DEVICES: [0,1,2,3,4,5,6,7]
+LOCAL_RANK: 6 - CUDA_VISIBLE_DEVICES: [0,1,2,3,4,5,6,7]
+Initial lr: 5.00e-05 Initial wd: 5.00e-02
+actual lr: 5.00e-05 Lambda1.00e+00
+actual wd: 5.00e-02
+accumulate grad iterations: 2
+effective batch size: 2048
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/transformers/optimization.py:411: FutureWarning: This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning
+  warnings.warn(
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/transformers/optimization.py:411: FutureWarning: This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning
+  warnings.warn(
+parameter groups: 
+{
+  "layer_11_no_decay": {
+    "name": "layer_11_no_decay",
+    "lr_scale": 1,
+    "weight_decay": 0.0,
+    "params": [
+      "transformer.blocks.10.gamma_1",
+      "transformer.blocks.10.gamma_2",
+      "transformer.blocks.10.norm1.weight",
+      "transformer.blocks.10.norm1.bias",
+      "transformer.blocks.10.attn.q_bias",
+      "transformer.blocks.10.attn.v_bias",
+      "transformer.blocks.10.attn.proj.bias",
+      "transformer.blocks.10.mlp_tf.fc1.bias",
+      "transformer.blocks.10.mlp_tf.fc2.bias",
+      "transformer.blocks.10.norm2_tf.weight",
+      "transformer.blocks.10.norm2_tf.bias"
+    ],
+    "lr": 5e-05
+  },
+  "layer_11_decay": {
+    "name": "layer_11_decay",
+    "lr_scale": 1,
+    "weight_decay": 0.05,
+    "params": [
+      "transformer.blocks.10.attn.qkv.weight",
+      "transformer.blocks.10.attn.proj.weight",
+      "transformer.blocks.10.mlp_tf.fc1.weight",
+      "transformer.blocks.10.mlp_tf.fc2.weight"
+    ],
+    "lr": 5e-05
+  },
+  "layer_12_no_decay": {
+    "name": "layer_12_no_decay",
+    "lr_scale": 1,
+    "weight_decay": 0.0,
+    "params": [
+      "transformer.blocks.11.gamma_1",
+      "transformer.blocks.11.gamma_2",
+      "transformer.blocks.11.norm1.weight",
+      "transformer.blocks.11.norm1.bias",
+      "transformer.blocks.11.attn.q_bias",
+      "transformer.blocks.11.attn.v_bias",
+      "transformer.blocks.11.attn.proj.bias",
+      "transformer.blocks.11.mlp_tf.fc1.bias",
+      "transformer.blocks.11.mlp_tf.fc2.bias",
+      "transformer.blocks.11.norm2_tf.weight",
+      "transformer.blocks.11.norm2_tf.bias",
+      "transformer.norm.weight",
+      "transformer.norm.bias"
+    ],
+    "lr": 5e-05
+  },
+  "layer_12_decay": {
+    "name": "layer_12_decay",
+    "lr_scale": 1,
+    "weight_decay": 0.05,
+    "params": [
+      "transformer.blocks.11.attn.qkv.weight",
+      "transformer.blocks.11.attn.proj.weight",
+      "transformer.blocks.11.mlp_tf.fc1.weight",
+      "transformer.blocks.11.mlp_tf.fc2.weight"
+    ],
+    "lr": 5e-05
+  },
+  "layer_13_decay": {
+    "name": "layer_13_decay",
+    "lr_scale": 1,
+    "weight_decay": 0.05,
+    "params": [
+      "spindle_pred_proj.decoder.weight"
+    ],
+    "lr": 0.001
+  },
+  "layer_13_no_decay": {
+    "name": "layer_13_no_decay",
+    "lr_scale": 1,
+    "weight_decay": 0.0,
+    "params": [
+      "spindle_pred_proj.decoder.bias"
+    ],
+    "lr": 0.001
+  }
+}
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/transformers/optimization.py:411: FutureWarning: This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning
+  warnings.warn(
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/transformers/optimization.py:411: FutureWarning: This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning
+  warnings.warn(
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/transformers/optimization.py:411: FutureWarning: This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning
+  warnings.warn(
+****Optim type = AdamW (
+Parameter Group 0
+    betas: (0.9, 0.999)
+    correct_bias: True
+    eps: 1e-08
+    lr: 5e-05
+    lr_scale: 1
+    name: layer_11_no_decay
+    weight_decay: 0.0
+
+Parameter Group 1
+    betas: (0.9, 0.999)
+    correct_bias: True
+    eps: 1e-08
+    lr: 5e-05
+    lr_scale: 1
+    name: layer_11_decay
+    weight_decay: 0.05
+
+Parameter Group 2
+    betas: (0.9, 0.999)
+    correct_bias: True
+    eps: 1e-08
+    lr: 5e-05
+    lr_scale: 1
+    name: layer_12_no_decay
+    weight_decay: 0.0
+
+Parameter Group 3
+    betas: (0.9, 0.999)
+    correct_bias: True
+    eps: 1e-08
+    lr: 5e-05
+    lr_scale: 1
+    name: layer_12_decay
+    weight_decay: 0.05
+
+Parameter Group 4
+    betas: (0.9, 0.999)
+    correct_bias: True
+    eps: 1e-08
+    lr: 0.001
+    lr_scale: 1
+    name: layer_13_decay
+    weight_decay: 0.05
+
+Parameter Group 5
+    betas: (0.9, 0.999)
+    correct_bias: True
+    eps: 1e-08
+    lr: 0.001
+    lr_scale: 1
+    name: layer_13_no_decay
+    weight_decay: 0.0
+)
+****Warmup_steps:35 	 Max_steps:350
+****Scheduler: {'scheduler': <timm.scheduler.cosine_lr.CosineLRScheduler object at 0x7f98d004de20>, 'interval': 'step'}
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/transformers/optimization.py:411: FutureWarning: This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning
+  warnings.warn(
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/transformers/optimization.py:411: FutureWarning: This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning
+  warnings.warn(
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/transformers/optimization.py:411: FutureWarning: This implementation of AdamW is deprecated and will be removed in a future version. Use the PyTorch implementation torch.optim.AdamW instead, or set `no_deprecation_warning=True` to disable this warning
+  warnings.warn(
+
+    | Name                                 | Type                | Params
+-------------------------------------------------------------------------------
+0   | transformer                          | MultiWayTransformer | 134 M 
+1   | transformer.patch_embed              | PatchEmbed          | 2.5 M 
+2   | transformer.patch_embed.proj         | Conv1d              | 1.2 M 
+3   | transformer.patch_embed.fft_proj     | Conv2d              | 1.2 M 
+4   | transformer.pos_drop                 | Dropout             | 0     
+5   | transformer.blocks                   | ModuleList          | 132 M 
+6   | transformer.blocks.0                 | Block               | 11.8 M
+7   | transformer.blocks.0.norm1           | LayerNorm           | 1.5 K 
+8   | transformer.blocks.0.attn            | Attention           | 2.4 M 
+9   | transformer.blocks.0.attn.qkv        | Linear              | 1.8 M 
+10  | transformer.blocks.0.attn.attn_drop  | Dropout             | 0     
+11  | transformer.blocks.0.attn.proj       | Linear              | 590 K 
+12  | transformer.blocks.0.attn.proj_drop  | Dropout             | 0     
+13  | transformer.blocks.0.drop_path       | Identity            | 0     
+14  | transformer.blocks.0.norm2_time      | LayerNorm           | 1.5 K 
+15  | transformer.blocks.0.mlp_time        | Mlp                 | 4.7 M 
+16  | transformer.blocks.0.mlp_time.fc1    | Linear              | 2.4 M 
+17  | transformer.blocks.0.mlp_time.act    | GELU                | 0     
+18  | transformer.blocks.0.mlp_time.fc2    | Linear              | 2.4 M 
+19  | transformer.blocks.0.mlp_time.drop   | Dropout             | 0     
+20  | transformer.blocks.0.norm2_fft       | LayerNorm           | 1.5 K 
+21  | transformer.blocks.0.mlp_fft         | Mlp                 | 4.7 M 
+22  | transformer.blocks.0.mlp_fft.fc1     | Linear              | 2.4 M 
+23  | transformer.blocks.0.mlp_fft.act     | GELU                | 0     
+24  | transformer.blocks.0.mlp_fft.fc2     | Linear              | 2.4 M 
+25  | transformer.blocks.0.mlp_fft.drop    | Dropout             | 0     
+26  | transformer.blocks.1                 | Block               | 11.8 M
+27  | transformer.blocks.1.norm1           | LayerNorm           | 1.5 K 
+28  | transformer.blocks.1.attn            | Attention           | 2.4 M 
+29  | transformer.blocks.1.attn.qkv        | Linear              | 1.8 M 
+30  | transformer.blocks.1.attn.attn_drop  | Dropout             | 0     
+31  | transformer.blocks.1.attn.proj       | Linear              | 590 K 
+32  | transformer.blocks.1.attn.proj_drop  | Dropout             | 0     
+33  | transformer.blocks.1.drop_path       | DropPath            | 0     
+34  | transformer.blocks.1.norm2_time      | LayerNorm           | 1.5 K 
+35  | transformer.blocks.1.mlp_time        | Mlp                 | 4.7 M 
+36  | transformer.blocks.1.mlp_time.fc1    | Linear              | 2.4 M 
+37  | transformer.blocks.1.mlp_time.act    | GELU                | 0     
+38  | transformer.blocks.1.mlp_time.fc2    | Linear              | 2.4 M 
+39  | transformer.blocks.1.mlp_time.drop   | Dropout             | 0     
+40  | transformer.blocks.1.norm2_fft       | LayerNorm           | 1.5 K 
+41  | transformer.blocks.1.mlp_fft         | Mlp                 | 4.7 M 
+42  | transformer.blocks.1.mlp_fft.fc1     | Linear              | 2.4 M 
+43  | transformer.blocks.1.mlp_fft.act     | GELU                | 0     
+44  | transformer.blocks.1.mlp_fft.fc2     | Linear              | 2.4 M 
+45  | transformer.blocks.1.mlp_fft.drop    | Dropout             | 0     
+46  | transformer.blocks.2                 | Block               | 11.8 M
+47  | transformer.blocks.2.norm1           | LayerNorm           | 1.5 K 
+48  | transformer.blocks.2.attn            | Attention           | 2.4 M 
+49  | transformer.blocks.2.attn.qkv        | Linear              | 1.8 M 
+50  | transformer.blocks.2.attn.attn_drop  | Dropout             | 0     
+51  | transformer.blocks.2.attn.proj       | Linear              | 590 K 
+52  | transformer.blocks.2.attn.proj_drop  | Dropout             | 0     
+53  | transformer.blocks.2.drop_path       | DropPath            | 0     
+54  | transformer.blocks.2.norm2_time      | LayerNorm           | 1.5 K 
+55  | transformer.blocks.2.mlp_time        | Mlp                 | 4.7 M 
+56  | transformer.blocks.2.mlp_time.fc1    | Linear              | 2.4 M 
+57  | transformer.blocks.2.mlp_time.act    | GELU                | 0     
+58  | transformer.blocks.2.mlp_time.fc2    | Linear              | 2.4 M 
+59  | transformer.blocks.2.mlp_time.drop   | Dropout             | 0     
+60  | transformer.blocks.2.norm2_fft       | LayerNorm           | 1.5 K 
+61  | transformer.blocks.2.mlp_fft         | Mlp                 | 4.7 M 
+62  | transformer.blocks.2.mlp_fft.fc1     | Linear              | 2.4 M 
+63  | transformer.blocks.2.mlp_fft.act     | GELU                | 0     
+64  | transformer.blocks.2.mlp_fft.fc2     | Linear              | 2.4 M 
+65  | transformer.blocks.2.mlp_fft.drop    | Dropout             | 0     
+66  | transformer.blocks.3                 | Block               | 11.8 M
+67  | transformer.blocks.3.norm1           | LayerNorm           | 1.5 K 
+68  | transformer.blocks.3.attn            | Attention           | 2.4 M 
+69  | transformer.blocks.3.attn.qkv        | Linear              | 1.8 M 
+70  | transformer.blocks.3.attn.attn_drop  | Dropout             | 0     
+71  | transformer.blocks.3.attn.proj       | Linear              | 590 K 
+72  | transformer.blocks.3.attn.proj_drop  | Dropout             | 0     
+73  | transformer.blocks.3.drop_path       | DropPath            | 0     
+74  | transformer.blocks.3.norm2_time      | LayerNorm           | 1.5 K 
+75  | transformer.blocks.3.mlp_time        | Mlp                 | 4.7 M 
+76  | transformer.blocks.3.mlp_time.fc1    | Linear              | 2.4 M 
+77  | transformer.blocks.3.mlp_time.act    | GELU                | 0     
+78  | transformer.blocks.3.mlp_time.fc2    | Linear              | 2.4 M 
+79  | transformer.blocks.3.mlp_time.drop   | Dropout             | 0     
+80  | transformer.blocks.3.norm2_fft       | LayerNorm           | 1.5 K 
+81  | transformer.blocks.3.mlp_fft         | Mlp                 | 4.7 M 
+82  | transformer.blocks.3.mlp_fft.fc1     | Linear              | 2.4 M 
+83  | transformer.blocks.3.mlp_fft.act     | GELU                | 0     
+84  | transformer.blocks.3.mlp_fft.fc2     | Linear              | 2.4 M 
+85  | transformer.blocks.3.mlp_fft.drop    | Dropout             | 0     
+86  | transformer.blocks.4                 | Block               | 11.8 M
+87  | transformer.blocks.4.norm1           | LayerNorm           | 1.5 K 
+88  | transformer.blocks.4.attn            | Attention           | 2.4 M 
+89  | transformer.blocks.4.attn.qkv        | Linear              | 1.8 M 
+90  | transformer.blocks.4.attn.attn_drop  | Dropout             | 0     
+91  | transformer.blocks.4.attn.proj       | Linear              | 590 K 
+92  | transformer.blocks.4.attn.proj_drop  | Dropout             | 0     
+93  | transformer.blocks.4.drop_path       | DropPath            | 0     
+94  | transformer.blocks.4.norm2_time      | LayerNorm           | 1.5 K 
+95  | transformer.blocks.4.mlp_time        | Mlp                 | 4.7 M 
+96  | transformer.blocks.4.mlp_time.fc1    | Linear              | 2.4 M 
+97  | transformer.blocks.4.mlp_time.act    | GELU                | 0     
+98  | transformer.blocks.4.mlp_time.fc2    | Linear              | 2.4 M 
+99  | transformer.blocks.4.mlp_time.drop   | Dropout             | 0     
+100 | transformer.blocks.4.norm2_fft       | LayerNorm           | 1.5 K 
+101 | transformer.blocks.4.mlp_fft         | Mlp                 | 4.7 M 
+102 | transformer.blocks.4.mlp_fft.fc1     | Linear              | 2.4 M 
+103 | transformer.blocks.4.mlp_fft.act     | GELU                | 0     
+104 | transformer.blocks.4.mlp_fft.fc2     | Linear              | 2.4 M 
+105 | transformer.blocks.4.mlp_fft.drop    | Dropout             | 0     
+106 | transformer.blocks.5                 | Block               | 11.8 M
+107 | transformer.blocks.5.norm1           | LayerNorm           | 1.5 K 
+108 | transformer.blocks.5.attn            | Attention           | 2.4 M 
+109 | transformer.blocks.5.attn.qkv        | Linear              | 1.8 M 
+110 | transformer.blocks.5.attn.attn_drop  | Dropout             | 0     
+111 | transformer.blocks.5.attn.proj       | Linear              | 590 K 
+112 | transformer.blocks.5.attn.proj_drop  | Dropout             | 0     
+113 | transformer.blocks.5.drop_path       | DropPath            | 0     
+114 | transformer.blocks.5.norm2_time      | LayerNorm           | 1.5 K 
+115 | transformer.blocks.5.mlp_time        | Mlp                 | 4.7 M 
+116 | transformer.blocks.5.mlp_time.fc1    | Linear              | 2.4 M 
+117 | transformer.blocks.5.mlp_time.act    | GELU                | 0     
+118 | transformer.blocks.5.mlp_time.fc2    | Linear              | 2.4 M 
+119 | transformer.blocks.5.mlp_time.drop   | Dropout             | 0     
+120 | transformer.blocks.5.norm2_fft       | LayerNorm           | 1.5 K 
+121 | transformer.blocks.5.mlp_fft         | Mlp                 | 4.7 M 
+122 | transformer.blocks.5.mlp_fft.fc1     | Linear              | 2.4 M 
+123 | transformer.blocks.5.mlp_fft.act     | GELU                | 0     
+124 | transformer.blocks.5.mlp_fft.fc2     | Linear              | 2.4 M 
+125 | transformer.blocks.5.mlp_fft.drop    | Dropout             | 0     
+126 | transformer.blocks.6                 | Block               | 11.8 M
+127 | transformer.blocks.6.norm1           | LayerNorm           | 1.5 K 
+128 | transformer.blocks.6.attn            | Attention           | 2.4 M 
+129 | transformer.blocks.6.attn.qkv        | Linear              | 1.8 M 
+130 | transformer.blocks.6.attn.attn_drop  | Dropout             | 0     
+131 | transformer.blocks.6.attn.proj       | Linear              | 590 K 
+132 | transformer.blocks.6.attn.proj_drop  | Dropout             | 0     
+133 | transformer.blocks.6.drop_path       | DropPath            | 0     
+134 | transformer.blocks.6.norm2_time      | LayerNorm           | 1.5 K 
+135 | transformer.blocks.6.mlp_time        | Mlp                 | 4.7 M 
+136 | transformer.blocks.6.mlp_time.fc1    | Linear              | 2.4 M 
+137 | transformer.blocks.6.mlp_time.act    | GELU                | 0     
+138 | transformer.blocks.6.mlp_time.fc2    | Linear              | 2.4 M 
+139 | transformer.blocks.6.mlp_time.drop   | Dropout             | 0     
+140 | transformer.blocks.6.norm2_fft       | LayerNorm           | 1.5 K 
+141 | transformer.blocks.6.mlp_fft         | Mlp                 | 4.7 M 
+142 | transformer.blocks.6.mlp_fft.fc1     | Linear              | 2.4 M 
+143 | transformer.blocks.6.mlp_fft.act     | GELU                | 0     
+144 | transformer.blocks.6.mlp_fft.fc2     | Linear              | 2.4 M 
+145 | transformer.blocks.6.mlp_fft.drop    | Dropout             | 0     
+146 | transformer.blocks.7                 | Block               | 11.8 M
+147 | transformer.blocks.7.norm1           | LayerNorm           | 1.5 K 
+148 | transformer.blocks.7.attn            | Attention           | 2.4 M 
+149 | transformer.blocks.7.attn.qkv        | Linear              | 1.8 M 
+150 | transformer.blocks.7.attn.attn_drop  | Dropout             | 0     
+151 | transformer.blocks.7.attn.proj       | Linear              | 590 K 
+152 | transformer.blocks.7.attn.proj_drop  | Dropout             | 0     
+153 | transformer.blocks.7.drop_path       | DropPath            | 0     
+154 | transformer.blocks.7.norm2_time      | LayerNorm           | 1.5 K 
+155 | transformer.blocks.7.mlp_time        | Mlp                 | 4.7 M 
+156 | transformer.blocks.7.mlp_time.fc1    | Linear              | 2.4 M 
+157 | transformer.blocks.7.mlp_time.act    | GELU                | 0     
+158 | transformer.blocks.7.mlp_time.fc2    | Linear              | 2.4 M 
+159 | transformer.blocks.7.mlp_time.drop   | Dropout             | 0     
+160 | transformer.blocks.7.norm2_fft       | LayerNorm           | 1.5 K 
+161 | transformer.blocks.7.mlp_fft         | Mlp                 | 4.7 M 
+162 | transformer.blocks.7.mlp_fft.fc1     | Linear              | 2.4 M 
+163 | transformer.blocks.7.mlp_fft.act     | GELU                | 0     
+164 | transformer.blocks.7.mlp_fft.fc2     | Linear              | 2.4 M 
+165 | transformer.blocks.7.mlp_fft.drop    | Dropout             | 0     
+166 | transformer.blocks.8                 | Block               | 11.8 M
+167 | transformer.blocks.8.norm1           | LayerNorm           | 1.5 K 
+168 | transformer.blocks.8.attn            | Attention           | 2.4 M 
+169 | transformer.blocks.8.attn.qkv        | Linear              | 1.8 M 
+170 | transformer.blocks.8.attn.attn_drop  | Dropout             | 0     
+171 | transformer.blocks.8.attn.proj       | Linear              | 590 K 
+172 | transformer.blocks.8.attn.proj_drop  | Dropout             | 0     
+173 | transformer.blocks.8.drop_path       | DropPath            | 0     
+174 | transformer.blocks.8.norm2_time      | LayerNorm           | 1.5 K 
+175 | transformer.blocks.8.mlp_time        | Mlp                 | 4.7 M 
+176 | transformer.blocks.8.mlp_time.fc1    | Linear              | 2.4 M 
+177 | transformer.blocks.8.mlp_time.act    | GELU                | 0     
+178 | transformer.blocks.8.mlp_time.fc2    | Linear              | 2.4 M 
+179 | transformer.blocks.8.mlp_time.drop   | Dropout             | 0     
+180 | transformer.blocks.8.norm2_fft       | LayerNorm           | 1.5 K 
+181 | transformer.blocks.8.mlp_fft         | Mlp                 | 4.7 M 
+182 | transformer.blocks.8.mlp_fft.fc1     | Linear              | 2.4 M 
+183 | transformer.blocks.8.mlp_fft.act     | GELU                | 0     
+184 | transformer.blocks.8.mlp_fft.fc2     | Linear              | 2.4 M 
+185 | transformer.blocks.8.mlp_fft.drop    | Dropout             | 0     
+186 | transformer.blocks.9                 | Block               | 11.8 M
+187 | transformer.blocks.9.norm1           | LayerNorm           | 1.5 K 
+188 | transformer.blocks.9.attn            | Attention           | 2.4 M 
+189 | transformer.blocks.9.attn.qkv        | Linear              | 1.8 M 
+190 | transformer.blocks.9.attn.attn_drop  | Dropout             | 0     
+191 | transformer.blocks.9.attn.proj       | Linear              | 590 K 
+192 | transformer.blocks.9.attn.proj_drop  | Dropout             | 0     
+193 | transformer.blocks.9.drop_path       | DropPath            | 0     
+194 | transformer.blocks.9.norm2_time      | LayerNorm           | 1.5 K 
+195 | transformer.blocks.9.mlp_time        | Mlp                 | 4.7 M 
+196 | transformer.blocks.9.mlp_time.fc1    | Linear              | 2.4 M 
+197 | transformer.blocks.9.mlp_time.act    | GELU                | 0     
+198 | transformer.blocks.9.mlp_time.fc2    | Linear              | 2.4 M 
+199 | transformer.blocks.9.mlp_time.drop   | Dropout             | 0     
+200 | transformer.blocks.9.norm2_fft       | LayerNorm           | 1.5 K 
+201 | transformer.blocks.9.mlp_fft         | Mlp                 | 4.7 M 
+202 | transformer.blocks.9.mlp_fft.fc1     | Linear              | 2.4 M 
+203 | transformer.blocks.9.mlp_fft.act     | GELU                | 0     
+204 | transformer.blocks.9.mlp_fft.fc2     | Linear              | 2.4 M 
+205 | transformer.blocks.9.mlp_fft.drop    | Dropout             | 0     
+206 | transformer.blocks.10                | Block               | 7.1 M 
+207 | transformer.blocks.10.norm1          | LayerNorm           | 1.5 K 
+208 | transformer.blocks.10.attn           | Attention           | 2.4 M 
+209 | transformer.blocks.10.attn.qkv       | Linear              | 1.8 M 
+210 | transformer.blocks.10.attn.attn_drop | Dropout             | 0     
+211 | transformer.blocks.10.attn.proj      | Linear              | 590 K 
+212 | transformer.blocks.10.attn.proj_drop | Dropout             | 0     
+213 | transformer.blocks.10.drop_path      | DropPath            | 0     
+214 | transformer.blocks.10.mlp_tf         | Mlp                 | 4.7 M 
+215 | transformer.blocks.10.mlp_tf.fc1     | Linear              | 2.4 M 
+216 | transformer.blocks.10.mlp_tf.act     | GELU                | 0     
+217 | transformer.blocks.10.mlp_tf.fc2     | Linear              | 2.4 M 
+218 | transformer.blocks.10.mlp_tf.drop    | Dropout             | 0     
+219 | transformer.blocks.10.norm2_tf       | LayerNorm           | 1.5 K 
+220 | transformer.blocks.11                | Block               | 7.1 M 
+221 | transformer.blocks.11.norm1          | LayerNorm           | 1.5 K 
+222 | transformer.blocks.11.attn           | Attention           | 2.4 M 
+223 | transformer.blocks.11.attn.qkv       | Linear              | 1.8 M 
+224 | transformer.blocks.11.attn.attn_drop | Dropout             | 0     
+225 | transformer.blocks.11.attn.proj      | Linear              | 590 K 
+226 | transformer.blocks.11.attn.proj_drop | Dropout             | 0     
+227 | transformer.blocks.11.drop_path      | DropPath            | 0     
+228 | transformer.blocks.11.mlp_tf         | Mlp                 | 4.7 M 
+229 | transformer.blocks.11.mlp_tf.fc1     | Linear              | 2.4 M 
+230 | transformer.blocks.11.mlp_tf.act     | GELU                | 0     
+231 | transformer.blocks.11.mlp_tf.fc2     | Linear              | 2.4 M 
+232 | transformer.blocks.11.mlp_tf.drop    | Dropout             | 0     
+233 | transformer.blocks.11.norm2_tf       | LayerNorm           | 1.5 K 
+234 | transformer.norm                     | LayerNorm           | 1.5 K 
+235 | token_type_embeddings                | Embedding           | 1.5 K 
+236 | spindle_pred_proj                    | Spindle_Head        | 614 K 
+237 | spindle_pred_proj.decoder            | Conv1d              | 614 K 
+238 | train_FpFn_loss                      | Scalar              | 0     
+239 | train_FpFn_TP                        | ACC                 | 0     
+240 | train_FpFn_FN                        | ACC                 | 0     
+241 | train_FpFn_FP                        | ACC                 | 0     
+242 | validation_FpFn_loss                 | Scalar              | 0     
+243 | validation_FpFn_TP                   | ACC                 | 0     
+244 | validation_FpFn_FN                   | ACC                 | 0     
+245 | validation_FpFn_FP                   | ACC                 | 0     
+246 | test_FpFn_loss                       | Scalar              | 0     
+247 | test_FpFn_TP                         | ACC                 | 0     
+248 | test_FpFn_FN                         | ACC                 | 0     
+249 | test_FpFn_FP                         | ACC                 | 0     
+-------------------------------------------------------------------------------
+14.8 M    Trainable params
+120 M     Non-trainable params
+135 M     Total params
+541.644   Total estimated model params size (MB)
+Sanity Checking: 0it [00:00, ?it/s]/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/functional.py:641: UserWarning: stft with return_complex=False is deprecated. In a future pytorch release, stft will return complex tensors for all inputs, and return_complex=False will raise an error.
+Note: you can still call torch.view_as_real on the complex output to recover the old return format. (Triggered internally at ../aten/src/ATen/native/SpectralOps.cpp:862.)
+  return _VF.stft(input, n_fft, hop_length, win_length, window,  # type: ignore[attr-defined]
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/functional.py:641: UserWarning: stft with return_complex=False is deprecated. In a future pytorch release, stft will return complex tensors for all inputs, and return_complex=False will raise an error.
+Note: you can still call torch.view_as_real on the complex output to recover the old return format. (Triggered internally at ../aten/src/ATen/native/SpectralOps.cpp:862.)
+  return _VF.stft(input, n_fft, hop_length, win_length, window,  # type: ignore[attr-defined]
+Sanity Checking:   0%|          | 0/1 [00:00<?, ?it/s]Sanity Checking DataLoader 0:   0%|          | 0/1 [00:00<?, ?it/s]/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/functional.py:641: UserWarning: stft with return_complex=False is deprecated. In a future pytorch release, stft will return complex tensors for all inputs, and return_complex=False will raise an error.
+Note: you can still call torch.view_as_real on the complex output to recover the old return format. (Triggered internally at ../aten/src/ATen/native/SpectralOps.cpp:862.)
+  return _VF.stft(input, n_fft, hop_length, win_length, window,  # type: ignore[attr-defined]
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/functional.py:641: UserWarning: stft with return_complex=False is deprecated. In a future pytorch release, stft will return complex tensors for all inputs, and return_complex=False will raise an error.
+Note: you can still call torch.view_as_real on the complex output to recover the old return format. (Triggered internally at ../aten/src/ATen/native/SpectralOps.cpp:862.)
+  return _VF.stft(input, n_fft, hop_length, win_length, window,  # type: ignore[attr-defined]
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/functional.py:641: UserWarning: stft with return_complex=False is deprecated. In a future pytorch release, stft will return complex tensors for all inputs, and return_complex=False will raise an error.
+Note: you can still call torch.view_as_real on the complex output to recover the old return format. (Triggered internally at ../aten/src/ATen/native/SpectralOps.cpp:862.)
+  return _VF.stft(input, n_fft, hop_length, win_length, window,  # type: ignore[attr-defined]
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/functional.py:641: UserWarning: stft with return_complex=False is deprecated. In a future pytorch release, stft will return complex tensors for all inputs, and return_complex=False will raise an error.
+Note: you can still call torch.view_as_real on the complex output to recover the old return format. (Triggered internally at ../aten/src/ATen/native/SpectralOps.cpp:862.)
+  return _VF.stft(input, n_fft, hop_length, win_length, window,  # type: ignore[attr-defined]
+attention_mask: tensor([[1., 1., 1.,  ..., 0., 0., 0.],
+        [1., 1., 1.,  ..., 0., 0., 0.],
+        [1., 1., 1.,  ..., 0., 0., 0.],
+        ...,
+        [1., 1., 1.,  ..., 0., 0., 0.],
+        [1., 1., 1.,  ..., 0., 0., 0.],
+        [1., 1., 1.,  ..., 0., 0., 0.]], device='cuda:0')
+attention_mask.shape : torch.Size([85, 242])
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/functional.py:641: UserWarning: stft with return_complex=False is deprecated. In a future pytorch release, stft will return complex tensors for all inputs, and return_complex=False will raise an error.
+Note: you can still call torch.view_as_real on the complex output to recover the old return format. (Triggered internally at ../aten/src/ATen/native/SpectralOps.cpp:862.)
+  return _VF.stft(input, n_fft, hop_length, win_length, window,  # type: ignore[attr-defined]
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/functional.py:641: UserWarning: stft with return_complex=False is deprecated. In a future pytorch release, stft will return complex tensors for all inputs, and return_complex=False will raise an error.
+Note: you can still call torch.view_as_real on the complex output to recover the old return format. (Triggered internally at ../aten/src/ATen/native/SpectralOps.cpp:862.)
+  return _VF.stft(input, n_fft, hop_length, win_length, window,  # type: ignore[attr-defined]
+/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/utilities/data.py:76: UserWarning: Trying to infer the `batch_size` from an ambiguous collection. The batch size we found is 85. To avoid any miscalculations, use `self.log(..., batch_size=batch_size)`.
+  warning_cache.warn(
+Sanity Checking DataLoader 0: 100%|██████████| 1/1 [00:04<00:00,  4.14s/it]/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/trainer/connectors/logger_connector/result.py:432: PossibleUserWarning: It is recommended to use `self.log('FpFn/validation/loss', ..., sync_dist=True)` when logging on epoch level in distributed setting to accumulate the metric across devices.
+  warning_cache.warn(
+                                                                           Training: 0it [00:00, ?it/s]Training:   0%|          | 0/7 [00:00<?, ?it/s]Epoch 0:   0%|          | 0/7 [00:00<?, ?it/s] *******beginning transformer.block********
+device:  cuda:7
+Memory Total:  32.0
+Memory Free:  27.4327392578125
+Memory Used:  4.5672607421875
+*******beginning transformer.block********
+device:  cuda:1
+Memory Total:  32.0
+Memory Free:  27.4327392578125
+Memory Used:  4.5672607421875
+*******beginning transformer.block********
+device:  cuda:6
+Memory Total:  32.0
+Memory Free:  27.4327392578125
+Memory Used:  4.5672607421875
+attention_mask: tensor([[1., 1., 1.,  ..., 0., 0., 0.],
+        [1., 1., 1.,  ..., 0., 0., 0.],
+        [1., 1., 1.,  ..., 0., 0., 0.],
+        ...,
+        [1., 1., 1.,  ..., 0., 0., 0.],
+        [1., 1., 1.,  ..., 0., 0., 0.],
+        [1., 1., 1.,  ..., 0., 0., 0.]], device='cuda:0')
+attention_mask.shape : torch.Size([128, 242])
+*******beginning transformer.block********
+device:  cuda:4
+Memory Total:  32.0
+Memory Free:  26.5382080078125
+Memory Used:  5.4617919921875
+*******beginning transformer.block********
+device:  cuda:0
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning transformer.block********
+device:  cuda:2
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning transformer.block********
+device:  cuda:3
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning transformer.block********
+device:  cuda:5
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning compute_fpfn last gpu********
+device:  cuda:7
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning compute_fpfn last gpu********
+device:  cuda:1
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning compute_fpfn last gpu********
+device:  cuda:6
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning compute_fpfn last gpu********
+device:  cuda:4
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning compute_fpfn last gpu********
+device:  cuda:0
+Memory Total:  32.0
+Memory Free:  24.3057861328125
+Memory Used:  7.6942138671875
+*******beginning compute_fpfn last gpu********
+device:  cuda:2
+Memory Total:  32.0
+Memory Free:  24.2628173828125
+Memory Used:  7.7371826171875
+*******beginning compute_fpfn last gpu********
+device:  cuda:3
+Memory Total:  32.0
+Memory Free:  24.2530517578125
+Memory Used:  7.7469482421875
+Epoch 0:  14%|█▍        | 1/7 [00:13<01:21, 13.50s/it]*******beginning compute_fpfn last gpu********
+device:  cuda:5
+Memory Total:  32.0
+Memory Free:  23.3214111328125
+Memory Used:  8.6785888671875
+Epoch 0:  14%|█▍        | 1/7 [00:13<01:21, 13.55s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0:  29%|██▊       | 2/7 [00:17<00:42,  8.54s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0:  29%|██▊       | 2/7 [00:17<00:42,  8.54s/it, v_num=9, FpFn/train/loss=1.000]INFO - torch.nn.parallel.distributed - Reducer buckets have been rebuilt in this iteration.
+INFO - torch.nn.parallel.distributed - Reducer buckets have been rebuilt in this iteration.
+INFO - torch.nn.parallel.distributed - Reducer buckets have been rebuilt in this iteration.
+INFO - torch.nn.parallel.distributed - Reducer buckets have been rebuilt in this iteration.
+INFO - torch.nn.parallel.distributed - Reducer buckets have been rebuilt in this iteration.
+INFO - torch.nn.parallel.distributed - Reducer buckets have been rebuilt in this iteration.
+INFO - torch.nn.parallel.distributed - Reducer buckets have been rebuilt in this iteration.
+INFO - torch.nn.parallel.distributed - Reducer buckets have been rebuilt in this iteration.
+Epoch 0:  43%|████▎     | 3/7 [00:20<00:26,  6.75s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0:  43%|████▎     | 3/7 [00:20<00:27,  6.76s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0:  57%|█████▋    | 4/7 [00:23<00:17,  5.94s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0:  57%|█████▋    | 4/7 [00:23<00:17,  5.94s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0:  71%|███████▏  | 5/7 [00:26<00:10,  5.39s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0:  71%|███████▏  | 5/7 [00:26<00:10,  5.40s/it, v_num=9, FpFn/train/loss=0.999]Epoch 0:  86%|████████▌ | 6/7 [00:30<00:05,  5.07s/it, v_num=9, FpFn/train/loss=0.999]Epoch 0:  86%|████████▌ | 6/7 [00:30<00:05,  5.07s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0: 100%|██████████| 7/7 [00:32<00:00,  4.62s/it, v_num=9, FpFn/train/loss=1.000]Epoch 0: 100%|██████████| 7/7 [00:32<00:00,  4.62s/it, v_num=9, FpFn/train/loss=1.000]
+Validation: 0it [00:00, ?it/s][A
+Validation:   0%|          | 0/1 [00:00<?, ?it/s][A
+Validation DataLoader 0:   0%|          | 0/1 [00:00<?, ?it/s][A
+Validation DataLoader 0: 100%|██████████| 1/1 [00:02<00:00,  2.17s/it][AEpoch 0: 100%|██████████| 7/7 [00:46<00:00,  6.69s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000]
+                                                                      [AEpoch 0: 100%|██████████| 7/7 [00:46<00:00,  6.69s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000]Epoch 0, global step 4: 'FpFn/validation/F1' reached 0.00000 (best 0.00000), saving model to '/data/checkpoint/0_fold/finetune_MASS_Spindle_cosine_backbone_large_patch200_l1_Spindledetection_all_time_/version_9/ModelCheckpoint-epoch=00-val_acc=0.0000-val_score=6.0000.ckpt' as top 20
+Epoch 0:   0%|          | 0/7 [00:00<?, ?it/s, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000]        Epoch 1:   0%|          | 0/7 [00:00<?, ?it/s, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000]Epoch 1:  14%|█▍        | 1/7 [00:17<01:44, 17.38s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000]Epoch 1:  14%|█▍        | 1/7 [00:17<01:44, 17.43s/it, v_num=9, FpFn/train/loss=0.999, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  29%|██▊       | 2/7 [00:21<00:53, 10.62s/it, v_num=9, FpFn/train/loss=0.999, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  29%|██▊       | 2/7 [00:21<00:53, 10.62s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  43%|████▎     | 3/7 [00:24<00:32,  8.14s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  43%|████▎     | 3/7 [00:24<00:32,  8.15s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  57%|█████▋    | 4/7 [00:27<00:20,  7.00s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  57%|█████▋    | 4/7 [00:27<00:20,  7.00s/it, v_num=9, FpFn/train/loss=0.997, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  71%|███████▏  | 5/7 [00:31<00:12,  6.22s/it, v_num=9, FpFn/train/loss=0.997, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  71%|███████▏  | 5/7 [00:31<00:12,  6.23s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  86%|████████▌ | 6/7 [00:34<00:05,  5.77s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1:  86%|████████▌ | 6/7 [00:34<00:05,  5.77s/it, v_num=9, FpFn/train/loss=0.999, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1: 100%|██████████| 7/7 [00:35<00:00,  5.07s/it, v_num=9, FpFn/train/loss=0.999, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1: 100%|██████████| 7/7 [00:35<00:00,  5.07s/it, v_num=9, FpFn/train/loss=0.998, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=1.000, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]
+Validation: 0it [00:00, ?it/s][A
+Validation:   0%|          | 0/1 [00:00<?, ?it/s][A
+Validation DataLoader 0:   0%|          | 0/1 [00:00<?, ?it/s][A
+Validation DataLoader 0: 100%|██████████| 1/1 [00:01<00:00,  1.89s/it][AEpoch 1: 100%|██████████| 7/7 [00:50<00:00,  7.19s/it, v_num=9, FpFn/train/loss=0.998, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]
+                                                                      [AEpoch 1: 100%|██████████| 7/7 [00:50<00:00,  7.19s/it, v_num=9, FpFn/train/loss=0.998, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 1, global step 8: 'FpFn/validation/F1' reached 0.00000 (best 0.00000), saving model to '/data/checkpoint/0_fold/finetune_MASS_Spindle_cosine_backbone_large_patch200_l1_Spindledetection_all_time_/version_9/ModelCheckpoint-epoch=01-val_acc=0.0000-val_score=5.9985.ckpt' as top 20
+Epoch 1:   0%|          | 0/7 [00:00<?, ?it/s, v_num=9, FpFn/train/loss=0.998, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]        Epoch 2:   0%|          | 0/7 [00:00<?, ?it/s, v_num=9, FpFn/train/loss=0.998, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  14%|█▍        | 1/7 [00:16<01:37, 16.17s/it, v_num=9, FpFn/train/loss=0.998, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=1.000, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  14%|█▍        | 1/7 [00:16<01:37, 16.22s/it, v_num=9, FpFn/train/loss=0.998, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  29%|██▊       | 2/7 [00:19<00:48,  9.64s/it, v_num=9, FpFn/train/loss=0.998, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  29%|██▊       | 2/7 [00:19<00:48,  9.64s/it, v_num=9, FpFn/train/loss=0.999, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  43%|████▎     | 3/7 [00:22<00:29,  7.38s/it, v_num=9, FpFn/train/loss=0.999, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  43%|████▎     | 3/7 [00:22<00:29,  7.40s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  57%|█████▋    | 4/7 [00:26<00:20,  6.71s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  57%|█████▋    | 4/7 [00:26<00:20,  6.71s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  71%|███████▏  | 5/7 [00:29<00:11,  5.92s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  71%|███████▏  | 5/7 [00:29<00:11,  5.93s/it, v_num=9, FpFn/train/loss=1.010, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  86%|████████▌ | 6/7 [00:33<00:05,  5.66s/it, v_num=9, FpFn/train/loss=1.010, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2:  86%|████████▌ | 6/7 [00:33<00:05,  5.66s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2: 100%|██████████| 7/7 [00:34<00:00,  4.98s/it, v_num=9, FpFn/train/loss=1.000, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2: 100%|██████████| 7/7 [00:34<00:00,  4.98s/it, v_num=9, FpFn/train/loss=1.010, FpFn/validation/loss_step=0.998, FpFn/validation/loss_epoch=0.998, FpFn/validation/score=0.998, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]
+Validation: 0it [00:00, ?it/s][A
+Validation:   0%|          | 0/1 [00:00<?, ?it/s][A
+Validation DataLoader 0:   0%|          | 0/1 [00:00<?, ?it/s][A
+Validation DataLoader 0: 100%|██████████| 1/1 [00:01<00:00,  1.40s/it][AEpoch 2: 100%|██████████| 7/7 [00:49<00:00,  7.07s/it, v_num=9, FpFn/train/loss=1.010, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]
+                                                                      [AEpoch 2: 100%|██████████| 7/7 [00:49<00:00,  7.07s/it, v_num=9, FpFn/train/loss=1.010, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 2, global step 12: 'FpFn/validation/F1' reached 0.00000 (best 0.00000), saving model to '/data/checkpoint/0_fold/finetune_MASS_Spindle_cosine_backbone_large_patch200_l1_Spindledetection_all_time_/version_9/ModelCheckpoint-epoch=02-val_acc=0.0000-val_score=5.9957.ckpt' as top 20
+Epoch 2:   0%|          | 0/7 [00:00<?, ?it/s, v_num=9, FpFn/train/loss=1.010, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]        Epoch 3:   0%|          | 0/7 [00:00<?, ?it/s, v_num=9, FpFn/train/loss=1.010, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 3:  14%|█▍        | 1/7 [00:16<01:39, 16.56s/it, v_num=9, FpFn/train/loss=1.010, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.999, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 3:  14%|█▍        | 1/7 [00:16<01:39, 16.61s/it, v_num=9, FpFn/train/loss=0.990, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.997, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 3:  29%|██▊       | 2/7 [00:18<00:47,  9.49s/it, v_num=9, FpFn/train/loss=0.990, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.997, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 3:  29%|██▊       | 2/7 [00:18<00:47,  9.49s/it, v_num=9, FpFn/train/loss=0.995, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.997, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 3:  43%|████▎     | 3/7 [00:21<00:28,  7.01s/it, v_num=9, FpFn/train/loss=0.995, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.997, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 3:  43%|████▎     | 3/7 [00:21<00:28,  7.02s/it, v_num=9, FpFn/train/loss=0.989, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.997, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 3:  57%|█████▋    | 4/7 [00:23<00:17,  5.99s/it, v_num=9, FpFn/train/loss=0.989, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.997, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]Epoch 3:  57%|█████▋    | 4/7 [00:23<00:17,  5.99s/it, v_num=9, FpFn/train/loss=0.991, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.997, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]max_iou_col: tensor([0., 0., 0., 0.], device='cuda:7'), index_col: tensor([0, 0, 0, 0], device='cuda:7'), max_iou_row: tensor([0.], device='cuda:7'), index_row: tensor([0], device='cuda:7')
+tensor([], device='cuda:7', dtype=torch.int64) tensor([], device='cuda:7', dtype=torch.int64) torch.Size([0]) torch.Size([1, 4]) cuda:7 tensor([0., 0., 0., 0.], device='cuda:7')
+max_iou_col: tensor([0.5429], device='cuda:3'), index_col: tensor([0], device='cuda:3'), max_iou_row: tensor([0.5429], device='cuda:3'), index_row: tensor([0], device='cuda:3')
+tensor([0], device='cuda:3') tensor([], device='cuda:3', dtype=torch.int64) torch.Size([0]) torch.Size([1, 1]) cuda:3 tensor([0.], device='cuda:3')
+max_iou_col: tensor([0., 0., 0., 0., 0.], device='cuda:0'), index_col: tensor([0, 0, 0, 0, 0], device='cuda:0'), max_iou_row: tensor([0.], device='cuda:0'), index_row: tensor([0], device='cuda:0')
+tensor([], device='cuda:0', dtype=torch.int64) tensor([], device='cuda:0', dtype=torch.int64) torch.Size([0]) torch.Size([1, 5]) cuda:0 tensor([0., 0., 0., 0., 0.], device='cuda:0')
+max_iou_col: tensor([0.0000, 0.0000, 0.0000, 0.4500], device='cuda:0'), index_col: tensor([0, 0, 0, 0], device='cuda:0'), max_iou_row: tensor([0.4500], device='cuda:0'), index_row: tensor([3], device='cuda:0')
+tensor([0], device='cuda:0') tensor([], device='cuda:0', dtype=torch.int64) torch.Size([0]) torch.Size([1, 4]) cuda:0 tensor([0., 0., 0., 0.], device='cuda:0')
+max_iou_col: tensor([0.], device='cuda:5'), index_col: tensor([0], device='cuda:5'), max_iou_row: tensor([0.], device='cuda:5'), index_row: tensor([0], device='cuda:5')
+tensor([], device='cuda:5', dtype=torch.int64) tensor([], device='cuda:5', dtype=torch.int64) torch.Size([0]) torch.Size([1, 1]) cuda:5 tensor([0.], device='cuda:5')
+ERROR - Sleep - Failed after 0:03:44!
+Traceback (most recent calls WITHOUT Sacred internals):
+  File "main_kfold.py", line 168, in main
+    trainer.fit(model, datamodule=dm,)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/trainer/trainer.py", line 520, in fit
+    call._call_and_handle_interrupt(
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/trainer/call.py", line 42, in _call_and_handle_interrupt
+    return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/strategies/launchers/subprocess_script.py", line 92, in launch
+    return function(*args, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/trainer/trainer.py", line 559, in _fit_impl
+    self._run(model, ckpt_path=ckpt_path)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/trainer/trainer.py", line 935, in _run
+    results = self._run_stage()
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/trainer/trainer.py", line 978, in _run_stage
+    self.fit_loop.run()
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/loops/fit_loop.py", line 201, in run
+    self.advance()
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/loops/fit_loop.py", line 354, in advance
+    self.epoch_loop.run(self._data_fetcher)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/loops/training_epoch_loop.py", line 133, in run
+    self.advance(data_fetcher)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/loops/training_epoch_loop.py", line 218, in advance
+    batch_output = self.automatic_optimization.run(trainer.optimizers[0], kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/loops/optimization/automatic.py", line 178, in run
+    closure()
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/loops/optimization/automatic.py", line 140, in __call__
+    self._result = self.closure(*args, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/loops/optimization/automatic.py", line 126, in closure
+    step_output = self._step_fn()
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/loops/optimization/automatic.py", line 308, in _training_step
+    training_step_output = call._call_strategy_hook(trainer, "training_step", *kwargs.values())
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/trainer/call.py", line 288, in _call_strategy_hook
+    output = fn(*args, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/strategies/ddp.py", line 329, in training_step
+    return self.model(*args, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/nn/parallel/distributed.py", line 1156, in forward
+    output = self._run_ddp_forward(*inputs, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/nn/parallel/distributed.py", line 1110, in _run_ddp_forward
+    return module_to_run(*inputs[0], **kwargs[0])  # type: ignore[index]
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/lightning/pytorch/overrides/base.py", line 90, in forward
+    output = self._forward_module.training_step(*inputs, **kwargs)
+  File "/home/hwx/Sleep/main/modules/backbone.py", line 838, in training_step
+    output = self(batch, stage="train")
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/hwx/Sleep/main/modules/backbone.py", line 825, in forward
+    ret.update(objectives.compute_fpfn(self, prob=self.prob, IOU_th=self.IOU_th,batch=batch, stage=stage))
+  File "/home/hwx/Sleep/main/modules/objectives.py", line 672, in compute_fpfn
+    TP, FN, FP = by_e(cls_feats.detach().clone(), batch['Spindle_label'].detach().clone())
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/hwx/Sleep/main/utils/others.py", line 232, in forward
+    true_positive, one_index, one = self.best_match(max_iou_col, index_col, index_row, max_iou_row)
+  File "/home/hwx/Sleep/main/utils/others.py", line 191, in best_match
+    bestmatch[index_2, :] = 0
+RuntimeError: linearIndex.numel()*sliceSize*nElemBefore == expandedValue.numel() INTERNAL ASSERT FAILED at "../aten/src/ATen/native/cuda/Indexing.cu":389, please report a bug to PyTorch. number of flattened indices did not match number of elements in the value tensor: 4 vs 1
+
+Epoch 3:  57%|█████▋    | 4/7 [00:27<00:20,  6.84s/it, v_num=9, FpFn/train/loss=0.991, FpFn/validation/loss_step=1.000, FpFn/validation/loss_epoch=1.000, FpFn/validation/score=0.996, FpFn/validation/Recall=0.000, FpFn/validation/Precision=0.000, FpFn/validation/F1=0.000, validation/the_metric=6.000, FpFn/train/score=0.997, FpFn/train/Recall=0.000, FpFn/train/Precision=0.000, FpFn/train/F1=0.000, train/the_metric=6.000]
+VM-0-3-centos:20219:20639 [0] NCCL INFO [Service thread] Connection closed by localRank 0
+VM-0-3-centos:20220:20642 [1] NCCL INFO [Service thread] Connection closed by localRank 0
+VM-0-3-centos:20225:20641 [3] NCCL INFO [Service thread] Connection closed by localRank 0
+VM-0-3-centos:20231:20640 [7] NCCL INFO [Service thread] Connection closed by localRank 0
+VM-0-3-centos:20219:20219 [0] NCCL INFO comm 0x411f6c10 rank 0 nranks 8 cudaDev 0 busId 1a000 - Abort COMPLETE
+max_iou_col: tensor([0., 0., 0., 0.], device='cuda:7'), index_col: tensor([0, 0, 0, 0], device='cuda:7'), max_iou_row: tensor([0.], device='cuda:7'), index_row: tensor([0], device='cuda:7')
+tensor([], device='cuda:7', dtype=torch.int64) tensor([], device='cuda:7', dtype=torch.int64) torch.Size([0]) torch.Size([1, 4]) cuda:7 tensor([0., 0., 0., 0.], device='cuda:7')
+max_iou_col: tensor([0.0000, 0.0000, 0.0000, 0.1131], device='cuda:3'), index_col: tensor([0, 0, 0, 1], device='cuda:3'), max_iou_row: tensor([0.0000, 0.1131], device='cuda:3'), index_row: tensor([0, 3], device='cuda:3')
+tensor([], device='cuda:3', dtype=torch.int64) tensor([], device='cuda:3', dtype=torch.int64) torch.Size([0]) torch.Size([2, 4]) cuda:3 tensor([0., 0., 0., 0.], device='cuda:3')
+max_iou_col: tensor([0., 0., 0., 0.], device='cuda:6'), index_col: tensor([0, 0, 0, 0], device='cuda:6'), max_iou_row: tensor([0.], device='cuda:6'), index_row: tensor([0], device='cuda:6')
+tensor([], device='cuda:6', dtype=torch.int64) tensor([], device='cuda:6', dtype=torch.int64) torch.Size([0]) torch.Size([1, 4]) cuda:6 tensor([0., 0., 0., 0.], device='cuda:6')
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 20220 closing signal SIGTERM
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 20223 closing signal SIGTERM
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 20225 closing signal SIGTERM
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 20226 closing signal SIGTERM
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 20227 closing signal SIGTERM
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 20229 closing signal SIGTERM
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 20231 closing signal SIGTERM
+WARNING:torch.distributed.elastic.multiprocessing.api:Unable to shutdown process 20220 via 15, forcefully exiting via 9
+WARNING:torch.distributed.elastic.multiprocessing.api:Unable to shutdown process 20223 via 15, forcefully exiting via 9
+WARNING:torch.distributed.elastic.multiprocessing.api:Unable to shutdown process 20225 via 15, forcefully exiting via 9
+WARNING:torch.distributed.elastic.multiprocessing.api:Unable to shutdown process 20226 via 15, forcefully exiting via 9
+WARNING:torch.distributed.elastic.multiprocessing.api:Unable to shutdown process 20227 via 15, forcefully exiting via 9
+WARNING:torch.distributed.elastic.multiprocessing.api:Unable to shutdown process 20229 via 15, forcefully exiting via 9
+WARNING:torch.distributed.elastic.multiprocessing.api:Unable to shutdown process 20231 via 15, forcefully exiting via 9
+ERROR:torch.distributed.elastic.multiprocessing.api:failed (exitcode: 1) local_rank: 0 (pid: 20219) of binary: /home/hwx/miniconda3/envs/pytorch/bin/python
+Traceback (most recent call last):
+  File "/home/hwx/miniconda3/envs/pytorch/bin/torchrun", line 8, in <module>
+    sys.exit(main())
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 346, in wrapper
+    return f(*args, **kwargs)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/distributed/run.py", line 794, in main
+    run(args)
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/distributed/run.py", line 785, in run
+    elastic_launch(
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 134, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/home/hwx/miniconda3/envs/pytorch/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 250, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+main_kfold.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2023-10-30_11:53:25
+  host      : gpu02
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 20219)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

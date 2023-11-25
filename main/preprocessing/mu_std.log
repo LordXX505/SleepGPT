@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "get_std_mean.py", line 16, in <module>
+    from main.datamodules.Multi_datamodule import MultiDataModule
+ModuleNotFoundError: No module named 'main'

@@ -1,0 +1,7 @@
+1. EEG amplifiers of sub3004 and 3015 were wrongly connected (channels 1-32 were actually 33-64, and vice versa)
+2. SD EEG: N = 105, 56 EEG, 3 EMG (EMG1-EMG3, EMG2-EMG3), 2 refs, 2 EOG, 1 ECG
+3. Young EEG: N =33,  57 EEG, 2 EMG, 2 refs, 2 EOG, 1 ECG 
+4. EEG data of the first 97*30 seconds for sub3019_Sleep1 should be delted to match stages, events, and fMRI
+5. EEG data of the first 70*30 seconds for sub3039 should be delted to match stages, events, and fMRI
+6. stages: unit 30s
+7. events: unit 1s. onset, offset, duration

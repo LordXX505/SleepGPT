@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="JupyterPersistentConnectionParameters">
+    <option name="knownRemoteServers">
+      <list>
+        <JupyterConnectionParameters>
+          <option name="authType" value="notebook" />
+          <option name="token" value="Hwx990519!" />
+          <option name="urlString" value="http://192.168.10.100:8890/" />
+          <authParams2>
+            <map>
+              <entry key="token" value="Hwx990519!" />
+            </map>
+          </authParams2>
+        </JupyterConnectionParameters>
+        <JupyterConnectionParameters>
+          <option name="authType" value="notebook" />
+          <option name="urlString" value="http://localhost:1234" />
+          <authParams2>
+            <map />
+          </authParams2>
+        </JupyterConnectionParameters>
+        <JupyterConnectionParameters>
+          <option name="authType" value="notebook" />
+          <option name="urlString" value="http://localhost:8888" />
+          <authParams2>
+            <map />
+          </authParams2>
+        </JupyterConnectionParameters>
+        <JupyterConnectionParameters>
+          <option name="authType" value="notebook" />
+          <option name="urlString" value="http://localhost:8889" />
+          <authParams2>
+            <map />
+          </authParams2>
+        </JupyterConnectionParameters>
+      </list>
+    </option>
+    <option name="moduleParameters">
+      <map>
+        <entry key="$USER_HOME$/Desktop/fnc/.idea/fnc.iml">
+          <value>
+            <JupyterConnectionParameters>
+              <option name="authType" value="notebook" />
+              <option name="urlString" value="http://localhost:1234" />
+              <authParams2>
+                <map />
+              </authParams2>
+            </JupyterConnectionParameters>
+          </value>
+        </entry>
+        <entry key="$USER_HOME$/Desktop/pythonProject1/.idea/pythonProject1.iml">
+          <value>
+            <JupyterConnectionParameters>
+              <option name="managed" value="true" />
+              <option name="sdkHomePath" value="$USER_HOME$/tools/anaconda/anaconda3/envs/boost/bin/python" />
+            </JupyterConnectionParameters>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/.idea/Sleep.iml">
+          <value>
+            <JupyterConnectionParameters>
+              <option name="authType" value="notebook" />
+              <option name="token" value="Hwx990519!" />
+              <option name="urlString" value="http://192.168.10.100:8890/" />
+              <authParams2>
+                <map>
+                  <entry key="token" value="Hwx990519!" />
+                </map>
+              </authParams2>
+            </JupyterConnectionParameters>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

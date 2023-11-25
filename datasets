@@ -1,0 +1,206 @@
+import sys
+
+import random
+
+import numpy as np
+import torch
+import io
+import pyarrow as pa
+import os
+
+from main.transforms import keys_to_transforms
+from torch.utils import data
+from typing import Optional, Union
+
+
+class BaseDatatset(data.Dataset):
+
+    def __init__(
+            self,
+            transform_keys: dict,
+            data_dir: str,
+            names: Union[np.ndarray, list],
+            column_names: list,
+            fs: int = 100,
+            epoch_duration: int = 30,
+            stage: bool = True,
+            spindle: bool = False,
+            concatenate=False,
+            random_choose_channels=9,
+            settings=None
+    ):
+        """
+        :param transform_keys: transform and augment
+        :param data_dir: base data dir
+        :param names: subject names
+        :param column_names: epochs(x), spindle ,stages
+        :param fs: 100hz
+        :param epoch_duration: 30s. Mass is 20s.
+        :param stage: need stage labels.
+        :param spindle: nedd spindle labels.
+        """
+        self.x = None
+        self.Spindle_label = None
+        self.Stage_label = None
+        self.stage = stage
+        self.spindle = spindle
+        super().__init__()
+        self.random_choose_channels = random_choose_channels
+        self.transforms = keys_to_transforms(transform_keys['keys'], transform_keys['mode'])
+        self.data_dir = data_dir
+        names = np.array(names)
+        if concatenate:
+            self.names = np.concatenate(names)
+        else:
+            self.names = names
+        self.column_names = column_names
+        self.max_channels = 57
+        assert 'x' in self.column_names
+        self.choose_channels = np.array([4, 5, 14, 15, 16, 18, 22, 23, 36, 37, 38, 39, 40, 52])
+        # array(['C3', 'C4', 'Cz', 'ECG', 'EMG1', 'EOG1', 'F3', 'F4', 'Fpz', 'Fz',
+        # 'O1', 'O2', 'Oz', 'Pz'], dtype='<U4')
+        self.settings = settings
+        # if len(names) != 0:
+        #     tables = [
+        #         pa.ipc.RecordBatchFileReader(
+        #             pa.memory_map(f"{data_dir}/{name}.arrow", "r")
+        #         ).read_all()
+        #         for name in names
+        #         if os.path.isfile(f"{data_dir}/{name}.arrow")
+        #     ]
+        #     # assert len(tables) == len(names)
+        #     table = pa.concat_tables(tables, promote=True)
+        #
+        #     x = table['x'].to_numpy()
+        #     self.x = []
+        #     for item in x:
+        #         tmp = []
+        #         for chanel in item:
+        #             tmp.append(chanel)
+        #         self.x.append(tmp)
+        #     self.x = np.array(self.x)
+        #     self.len = self.x.shape[0]
+        #     if self.spindle:
+        #         assert 'Spindle_label' in self.column_names
+        #         self.pre_spindle(table['Spindle_label'].to_numpy())
+        #     if self.stage:
+        #         assert 'Stage_label' in self.column_names
+        #         self.pre_stage(table['Stage_label'].to_numpy())
+        #     del table
+
+    def pre_spindle(self, spindle):
+        self.Spindle_label = []
+        for item in spindle:
+            self.Spindle_label.append(item)
+        self.Spindle_label = np.array(self.Spindle_label)
+
+    def pre_stage(self, stage):
+        self.Stage_label = np.array(stage)
+
+    def __len__(self):
+        return len(self.names)
+
+    @property
+    def all_channels(self):
+        return torch.ones(self.max_channels)
+
+    @property
+    def channels(self):
+        raise NotImplementedError
+
+    def get_epochs(self, data):
+        x = np.array(data.as_py())
+        channel = self.channels
+        if self.settings is not None:
+            if 'ECG' in self.settings:
+                idx = np.where(channel == 15)[0][0]
+                # print(idx)
+                x[idx] = x[idx] * 1000
+                # print(x[idx])
+        x = torch.from_numpy(self.transforms(x)).float()
+        assert x.shape[1] == channel.shape[0]
+
+        return {'x': (x, channel)}
+
+    def get_stage(self, data):
+        return {'Stage_label': torch.from_numpy(np.array(data)).long()}
+
+    def get_spindle(self, data):
+        data = np.array(data.as_py())
+        return {'Spindle_label': torch.from_numpy(data).long()}
+
+    def get_suite(self, index):
+        result = None
+        name = self.names[index]
+        if not os.path.isfile(name):
+            name = '/data/data/' + '/'.join(name.split('/')[-3:])
+            if not os.path.isfile(name):
+                name = '/data/ata/' + '/'.join(name.split('/')[-4:])
+                if not os.path.isfile(name):
+                    raise RuntimeError(f"Error while read file idx {name}")
+        tables = pa.ipc.RecordBatchFileReader(
+            pa.memory_map(name, "r")
+        ).read_all()
+        while result is None:
+            try:
+                ret = dict()
+                ret.update(self.get_epochs(tables['x'][0]))
+                if self.stage:
+                    ret.update(self.get_stage(tables['stage']))
+                if self.spindle:
+                    ret.update(self.get_spindle(tables['spindle'][0]))
+                ret.update({'index': index})
+
+                result = True
+            except Exception as e:
+                print(f"Error while read file idx {index} in {name} -> {e}")
+                sys.exit(0)
+        return ret
+
+    def collate(self, batch_list):
+        keys = set(keys for b in batch_list for keys in b.keys())
+        dict_batch = {k: [dic[k] if k in dic else None for dic in batch_list] for k in keys}
+        dict_batch['epochs'] = []
+        dict_batch['mask'] = []
+        if self.random_choose_channels >= self.choose_channels.shape[0]:
+            random_channels_num = self.random_choose_channels-self.choose_channels.shape[0]
+            all_channels = np.arange(57)
+            select_channels = np.setdiff1d(all_channels, self.choose_channels)
+            np.random.shuffle(select_channels)
+            select_channels = select_channels[:random_channels_num]
+            select_channels = np.concatenate([self.choose_channels, select_channels])
+        for x in dict_batch['x']:
+            epochs = x[0]
+            channel = x[1]
+            res_multi_epochs = []
+            attention_multi_mask = []
+            for _x in epochs:
+                if self.random_choose_channels >= self.choose_channels.shape[0]:
+                    res_epochs = torch.zeros((self.random_choose_channels, _x.shape[1]))
+                    attention_mask = torch.zeros(self.random_choose_channels)
+                    for i, index in enumerate(select_channels):
+                        idx = np.where(channel == index)[0]
+                        if idx.shape[0] != 0:
+                            res_epochs[i] = _x[idx]
+                            attention_mask[i] = 1
+                else:
+                    attention_mask = torch.zeros(self.max_channels)
+                    attention_mask[channel] = 1
+                    res_epochs = torch.zeros((self.max_channels, _x.shape[1]))
+                    res_epochs[channel] = _x
+                res_multi_epochs.append(res_epochs)
+                attention_multi_mask.append(attention_mask)
+            dict_batch['epochs'].append(torch.stack(res_multi_epochs, dim=0))
+            dict_batch['mask'].append(torch.stack(attention_multi_mask, dim=0))
+            # for i in res_epochs:
+            #     print(max(i), end=', ')
+            # print(' ')
+        dict_batch['epochs'] = torch.stack(dict_batch['epochs'], dim=0)
+        dict_batch['mask'] = torch.stack(dict_batch['mask'], dim=0)
+
+        dict_batch['epochs'] = dict_batch['epochs'].transpose(0, 1)
+        dict_batch['mask'] = dict_batch['mask'].transpose(0, 1)
+
+        dict_batch.pop('x')
+        return dict_batch
+

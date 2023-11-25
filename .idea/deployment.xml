@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" serverName="root@111.229.168.142:22 key" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
+    <option name="confirmBeforeUploading" value="false" />
+    <serverData>
+      <paths name="2201210064@wm1-login.pku.edu.cn:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="bjnz">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="root@111.229.168.142:22 key">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="root@GPU01:22 agent">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="root@GPU01:22 agent (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="Sleep" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="root@GPU02:22 agent">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="root@GPU02:22 agent (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="tencent">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="weixuan@192.168.10.100:22 password (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="wmbd">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/Sleep" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>

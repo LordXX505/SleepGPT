@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" host="wmbd1-data.pku.edu.cn" id="a7cf3a98-41e9-431e-bb34-668e4c0581b8" port="22" nameFormat="DESCRIPTIVE" username="2201210064" useOpenSSHConfig="true" />
+      <sshConfig authType="PASSWORD" host="wm1-data.pku.edu.cn" id="fd2ab8b2-fe1b-433a-a1e1-4d5f8fe3ded2" port="22" nameFormat="DESCRIPTIVE" username="2201210064" useOpenSSHConfig="true" />
+      <sshConfig authType="PASSWORD" host="GPU01" id="c8fb7ef6-67e3-418a-a449-ad07da8f3eb7" port="22" nameFormat="DESCRIPTIVE" username="root" useOpenSSHConfig="true" />
+      <sshConfig host="GPU02" id="ae869f65-2d39-4677-8fa5-7b048d044eeb" keyPath="$USER_HOME$/sleep_ssh.pem" port="22" nameFormat="DESCRIPTIVE" username="root" useOpenSSHConfig="true" />
+      <sshConfig authType="PASSWORD" host="10.12.100.88" id="e7468562-1b43-4668-ab98-3c67fcb2b94d" port="22" nameFormat="DESCRIPTIVE" username="huangweixuan" useOpenSSHConfig="true" />
+    </configs>
+  </component>
+</project>
