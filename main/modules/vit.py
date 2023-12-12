@@ -159,7 +159,7 @@ class PositionalEncoding(nn.Module):
     def __init__(self, out_features, dropout=0.1):
         super(PositionalEncoding, self).__init__()
 
-        self.max_len = 20
+        self.max_len = 600
 
         print('[INFO] Maximum length of pos_enc: {}'.format(self.max_len))
 
@@ -172,12 +172,11 @@ class PositionalEncoding(nn.Module):
         self.pe = nn.Parameter(pe, requires_grad=False)
 
     def forward(self, x):
-        if self.pe.shape != x.shape:
-            pe = self.pe.unsqueeze(2)
-        else:
-            pe = self.pe
-        assert x.size(1) == self.max_len
-        x = x + pe[:, :x.size(1)]
+        # if self.pe.shape != x.shape:
+        #     pe = self.pe.unsqueeze(0)
+        # else:
+        #     pe = self.pe
+        x = x + self.pe[:, :x.size(1)]
         return x
 
 
@@ -568,3 +567,61 @@ class Transformer(nn.Module):
         ret.update({modality_type: x})
 
         return ret
+
+class SpindleDecoderTransformer(nn.Module):
+    def __init__(self, hidden_size, patch_size, weight=None, decoder_depth=6, enc_dim=512, num_heads=16, mlp_ratio=4.0,
+                 qkv_bias=True, drop_rate=0.0, attn_drop_rate=0.0, dpr=None, norm_layer=nn.LayerNorm, num_layers=1,
+                 seq_len=10, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.first = nn.Sequential(nn.Linear(hidden_size, enc_dim),
+                                   nn.LayerNorm(enc_dim))
+        self.token_type_embeddings = nn.Embedding(2, enc_dim)
+        self.blocks = nn.ModuleList()
+        if dpr is not None:
+            drop_path_rate = [x.item() for x in (torch.linspace(0.00, dpr, decoder_depth))]
+        else:
+            drop_path_rate = None
+        for i in range(decoder_depth):
+            self.blocks.append(Block(dim=enc_dim,
+                                     num_heads=num_heads,
+                                     mlp_ratio=mlp_ratio,
+                                     qkv_bias=qkv_bias,
+                                     drop=drop_rate,
+                                     attn_drop=attn_drop_rate,
+                                     drop_path=drop_path_rate[i] if dpr is not None else 0.0,
+                                     norm_layer=norm_layer,
+                                     ))
+        self.last = nn.Linear(enc_dim * 2, 200)
+        # self.last_act = nn.GELU()
+        # self.predic_all = nn.Linear(2000, 2000)
+        self.pe = PositionalEncoding(out_features=enc_dim)
+
+    def forward(self, x):
+        time_c3, fft_c3 = x
+        B = time_c3.shape[0]
+        L = time_c3.shape[1]
+        x = torch.cat([time_c3, fft_c3], dim=1)
+        x = self.first(x)
+        time_c3, fft_c3 = x[:, :L], x[:, L:]
+        time_c3, fft_c3 = (
+            self.pe(time_c3),
+            self.pe(fft_c3)
+        )
+        x_embeds, fft_embeds = (
+            time_c3 + self.token_type_embeddings(
+                torch.zeros((B, time_c3.shape[1]), dtype=torch.long,
+                            device=time_c3.device)),
+            fft_c3 + self.token_type_embeddings(
+                torch.ones((B, fft_c3.shape[1]), dtype=torch.long, device=fft_c3.device))
+        )
+        inputs = torch.cat([x_embeds, fft_embeds], dim=1)
+        for block in self.blocks:
+            inputs = block(inputs)
+        x_embeds, fft_embeds = (
+            inputs[:, :L],
+            inputs[:, L:]
+        )
+        x = torch.cat([x_embeds, fft_embeds], dim=-1)
+        # x = F.sigmoid(self.predic_all(self.last_act(self.last(x).reshape(B, -1))))
+        x = F.sigmoid(self.last(x).reshape(B, -1))
+        return x

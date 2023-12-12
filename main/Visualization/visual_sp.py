@@ -77,14 +77,14 @@ def main(_config):
             patch_epochs_mask2 = patch_epochs_fft.masked_fill(mask_fft[:, :, None], np.nan)
             patch_epochs_mask = pre_train.unpatchify(patch_epochs_mask)[1]
             patch_epochs_mask2 = pre_train.unpatchify_2D(patch_epochs_mask2)[1]
-
+            spindle_label = res['batch']['Spindle_label'][1]
             masked_time = pre_train.unpatchify(res['cls_feats'].masked_fill(~mask[:, :, None], np.nan))[1]
             masked_fft = pre_train.unpatchify_2D(res['cls_feats_fft'].masked_fill(~mask_fft[:, :, None], np.nan))[1]
             # masked_fft = pre_train.unpatchify_2D(res['mtm_logits_fft'])[1]
             patch_epochs = pre_train.unpatchify(patch_epochs)[1]
             patch_epochs_fft = pre_train.unpatchify_2D(patch_epochs_fft)[1]
             names = get_names()
-            for i, channels in enumerate(pre_train.transformer.choose_channels):
+            for i, channels in enumerate(range(len(patch_epochs_mask))):
                 axes = Axes[i][0]
                 print(patch_epochs_mask[i])
                 axes.plot(range(3000), patch_epochs_mask[i][:3000].detach().numpy(), color[-2])
@@ -95,6 +95,7 @@ def main(_config):
                 axes = Axes[i][1]
                 axes.plot(range(3000), masked_time[i].detach().numpy(), color[-2])
                 axes.plot(range(3000), patch_epochs[i].detach().numpy(), 'r', alpha=0.2)
+                axes.plot(range(2000), spindle_label.detach().numpy(), color[-1])
                 axes.set_title(names[i])
 
                 # axes.set_yticks(np.arange(0, 2, 0.1))
@@ -107,7 +108,7 @@ def main(_config):
 
             plt.figure()
             fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(30, 32))
-            for i, channels in enumerate(pre_train.transformer.choose_channels):
+            for i, channels in enumerate(range(len(patch_epochs_mask))):
                 axes = Axes[i][0]
                 axes.imshow(masked_fft[i].detach().numpy(), aspect='auto', origin='lower')
                 axes.set_title(names[i] + '_' + str(loss2.item()))

@@ -1,8 +1,8 @@
 from .transform import Compose, RandomTimeShift, RandomDCShift, RandomZeroMasking, RandomBandStopFilter, \
     RandomAdditiveGaussianNoise, RandomAmplitudeScale, TwoTransform, default, Multi_Transform, FFT_Transform, \
-    normalize, Permutation
+    normalize, Permutation, RandomTimeInverted, unnormalize
 _idx_to_transforms = [RandomAmplitudeScale(), RandomTimeShift(), RandomDCShift(), RandomAdditiveGaussianNoise(),
-                      RandomBandStopFilter(), RandomZeroMasking(), Permutation()]
+                      RandomBandStopFilter(), RandomZeroMasking(), Permutation(), RandomTimeInverted()]
 
 
 def keys_to_transforms(keys, mode):

@@ -1,5 +1,8 @@
 import copy
-
+import glob
+import os
+import sys
+import torch.nn.functional as F
 import torch.nn as nn
 from pytorch_lightning.utilities.rank_zero import rank_zero_info
 import torch
@@ -19,22 +22,86 @@ def init_weights(module):
     if isinstance(module, nn.Linear) and module.bias is not None:
         module.bias.data.zero_()
 
+def Dice_loss(inputs, target, beta=1, smooth=1e-5):
+    n, h = inputs.size()
+    nt, ht = target.size()
+    if h != ht:
+        inputs = F.interpolate(inputs, size=(ht),  align_corners=True)
+    tp = torch.sum(target * inputs, dim=1)
+    fp = torch.sum(inputs, dim=1) - tp
+    fn = torch.sum(target, dim=1) - tp
+    score = ((1 + beta ** 2) * tp + smooth) / ((1 + beta ** 2) * tp + beta ** 2 * fn + fp + smooth)
+    dice_loss = 1 - torch.mean(score)
+    return dice_loss
+
 
 class Fpfn(nn.Module):
 
-    def __init__(self):
+    def __init__(self, use_fpfn='Fpfn'):
         super(Fpfn, self).__init__()
+        self.use_fpfn = use_fpfn
 
-    def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        sum1 = torch.sum(target, -1)
-        sum2 = torch.sum(1 - target, -1)
-        # print(sum1, sum2)
-        # print(torch.sum(output * (1 - target), -1), torch.sum((1 - output) * target, -1))
-        weight = [1, 10]
-        loss = torch.sum(output[..., 0] * (1 - target), -1) / sum2 + torch.sum(output[..., 1] * target, -1) / sum1
-        # print(loss)
-        # print(torch.mean(loss))
-        return torch.mean(loss)
+    def _get_next_version(self, root_dir) -> int:
+        import os
+        save_dir = root_dir
+
+        listdir_info = os.listdir(save_dir)
+
+
+        existing_versions = []
+        for listing in listdir_info:
+            d = listing
+            bn = os.path.basename(d)
+            if bn.startswith("version_"):
+                dir_ver = bn.split("_")[1].replace("/", "")
+                existing_versions.append(dir_ver)
+        if len(existing_versions) == 0:
+            return 0
+
+        return len(existing_versions) + 1
+    def forward(self, output: torch.Tensor, target: torch.Tensor, data_idx, store) -> torch.Tensor:
+        target = target.float()
+        if self.use_fpfn == 'Fpfn':
+            sum1 = torch.sum(target, -1)
+            sum2 = torch.sum(1 - target, -1)
+            # rank_zero_info(f'ouput:{torch.max(output, dim=-1), torch.min(output, dim=-1), output[0]}, targe:{sum1, sum2, target[0]}')
+            loss = torch.sum(output * (1 - target), -1) / sum2 + torch.sum((1 - output) * target, -1) / sum1
+            # rank_zero_info(f'output: {torch.max(output), torch.min(output)} loss: {loss}')
+            if store:
+                idx = torch.where(loss > 0.9)[0]
+                if idx.shape[0] != 0:
+                    import numpy as np
+                    torch.set_printoptions(threshold=np.inf)
+                    # rank_zero_info(f'outlier: {loss[torch.where(loss > 0.9)]},'
+                    #                f'output: {output[torch.where(loss > 0.9)]},'
+                    #                f'target: {target[torch.where(loss > 0.9)]}')
+                    rootdir = '/home/cuizaixu_lab/huangweixuan/data/ver_log'
+                    os.makedirs(rootdir,
+                                exist_ok=True)
+                    torch.save({"output": output[torch.where(loss>1.05)], "target": target[torch.where(loss>1.05)], "idx": data_idx},
+                               f'{rootdir}/version_{self._get_next_version(rootdir)}.ckpt')
+                idx = torch.where(loss < 0.5)[0]
+                if idx.shape[0] != 0:
+                    import numpy as np
+                    torch.set_printoptions(threshold=np.inf)
+                    # rank_zero_info(f'outlier: {loss[torch.where(loss < 0.5)]},'
+                    #                f'output: {output[torch.where(loss < 0.5)]},'
+                    #                f'target: {target[torch.where(loss < 0.5)]}')
+                    rootdir = '/home/cuizaixu_lab/huangweixuan/data/ver_log'
+                    os.makedirs(rootdir,
+                                exist_ok=True)
+                    torch.save(
+                        {"output": output[torch.where(loss < 0.5)], "target": target[torch.where(loss < 0.5)], "idx": data_idx},
+                        f'{rootdir}/version_{self._get_next_version(rootdir)}.ckpt')
+            return torch.mean(loss)
+        elif self.use_fpfn == 'BCE':
+            target = target.float()
+            loss = F.binary_cross_entropy_with_logits(output, target, weight=torch.tensor([1, 10], device=output.device))
+            return loss
+        else:
+            target = target.float()
+            loss = 0.5*F.binary_cross_entropy_with_logits(output, target) + 0.5*Dice_loss(output, target)
+            return loss
 
 
 class Event(nn.Module):
@@ -164,12 +231,14 @@ class By_Event(nn.Module):
         row_len = index_row.shape[0]
         bestmatch = torch.zeros((row_len, col_len), device=self.device)
         index_1 = torch.where((index_row[index_col[range(col_len)]] == torch.tensor(range(col_len), device=self.device))
-                              & (max_iou_col[range(col_len)] >= torch.tensor(self.IOU_threshold, device=self.device)))[0]
+                              & (max_iou_col[range(col_len)] >= torch.tensor(self.IOU_threshold, device=self.device)))[
+            0]
         index_2 = torch.where((index_col[index_row[range(row_len)]] == torch.tensor(range(row_len), device=self.device))
-                              & (max_iou_row[range(row_len)] >= torch.tensor(self.IOU_threshold, device=self.device)))[0]
+                              & (max_iou_row[range(row_len)] >= torch.tensor(self.IOU_threshold, device=self.device)))[
+            0]
         # print(index_1, index_2)
-        index_1 = index_1.reshape(-1).to(self.device)
-        index_2 = index_2.reshape(-1).to(self.device)
+        index_1 = index_1.reshape(-1).to(self.device).long()
+        index_2 = index_2.reshape(-1).to(self.device).long()
         index_1_true = torch.tensor([False] * col_len, dtype=torch.bool, device=self.device)
         index_2_true = torch.tensor([False] * row_len, dtype=torch.bool, device=self.device)
         index_1_true[index_1] = True
@@ -189,10 +258,25 @@ class By_Event(nn.Module):
 
         bestmatch[(index_2_true, index_row[index_2_true])] = 1
         bestmatch[(index_col[index_1_true], index_1_true)] = 1
-        # print(index_2, index_2_true, index_2_true.shape, bestmatch.shape, bestmatch.device, bestmatch[0])
-        bestmatch[index_2, :] = 0
-        bestmatch[:, index_row[index_2]] = 0
-        bestmatch[(index_2, index_row[index_2])] = 2
+        try:
+            bestmatch = bestmatch.index_fill(dim=0, index=index_2, value=0)
+            # bestmatch[index_2] = 0
+        except Exception as e:
+            print(f"Exception : {e}")
+            print(index_2, index_2_true, index_2_true.shape, bestmatch)
+            sys.exit(0)
+        try:
+            bestmatch = bestmatch.index_fill(dim=1, index=index_row[index_2], value=0)
+            # bestmatch[:, index_row[index_2]] = 0
+        except Exception as e:
+            print(f"Exception : {e}, index_2: {index_2}, index_2_true:{index_2_true}, bestmatch: {bestmatch}")
+            sys.exit(0)
+        try:
+            # bestmatch.index_put((index_2, index_row[index_2]), values=torch.tensor(2, device=self.device, dtype=torch.int64))
+            bestmatch[(index_2, index_row[index_2])] = 2
+        except Exception as e:
+            print(f"Exception : {e}, index_2: {index_2}, index_2_true:{index_2_true}, bestmatch: {bestmatch}")
+            sys.exit(0)
         TP = (bestmatch == 2).sum().item()
 
         # print('del: ', bestmatch)
@@ -209,8 +293,8 @@ class By_Event(nn.Module):
         FP = 0.0
         # print(output.shape)
         len = output.shape[1]
-        output = output[..., 0]
-        assert output.shape == target.shape
+
+        assert output.shape == target.shape, f'output shape:{output.shape}, target shape: {target.shape}'
 
         predicted_events_output = self.get_event.get_event(output, processingpost=ProcessingPostEvent, prob=True)
         predicted_events_target = self.get_event.get_event(target, prob=False)
@@ -312,6 +396,7 @@ class By_Event(nn.Module):
         # print(Precision)
         # return Recall, Precision, cal_F1_score(Precision, Recall)
         return TP, FN, FP
+
 
 def cal_IOU(overlap, left, right):
     return (1.0 * overlap / (right - left + 1)).item()
@@ -423,3 +508,35 @@ def set_metrics(pl_module, ):
                 setattr(pl_module, f"{split}_{k}_accuracy", Accuracy())
                 setattr(pl_module, f"{split}_{k}_loss", Scalar())
 
+if __name__ == '__main__':
+    import torch
+    # ckpt = torch.load('../../data/case.ckpt', map_location=torch.device('cpu'))
+    # cls = ckpt['cls']
+    # spindle = ckpt['Spindle_label']
+    # cls = torch.zeros([1, 2000])
+    # cls[0, 2:52] = 1
+    # cls[0, 60:115] = 1
+    # cls[0, 200:252] = 1
+    # spindle = torch.zeros([1, 2000])
+    # spindle[0, 10:120] = 1
+    # spindle[0, 201:252] = 1
+    path_list = glob.glob('../../data/ver_log/*')
+    for path in path_list:
+        ckpt = torch.load(path, map_location=torch.device('cpu'))
+        import matplotlib.pyplot as plt
+        x = range(2000)
+        cls = ckpt['output']
+        spindle = ckpt['Spindle_label']
+        for i in range(cls):
+            plt.plot(x, spindle[i], c='r')
+            plt.plot(x, cls[i], c='b')
+            plt.legend()
+            plt.show()
+        # fpfn = Fpfn()
+        # loss = fpfn(cls, spindle)
+        # by_e = By_Event(threshold=0.55, IOU_threshold=0.2, device=cls.device)
+        # TP, FN, FP = by_e(cls.detach().clone(), spindle.detach().clone())
+        # print(TP, FN, FP)
+        # Recall = cal_Recall(TP, FN)
+        # Precision = cal_Precision(TP, FP)
+        # print(Recall, Precision, cal_F1_score(Precision, Recall))

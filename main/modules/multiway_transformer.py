@@ -1,14 +1,4 @@
-""" Vision Transformer (ViT) in PyTorch
 
-A PyTorch implement of Vision Transformers as described in
-'An Image Is Worth 16 x 16 Words: Transformers for Image Recognition at Scale' - https://arxiv.org/abs/2010.11929
-
-The official jax code is released and available at https://github.com/google-research/vision_transformer
-
-DeiT model defs and weights from https://github.com/facebookresearch/deit,
-paper `DeiT: Data-efficient Image Transformers` - https://arxiv.org/abs/2012.12877
-
-"""
 import os
 
 import numpy as np
@@ -396,7 +386,7 @@ class PatchEmbed(nn.Module):
             assert len(x) == 2
             assert C == self.max_channels
             time_proj = rearrange(self.proj(x[0]), 'B (C D) P -> B (C P) D', C=self.in_chans)
-            fft_proj =  rearrange(self.fft_proj(x[1]).squeeze(-1), 'B (C D) P -> B (C P) D', C=self.in_chans)
+            fft_proj = rearrange(self.fft_proj(x[1]).squeeze(-1), 'B (C D) P -> B (C P) D', C=self.in_chans)
         # print('self.fft_proj.weight', torch.isnan(self.fft_proj.weight).sum())
         # os.makedirs('./result/', exist_ok=True)
         # torch.save(self.state_dict(), './result/fft_proj.pt')

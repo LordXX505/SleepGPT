@@ -60,7 +60,7 @@ class BaseDatatset(data.Dataset):
         self.transforms = keys_to_transforms(transform_keys['keys'], transform_keys['mode'])
         if "train" not in self.split:
             self.transforms = keys_to_transforms([[]], ['full'])
-            rank_zero_info(f"transforms: {self.transforms}")
+        rank_zero_info(f"transforms: {self.transforms}, split: {self.split}")
         self.data_dir = data_dir
         self.all_time = all_time
         names = np.array(names)
@@ -154,10 +154,13 @@ class BaseDatatset(data.Dataset):
         raise NotImplementedError
 
     def get_name(self, index):
+        print(f'idx_2_nums : {self.idx_2_nums}')
         idx = np.where(self.idx_2_nums <= index)[0][-1]
         start_idx = index - self.nums_2_idx[idx]
+        print(f'before start idx: {start_idx}')
         if self.pool_all:
             start_idx *= self.split_len
+        print(f'after start idx: {start_idx}')
         return os.path.join(self.idx_2_name[idx], str(start_idx).zfill(5)+'.arrow')
     def get_epochs(self, data):
         try:
@@ -190,13 +193,14 @@ class BaseDatatset(data.Dataset):
             x = np.array(data.as_py())
         except:
             x = np.array(data.to_pylist())
-        return {'Spindle_label': torch.from_numpy(x).long()}
+        return {'Spindle_label': torch.from_numpy(x).squeeze().long()}
 
     def get_suite(self, index):
         result = None
         if self.all_time:
             ret = dict()
             idx = np.where(self.idx_2_nums <= index)[0][-1]
+            # print(f'self.idx_2_nums: {self.idx_2_nums}, idx:{idx}, index: {index}')
             start_idx = index - self.nums_2_idx[idx]
             if self.pool_all:
                 start_idx *= self.split_len
@@ -290,7 +294,11 @@ class BaseDatatset(data.Dataset):
         dict_batch['epochs'] = []
         dict_batch['mask'] = []
         dict_batch['random_mask'] = []
-        for x in dict_batch['x']:
+        if 'Spindle_label' in dict_batch:
+            label = dict_batch['Spindle_label']
+        else:
+            label = None
+        for x_idx, x in enumerate(dict_batch['x']):
             epochs = x[0]
             channels = x[1]
             res_multi_epochs = []
@@ -299,7 +307,7 @@ class BaseDatatset(data.Dataset):
             if not self.all_time:
                 epochs = [epochs]
                 channels = [channels]
-            for _x, channel in zip(epochs, channels):
+            for _idx, (_x, channel) in enumerate(zip(epochs, channels)):
                 if self.random_choose_channels >= self.choose_channels.shape[0]:
                     res_epochs = torch.zeros((self.random_choose_channels, 3000))
                     attention_mask = torch.zeros(self.random_choose_channels)
@@ -329,7 +337,11 @@ class BaseDatatset(data.Dataset):
                         random_mask_w_temp[colletc_idx[ids_shuffle[:len_shuffle]]] = 1
                         random_mask_w.append(random_mask_w_temp)
                     # print(f"res_epochs: {res_epochs}")
-                    res_epochs = self.transforms(self.normalize(res_epochs, attention_mask))
+                    res_epochs = self.normalize(res_epochs, attention_mask)
+                    if label is not None:
+                        res_epochs, label[x_idx][_idx] = self.transforms(res_epochs, label[x_idx][_idx])
+                    else:
+                        res_epochs = self.transforms(res_epochs)
                     # assert res_epochs.ndim == 2, f"{res_epochs.shape}, {self.transforms}"
                     attention_mask = attention_mask
                     # print("attention_mask shape: ", attention_mask.shape)
