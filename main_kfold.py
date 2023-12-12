@@ -1,3 +1,4 @@
+import sys
 import time
 
 import torch
@@ -10,8 +11,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelSummary
 from lightning.pytorch.strategies import DDPStrategy
 import os
-from main.modules import Test
-from main.datamodules import TestData
+
 from main.datamodules.Multi_datamodule import MultiDataModule
 from main.modules import Model, Model_Pre
 from lightning.pytorch.plugins.environments import SLURMEnvironment
@@ -31,6 +31,8 @@ def main(_config):
     # torch.manual_seed(SEED)
     # torch.cuda.manual_seed_all(SEED)
     for k in range(_config['kfold']):
+        if k == 1:
+            sys.exit(0)
         # if k==0 or k==1: #resume
         #     continue
         rank_zero_info(f'Using k fold: now is {k}')
@@ -146,21 +148,24 @@ def main(_config):
 
             for name, param in model.named_parameters():
                 rank_zero_info("{}\t{}".format(name, param.requires_grad))
-        if _config["all_time"] is True:
+        if _config["all_time"] is True and _config['grad_name'] == 'partial' != 'all':
             if _config['get_param_method'] == 'layer_decay' or _config['get_param_method'] == 'no_layer_decay':
                 for param in model.parameters():
                     param.requires_grad = False
-                grad_name = ["fc_norm","transformer.blocks.10", "transformer.blocks.11",
-                             "transformer.norm", "pooler", "decoder_transformer_block", "stage_pred", "spindle_pred_proj"]
+
+                grad_name = ["fc_norm", "transformer.norm", "pooler",
+                             "decoder_transformer_block", "stage_pred", "spindle_pred_proj"]
+                if _config['grad_name'] == 'partial':
+                    grad_name.append("transformer.blocks.10")
+                    grad_name.append("transformer.blocks.11")
                 if _config['use_pooling'] == 'cls':
                     grad_name.append("cls_token")
                 if _config['use_relative_pos_emb']:
                     grad_name.append("relative_position_bias_table")
                 for name, param in model.named_parameters():
                     for key in grad_name:
-                        if key in name and "pos_encoding.pe" not in name:
+                        if key in name and "pe" not in name:
                             param.requires_grad = True
-
             for name, param in model.named_parameters():
                 rank_zero_info("{}\t{}\t{}".format(name, param.requires_grad, param.shape))
         if not _config["eval"]:

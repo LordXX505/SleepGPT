@@ -663,11 +663,12 @@ def confusion(cm:torch.Tensor):
     specificity = TN / (FP.sum() + TN)
     return precision, recall, kappa, sensitivity, specificity
 
-def compute_fpfn(pl_module, prob, IOU_th, batch,  stage):
+
+def compute_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True, store=False):
     infer = pl_module.infer(batch, time_mask=False)
     cls_feats = infer['cls_feats']
-    fpfn = Fpfn()
-    loss = fpfn(cls_feats, batch['Spindle_label'])
+    fpfn = Fpfn(use_fpfn=use_fpfn)
+    loss = fpfn(cls_feats, batch['Spindle_label'], data_idx=batch['index'], store=store)
     by_e = By_Event(threshold=prob, IOU_threshold=IOU_th, device=cls_feats.device)
     TP, FN, FP = by_e(cls_feats.detach().clone(), batch['Spindle_label'].detach().clone())
     ret = {
@@ -675,6 +676,7 @@ def compute_fpfn(pl_module, prob, IOU_th, batch,  stage):
         'TP': TP,
         'FN': FN,
         'FP': FP,
+        'cls_feats': cls_feats
     }
     phase = stage
     loss = getattr(pl_module, f"{phase}_FpFn_loss")(ret["loss"])

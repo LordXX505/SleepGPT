@@ -1,5 +1,6 @@
 import copy
 import os
+import sys
 from functools import partial
 from einops import rearrange
 import matplotlib.pyplot as plt
@@ -27,6 +28,7 @@ from . import vit
 from . import Swin_transformer
 from main.utils import cal_F1_score, cal_Precision, cal_Recall
 import torch.distributed as dist
+
 
 class Model(LightningModule):
     def __init__(self, config):
@@ -141,18 +143,18 @@ class Model(LightningModule):
                                             drop_path_rate=dpr[12:])
                         self.decoder_transformer_block.apply(init_weights)
                     elif self.use_pooling == 'swin':
-                        self.pooler = heads.Attn(self.num_features*2, self.decoder_features, reshape=False,
+                        self.pooler = heads.Attn(self.num_features * 2, self.decoder_features, reshape=False,
                                                  channels=self.transformer.num_patches, double=False,
                                                  channel_wise=False, )
                         self.pooler.apply(init_weights)
                         self.decoder_transformer_block = Swin_transformer.GlobalSwin(
                             time_size=self.time_size, num_classes=5,
                             embed_dim=self.decoder_features,
-                            window_size=self.time_size*3, mlp_ratio=4., qkv_bias=True, qk_scale=None,
+                            window_size=self.time_size * 3, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                             drop_rate=0., attn_drop_rate=0., drop_path_rate=config["drop_path_rate"],
                             norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
                             use_checkpoint=False, fused_window_process=False,
-                            patches_resolution=self.time_size*self.transformer.num_patches,
+                            patches_resolution=self.time_size * self.transformer.num_patches,
                         )
                     else:
                         self.pooler_time = nn.Linear(self.num_features, self.decoder_features)
@@ -178,7 +180,7 @@ class Model(LightningModule):
                                             drop_path_rate=dpr[12:])
                         self.decoder_transformer_block.apply(init_weights)
             else:
-                # self.fc_norm = nn.LayerNorm(self.num_features*2)
+                # no use
                 if self.all_time:
                     self.pooler = heads.Pooler(self.num_features * 2, self.decoder_features)
                     self.pooler.apply(init_weights)
@@ -190,8 +192,10 @@ class Model(LightningModule):
                                         pool=config['pool'], multi_y=self.multi_y,
                                         attn_drop_rate=0, norm_layer=partial(nn.LayerNorm, eps=1e-6),
                                         use_all_label=self.use_all_label,
-                                        use_global_fft=config['use_global_fft'], drop_rate=0, num_patches=self.time_size,
-                                        use_relative_pos_emb=self.use_relative_pos_emb, use_multiway=config['use_multiway'],
+                                        use_global_fft=config['use_global_fft'], drop_rate=0,
+                                        num_patches=self.time_size,
+                                        use_relative_pos_emb=self.use_relative_pos_emb,
+                                        use_multiway=config['use_multiway'],
                                         drop_path_rate=dpr[12:])
                     self.decoder_transformer_block.apply(init_weights)
                 else:
@@ -199,8 +203,12 @@ class Model(LightningModule):
                     self.pooler.apply(init_weights)
 
         if config['loss_names']['FpFn'] > 0:
-            self.spindle_pred_proj = heads.Spindle_Head(self.num_features, self.transformer.patch_size)
-
+            self.spindle_pred_proj = heads.Spindle_Head(self.num_features, self.transformer.patch_size,
+                                                        Use_FPN=config['Use_FPN'],
+                                                        decoder_depth=config['Spindle_decoder_depth'],
+                                                        enc_dim=config['Spindle_enc_dim'],
+                                                        dpr=config["drop_path_rate"], num_queries=config['num_queries'],
+                                                        seq_len=self.patch_time * 100, FPN_resnet=config['FPN_resnet'])
         if config['loss_names']['CrossEntropy'] > 0 and self.use_pooling != 'swin':
             # self.stage_pred_proj = heads.Stage_Head(self.num_features)
             if self.all_time:
@@ -218,38 +226,24 @@ class Model(LightningModule):
                     else:
                         decoder_features = self.decoder_features
                     setattr(self, f'stage_pred_{name}_proj', nn.Sequential(
-                        # nn.Linear(decoder_features, 128),
-                        # nn.LayerNorm(128),
-                        # nn.GELU(),
                         nn.Linear(decoder_features, 5),
                     ))
                     getattr(self, f'stage_pred_{name}_proj').apply(init_weights)
             else:
                 self.stage_pred_proj = nn.Sequential(
                     nn.Linear(self.decoder_features * 2, 5),
-
-                    # nn.Linear(self.num_features * 2, self.num_features * 4),
-                    # nn.LayerNorm(self.num_features * 4),
-                    # nn.GELU(),
-                    # nn.Linear(self.num_features * 4, 5),
                 )
         if config['loss_names']['mtm'] > 0:
-            self.Masked_docoder = heads.Masked_decoder(self.transformer.embed_dim, self.transformer.patch_size, self.transformer.num_patches,
+            self.Masked_docoder = heads.Masked_decoder(self.transformer.embed_dim, self.transformer.patch_size,
+                                                       self.transformer.num_patches,
                                                        self.transformer.max_channels)
-            self.Masked_docoder_fft = heads.Masked_decoder2(self.transformer.embed_dim, self.transformer.patch_size, self.transformer.num_patches,
-                                                       self.transformer.max_channels)
+            self.Masked_docoder_fft = heads.Masked_decoder2(self.transformer.embed_dim, self.transformer.patch_size,
+                                                            self.transformer.num_patches,
+                                                            self.transformer.max_channels)
         set_metrics(self)
         self.current_tasks = list()
         self.init_weights()
         self.load_pretrained_weight()
-
-        # ===================== Downstream ===================== #
-        # ========================On do========================= #
-        # spindle detection
-        # movement disorder
-        # epilepsy detection
-        # sleep cognitive impairment
-        # sleep rem detection
 
     def load_pretrained_weight(self):
         print(self.hparams.config["load_path"])
@@ -392,8 +386,10 @@ class Model(LightningModule):
         num_patches = self.transformer.num_patches
         c = attention_mask.shape[1]
         if self.transformer.actual_channels is not None:
-            attention_mask = torch.ones([attention_mask.shape[0], len(self.transformer.actual_channels)], device=attention_mask.device)
-            attention_mask_fft = torch.ones([attention_mask.shape[0], len(self.transformer.actual_channels)], device=attention_mask.device)
+            attention_mask = torch.ones([attention_mask.shape[0], len(self.transformer.actual_channels)],
+                                        device=attention_mask.device)
+            attention_mask_fft = torch.ones([attention_mask.shape[0], len(self.transformer.actual_channels)],
+                                            device=attention_mask.device)
             c = len(self.transformer.actual_channels)
         if self.time_only or self.fft_only:
             attention_mask = attention_mask.repeat_interleave(num_patches, dim=1)
@@ -407,11 +403,11 @@ class Model(LightningModule):
         #     assert 0 not in cls_token and 0 not in attention_mask
         if self.time_mask_last is True:
             mask_last_matrix = torch.zeros(15, device=attention_mask.device)
-            idx = self.patch_time//2
+            idx = self.patch_time // 2
             mask_last_matrix[:idx] = 1
             mask_last_matrix = mask_last_matrix.unsqueeze(0).repeat(1, c)
-            attention_mask = attention_mask*mask_last_matrix
-            attention_mask_fft = attention_mask_fft*mask_last_matrix
+            attention_mask = attention_mask * mask_last_matrix
+            attention_mask_fft = attention_mask_fft * mask_last_matrix
         if not self.first_log_gpu:
             rank_zero_info(f"attention_mask: {attention_mask}, attention_mask_fft: {attention_mask_fft}")
         return [cls_token, attention_mask, cls_token_fft, attention_mask_fft]
@@ -439,7 +435,7 @@ class Model(LightningModule):
         else:
             mask_w = None
         res = self.transformer.embed(epochs, attn_mask=attention_mask[1],
-                                          mask=time_mask, mask_w=mask_w)
+                                     mask=time_mask, mask_w=mask_w)
         # res = self.transformer.embed(epochs, attn_mask=attention_mask[1],
         #                              mask=False)  # get embeddings  # ret:{embed:[N,L_t + L_f + 2,D], mask:[N, L_t]}
         attention_mask = torch.cat(attention_mask, dim=-1)  # batch, L_t+L_f+2
@@ -554,7 +550,8 @@ class Model(LightningModule):
                         use_g_mid=False,
                         epoch_mask=batch['epoch_mask'], training=self.training)
             else:
-                C = len(self.transformer.actual_channels) if self.transformer.actual_channels is not None else self.transformer.max_channels
+                C = len(
+                    self.transformer.actual_channels) if self.transformer.actual_channels is not None else self.transformer.max_channels
                 x_time = rearrange(time_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
                 x_fft = rearrange(fft_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
                 x_pool = torch.cat([x_time, x_fft], dim=-1)
@@ -562,33 +559,20 @@ class Model(LightningModule):
                 # rank_zero_info(f"token : {token.shape}")
 
                 cls_feats = self.decoder_transformer_block(rearrange(token, '(B T) P D ->B (T P) D', T=self.time_size))
-                # rank_zero_info(f"rearrange : {cls_feats.shape}")
-            # else:
-            #     token = torch.cat((time_feats[:, 0], fft_feats[:, 0]), dim=-1)
-            #     if self.all_time:
-            #         token = token.reshape(-1, self.time_size, self.num_features * 2)
-            #         token = self.pooler(token)
-            #         cls_feats = self.decoder_transformer_block(
-            #             token[0].reshape(-1, self.time_size, self.transformer.max_channels, self.decoder_features),
-            #             token[1].reshape(-1, self.time_size, self.transformer.max_channels, self.decoder_features),
-            #             None,
-            #             use_g_mid=False,
-            #             epoch_mask=batch['epoch_mask'], training=self.training)
-            #         self.gpu_monitor(cls_feats, phase=f'{cls_feats.shape}', block_log=False)
-            #     else:
-            #         cls_feats = self.pooler(token)
+
         elif self.current_tasks[0] == 'FpFn':
             time_feats, fft_feats = (
                 x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
                 x[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
             )
-            max_len = self.patch_time//2
-            time_c3 = time_feats[:, 1:1+max_len]
-            fft_c3 = fft_feats[:, 1:1+max_len]
-            cls = torch.transpose(torch.cat([time_c3, fft_c3], dim=-1), dim0=1, dim1=2)
-            cls_feats = self.spindle_pred_proj(cls)
+            max_len = self.patch_time // 2
+            time_c3 = time_feats[:, 1:1 + max_len]
+            fft_c3 = fft_feats[:, 1:1 + max_len]
+            # cls = torch.cat([time_c3, fft_c3], dim=-1)
+            # cls = torch.transpose(torch.cat([time_c3, fft_c3], dim=-1), dim0=1, dim1=2)
+            cls_feats = self.spindle_pred_proj((time_c3, fft_c3))
         else:
-            print(time_max_len)
+            # print(time_max_len)
             time_feats, fft_feats = (
                 x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
                 x[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
@@ -618,7 +602,8 @@ class Model(LightningModule):
         else:
             mask_w = None
         res = self.transformer.time_embed(epochs, attn_mask=attention_mask[1],
-                                          mask=time_mask, mask_w=mask_w)  # get embeddings  # ret:{embed:[N,L_t + 1,D], mask:None# }
+                                          mask=time_mask,
+                                          mask_w=mask_w)  # get embeddings  # ret:{embed:[N,L_t + 1,D], mask:None# }
         time_max_len = res['x_len']  # 1 + num_patches*max_channels
         x = res['x']  # time
         attention_mask = torch.cat((attention_mask[0], attention_mask[1]), dim=1)  # batch, L_t+1
@@ -731,9 +716,10 @@ class Model(LightningModule):
             res: (N, patches_time, patch)
         """
         patch_size = (2, 100)
-        patches = (labels.shape[2] // patch_size[0], labels.shape[3]//patch_size[1])
-        x = labels.reshape(shape=(labels.shape[0], labels.shape[1], patches[0], patch_size[0], patch_size[1]))  # N, c, patches, patch_size
-        x = x.reshape(labels.shape[0], labels.shape[1]*patches[0], -1)
+        patches = (labels.shape[2] // patch_size[0], labels.shape[3] // patch_size[1])
+        x = labels.reshape(shape=(
+        labels.shape[0], labels.shape[1], patches[0], patch_size[0], patch_size[1]))  # N, c, patches, patch_size
+        x = x.reshape(labels.shape[0], labels.shape[1] * patches[0], -1)
         return x
 
     def unpatchify_2D(self, x):
@@ -744,7 +730,7 @@ class Model(LightningModule):
 
         p = self.transformer.patch_size
         num_patch = self.transformer.num_patches
-        x = x.reshape(x.shape[0], self.transformer.max_channels,  num_patch, patch_size[0], patch_size[1])
+        x = x.reshape(x.shape[0], self.transformer.max_channels, num_patch, patch_size[0], patch_size[1])
         time = x.reshape(x.shape[0], -1, num_patch * patch_size[0], patch_size[1])
         return time
 
@@ -758,7 +744,7 @@ class Model(LightningModule):
         patch_size = self.patch_size
         assert labels.shape[2] % patch_size == 0
         x = labels.reshape(labels.shape[0], labels.shape[1], -1, patch_size)
-        x = x.reshape(x.shape[0], -1 ,patch_size)
+        x = x.reshape(x.shape[0], -1, patch_size)
         return x
 
     def unpatchify(self, x):
@@ -796,8 +782,10 @@ class Model(LightningModule):
         else:
             loss = (predict - patch_label) ** 2
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
-        loss = (loss * time_mask_patch).reshape(predict.shape[0], self.hparams.config['random_choose_channels'], -1).sum(dim=-1)  # mean loss on removed patches
-        loss = loss/time_mask_patch.reshape(predict.shape[0], self.hparams.config['random_choose_channels'], -1).sum(dim=-1)
+        loss = (loss * time_mask_patch).reshape(predict.shape[0], self.hparams.config['random_choose_channels'],
+                                                -1).sum(dim=-1)  # mean loss on removed patches
+        loss = loss / time_mask_patch.reshape(predict.shape[0], self.hparams.config['random_choose_channels'], -1).sum(
+            dim=-1)
         return loss
 
     def forward_masked_loss(self, predict, labels, time_mask_patch):
@@ -842,7 +830,7 @@ class Model(LightningModule):
         """
         patch_label = self.patchify_2D(labels)  # N, 15*C, 2*100
         assert predict.shape == patch_label.shape
-        assert predict.shape[1] == self.transformer.num_patches*self.transformer.max_channels
+        assert predict.shape[1] == self.transformer.num_patches * self.transformer.max_channels
         if not self.first_log_gpu:
             rank_zero_info(f"predict shape: {predict.shape}, patch_label shape: {patch_label.shape}")
             rank_zero_info(f"time_mask_patch: {time_mask_patch}")
@@ -881,7 +869,7 @@ class Model(LightningModule):
                 if 'Stage_label' in batch.keys():
                     batch['Stage_label'] = torch.stack(batch['Stage_label'], dim=0).squeeze(-1)
                 if 'Spindle_label' in batch.keys():
-                    batch['Spindle_label'] = torch.stack(batch['Spindle_label'], dim=0).squeeze()
+                    batch['Spindle_label'] = torch.stack(batch['Spindle_label'], dim=0).squeeze(1).squeeze(-1)
                 if self.training and self.mixup_fn is not None:
                     batch['epochs'][0], batch['Stage_label'] = self.mixup_fn(batch['epochs'][0], batch['Stage_label'])
                 epochs_fft, attn_mask_fft = self.transformer.get_fft(batch['epochs'][0], batch['mask'][0])
@@ -911,18 +899,6 @@ class Model(LightningModule):
                                 batch['Stage_label'] = batch['Stage_label'].reshape(-1)
                     else:
                         batch['Stage_label'] = batch['Stage_label'][:, -1]
-                # print(attention_mask)
-                # print('forward epochs_fft is nan:', torch.isnan(epochs_fft).sum())
-                # handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                # meminfo = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                # print("-----------FFT_post-----------")
-                # print("Memory Total: ", meminfo.total/unit)
-                # print("Memory Free: ", meminfo.free/unit)
-                # print("Memory Used: ", meminfo.used/unit)
-
-                # batch['epochs'] = torch.ones(48, 10+8, 3000, device=self.device)
-                # batch['mask'] = self.get_attention_mask(torch.ones(48, 10, device=self.device),
-                #                                         torch.ones(48, 8, device=self.device))
         if len(self.current_tasks) == 0:
             ret.update(self.infer(batch, time_mask=True, stage=stage))
             return ret
@@ -935,7 +911,11 @@ class Model(LightningModule):
             if self.training:
                 self.gpu_monitor(batch['epochs'][0], phase='compute_ce last gpu', block_log=True)
         if self.current_tasks[0] == 'FpFn':
-            ret.update(objectives.compute_fpfn(self, prob=self.prob, IOU_th=self.IOU_th,batch=batch, stage=stage))
+            ret.update(objectives.compute_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=batch, stage=stage,
+                                               use_fpfn=self.hparams.config['use_fpfn'],
+                                               store=(self.global_step >= 2000)))
+            if self.global_step % 10 == 0:
+                rank_zero_info(f'self.global_step: {self.global_step}')
             if self.training:
                 self.gpu_monitor(batch['epochs'][0], phase='compute_fpfn last gpu', block_log=True)
         # if "FpFn" in self.current_tasks:
@@ -988,13 +968,15 @@ class Model(LightningModule):
         if self.training:
             raise Exception(f"self.training is not False in validation")
         output = self(batch, stage="validation")
-        if self.current_tasks[0] =='CrossEntropy':
+        # torch.save({'cls': output['cls_feats'], 'Spindle_label': batch['Spindle_label']}, f='/home/cuizaixu_lab/huangweixuan/data/case.ckpt')
+        # if self.first_log_gpu:
+        #     sys.exit(0)
+        if self.current_tasks[0] == 'CrossEntropy':
             self.res_index.append(output['index'].reshape(-1, self.time_size))
             self.res_label.append(output['label'].reshape(-1, self.time_size))
             self.res_feats.append(output['feats'].reshape(-1, self.time_size))
 
     def on_validation_epoch_end(self) -> None:
-
         self.epoch_end(stage="validation")
 
     def lr_scheduler_step(self, scheduler: LRSchedulerTypeUnion, metric: Optional[Any]) -> None:
@@ -1048,7 +1030,8 @@ class Model(LightningModule):
                 for name in multi_y:
                     value_acc = float(format(getattr(self, f"{phase}_{loss_name}_accuracy_{name}").compute(), '.3f'))
                     max_acc = max(max_acc, value_acc)
-                    self.log(f"{loss_name}/{phase}/{name}/accuracy_epoch", value_acc, prog_bar=True, on_epoch=True, sync_dist=True)
+                    self.log(f"{loss_name}/{phase}/{name}/accuracy_epoch", value_acc, prog_bar=True, on_epoch=True,
+                             sync_dist=True)
                     getattr(self, f"{phase}_{loss_name}_accuracy_{name}").reset()
                     value = value_acc - value
                     confmat = getattr(self, f"{phase}_{loss_name}_conf_{name}").compute()

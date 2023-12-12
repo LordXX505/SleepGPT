@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
+from . import cross_attention
+from . import FPN
+from . import vit
+from . import cross_model
 
 class Pooler(nn.Module):
     def __init__(self, hidden_size, out_size):
@@ -44,8 +48,8 @@ class Conv_embed(nn.Module):
         kernel_size = kernel_size
         if use_gem:
             self.gem = GeM()
-            kernel_size = kernel_size//3
-        self.conv = nn.Conv1d(in_channels=in_channels*self.channels, out_channels=self.channels*out_channels,
+            kernel_size = kernel_size // 3
+        self.conv = nn.Conv1d(in_channels=in_channels * self.channels, out_channels=self.channels * out_channels,
                               kernel_size=kernel_size, groups=self.channels)
 
     def forward(self, x):
@@ -73,8 +77,8 @@ class Attn(nn.Module):
             self.fc_norm = nn.LayerNorm(eps=1e-6, normalized_shape=out_size)
         self.return_alpha = return_alpha
         if self.reshape and self.double:
-            self.hidden_size = hidden_size*2
-            self.out_size = out_size*2
+            self.hidden_size = hidden_size * 2
+            self.out_size = out_size * 2
         else:
             self.hidden_size = hidden_size
             self.out_size = out_size
@@ -87,9 +91,9 @@ class Attn(nn.Module):
                 setattr(self, f"w_at_{i}", nn.Linear(self.out_size, 1, bias=False))
 
     def forward(self, x, time_split=None):
-        if time_split==-1:
+        if time_split == -1:
             b, c, p, d = x.shape
-            assert c==self.channels
+            assert c == self.channels
         else:
             b, c, d = x.shape
         softdim = 1
@@ -101,24 +105,25 @@ class Attn(nn.Module):
                 x = x.reshape(b, self.channels, -1, d)
                 softdim = 1
             else:
-                x_time = x[:, :time_split].reshape(b*self.channels, -1, d)
-                x_fft = x[:, time_split:].reshape(b*self.channels, -1, d)
+                x_time = x[:, :time_split].reshape(b * self.channels, -1, d)
+                x_fft = x[:, time_split:].reshape(b * self.channels, -1, d)
                 x = torch.cat([x_time, x_fft], dim=-1)
                 softdim = 2
         if self.channel_wise:
             a_states = []
             alpha = []
-            assert x.shape[1]==self.channels
+            assert x.shape[1] == self.channels
             for i in range(self.channels):
                 a_states_temp = torch.tanh(getattr(self, f"w_ha_{i}")(x[:, i]))
-                alpha_temp = torch.softmax(getattr(self, f"w_at_{i}")(a_states_temp), dim=softdim).view(x.size(0), 1, -1)
+                alpha_temp = torch.softmax(getattr(self, f"w_at_{i}")(a_states_temp), dim=softdim).view(x.size(0), 1,
+                                                                                                        -1)
                 a_states.append(a_states_temp)
                 alpha.append(alpha_temp)
             a_states = torch.stack(a_states, dim=1)
             alpha = torch.stack(alpha, dim=1)
             assert a_states.shape == (b, c, p, self.out_size), f"a_states.shape:{a_states.shape}, x.shape:{x.shape}"
-            a_states = a_states.reshape(b*self.channels, -1, self.out_size)
-            alpha = alpha.reshape(b*self.channels, alpha.shape[2], alpha.shape[3])
+            a_states = a_states.reshape(b * self.channels, -1, self.out_size)
+            alpha = alpha.reshape(b * self.channels, alpha.shape[2], alpha.shape[3])
         else:
             a_states = torch.tanh(self.w_ha(x))
             alpha = torch.softmax(self.w_at(a_states), dim=softdim).view(x.size(0), 1, -1)
@@ -133,8 +138,8 @@ class Attn(nn.Module):
             x = self.fc_norm(x.reshape(b, self.channels, 2, -1))
             x_time = x[:, :, 0]
             x_fft = x[:, :, 1]
-            assert x_time.shape == (b, self.channels, self.out_size//2), f"{x_time.shape}"
-            assert x_fft.shape == (b, self.channels, self.out_size//2), f"{x_fft.shape}"
+            assert x_time.shape == (b, self.channels, self.out_size // 2), f"{x_time.shape}"
+            assert x_fft.shape == (b, self.channels, self.out_size // 2), f"{x_fft.shape}"
             if self.return_alpha:
                 return x_time, x_fft, alpha
             else:
@@ -145,6 +150,7 @@ class Attn(nn.Module):
                 return x, alpha
             else:
                 return x
+
 
 class ITMHead(nn.Module):
     def __init__(self, hidden_size):
@@ -165,19 +171,54 @@ class ITCHead(nn.Module):
         x = self.fc(x)
         return x
 
+class MLP(nn.Module):
+    """ Very simple multi-layer perceptron (also called FFN)"""
+
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+        super().__init__()
+        self.num_layers = num_layers
+        h = [hidden_dim] * (num_layers - 1)
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return F.sigmoid(x)
 
 class Spindle_Head(nn.Module):
-    def __init__(self, hidden_size, patch_size, weight=None):
+    def __init__(self, hidden_size, patch_size, weight=None, decoder_depth=6, enc_dim=512, num_heads=16, mlp_ratio=4.0,
+                 qkv_bias=True, drop_rate=0.0, attn_drop_rate=0.0, dpr=None, norm_layer=nn.LayerNorm, num_layers=1,
+                 seq_len=10, num_queries=400, FPN_resnet=False,
+                 Use_FPN=None):
         super().__init__()
-        self.decoder = nn.Conv1d(in_channels=2*hidden_size,
-                                 out_channels=2*patch_size,
-                                 kernel_size=1)
+        # print(f"h:{h}")
+        self.layers = num_layers
+        self.Use_FPN = Use_FPN
+        if Use_FPN == 'Trans':
+            self.decoder = vit.SpindleDecoderTransformer(hidden_size, patch_size, weight=None, decoder_depth=decoder_depth,
+                                                         enc_dim=enc_dim, num_heads=num_heads, mlp_ratio=mlp_ratio,
+                                                         qkv_bias=qkv_bias, drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, dpr=dpr,
+                                                         norm_layer=norm_layer, num_layers=num_layers, seq_len=seq_len,
+                                                         )
+        elif Use_FPN == 'Cross':
+            assert seq_len % num_queries == 0, f'seq_len%num_queries is not 0, seq_len: {seq_len}, num_queries: {num_queries}'
+            self.decoder = cross_model.Cross_Attn_Spindle_Model(enc_dim, kvdim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias,
+                                                                seq_len=seq_len, drop_path=dpr, decoder_depth=decoder_depth, num_queries=num_queries)
+        elif Use_FPN == 'FPN':
+            self.decoder = FPN.FPN(depth=decoder_depth, resnet=FPN_resnet)
+        else:
+            self.decoder = MLP(input_dim=hidden_size*2, hidden_dim=enc_dim, output_dim=patch_size, num_layers=decoder_depth)
+
     def forward(self, x):
-        B = x.shape[0]
-        x = self.decoder(x)
-        x = rearrange(x, 'B (C J) T -> B T C J', J=2)
-        x = torch.softmax(x, dim=-1)
-        x = x.reshape(B, -1, 2)
+        # print(f"x.shape:{x.shape}")
+        time_c3, fft_c3 = x
+        B = time_c3.shape[0]
+        if self.Use_FPN == 'FPN' or self.Use_FPN == 'MLP':
+            x = torch.cat([time_c3, fft_c3], dim=-1)
+            x = self.decoder(x)
+        else:
+            x = self.decoder(x)
+        x = x.reshape(B, -1)
         return x
 
 
@@ -203,8 +244,8 @@ class Masked_decoder(nn.Module):
         # self.activation = nn.GELU()
         # self.LayreNorm = nn.LayerNorm(hidden_size)
         # self.decoder = nn.Linear(hidden_size, patch_size, bias=True)
-        self.decoder = nn.Conv1d(in_channels=hidden_size*self.channels,
-                                 out_channels=patch_size*self.channels,
+        self.decoder = nn.Conv1d(in_channels=hidden_size * self.channels,
+                                 out_channels=patch_size * self.channels,
                                  groups=self.channels,
                                  kernel_size=1)
 
@@ -215,6 +256,7 @@ class Masked_decoder(nn.Module):
         # x = self.decoder(x)
         x = x[:, 1:, :]
         B, L, C = x.shape
+        # print(f'-----------Masked_decoder forward    B:{B}, L:{L}, C:{C}-----------')
         x = rearrange(x, 'B (C P) D -> B (C D) P', C=self.channels)
         # x = x.reshape(B, self.num_patch, C)
         x = self.decoder(x)
@@ -235,8 +277,8 @@ class Masked_decoder2(nn.Module):
         # self.activation = nn.GELU()
         # self.LayreNorm = nn.LayerNorm(hidden_size)
         # self.decoder = nn.Linear(hidden_size, patch_size, bias=True)
-        self.decoder = nn.Conv1d(in_channels=hidden_size*self.channels,
-                                 out_channels=patch_size*self.channels,
+        self.decoder = nn.Conv1d(in_channels=hidden_size * self.channels,
+                                 out_channels=patch_size * self.channels,
                                  groups=self.channels,
                                  kernel_size=1)
 

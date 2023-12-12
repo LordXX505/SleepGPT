@@ -147,16 +147,22 @@ def config():
     use_cb = False
 
     # kfold
-    actual_channels=None
-    kfold_test=None
+    actual_channels = None
+    kfold_test = None
+    grad_name = False
 
     #spindle
-    expert=None
-    IOU_th=0.2
-    sp_prob=0.55
-    patch_time=30
-    mass_settings=None
-
+    expert = None
+    IOU_th = 0.2
+    sp_prob = 0.55
+    patch_time = 30
+    mass_settings = None
+    use_fpfn = "Fpfn"
+    Use_FPN = True
+    Spindle_decoder_depth = 4
+    Spindle_enc_dim = 384
+    num_queries = 400
+    FPN_resnet=False
 @ex.named_config
 def test():
     data_dir = './data'
@@ -361,7 +367,7 @@ def finetune_MASS_Spindle():
     # train configs
     dropout = 0
     loss_names = _loss_names({"FpFn": 1})
-    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3, 4, 6]], "mode": ["shuffle"]})
+    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3]], "mode": ["shuffle"]})
 
     start_epoch = 0
     num_workers = 0
@@ -840,12 +846,13 @@ def visualization_sp():
 
     # data
     datasets = ['MASS']
-    data_dir = ["/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2"]
+    # data_dir = ["/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2"]
+    data_dir = ["/Users/hwx_admin/Sleep/data/data/MASS/SS2"]
     mass_settings = ['MASS']
     # train configs
     dropout = 0
     loss_names = _loss_names({"mtm": 1})
-    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3, 4, 6]], "mode": ["shuffle"]})
+    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3]], "mode": ["shuffle"]})
 
     start_epoch = 0
     num_workers = 0

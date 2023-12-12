@@ -1,3 +1,5 @@
+import sys
+
 import mne
 import numpy as np
 import pyarrow as pa
@@ -5,37 +7,30 @@ import os
 import glob
 import pandas as pd
 import gc
-path_root ="/home/cuizaixu_lab/huangweixuan/data/SS2"
+path_root ="/home/cuizaixu_lab/huangweixuan/data/data/SS2"
 
 ana_spindle = os.path.join(path_root, 'SS2_ana')
-# print(ana_spindle)
 spindle_path_E1 = glob.glob(ana_spindle+'/*Spindles_E1*')
 spindle_path_E2 = glob.glob(ana_spindle+'/*Spindles_E2*')
-# print(spindle_path_E1)
 spindle_path_E1 = sorted(spindle_path_E1)
 spindle_path_E2 = sorted(spindle_path_E2)
 epoch = os.path.join(path_root, 'SS2_bio')
-# print(os.path.split(spindle_path_E1[0])[1])
-name = os.path.split(spindle_path_E1[0])[1].split(' ')[0]
-mne.io.read_raw_edf(glob.glob(epoch+f"/{name}*PSG*")[0])
-
-E1_anno = []
-E2_anno = []
-epoch = os.path.join(path_root, 'SS2_bio')
-for _, path in enumerate([spindle_path_E1, spindle_path_E2]):
+for _, path in enumerate([spindle_path_E2, spindle_path_E1]):
     expert = 'E1'
     if _ == 1:
         expert = 'E2'
     for items in path:
-
         name = os.path.split(items)[1].split(' ')[0]
         print(f"----------{name}-----------")
+        # if name != '01-02-0019':
+        #     continue
         epochs = mne.io.read_raw_edf(glob.glob(epoch+f"/{name}*PSG*")[0])
         anno = mne.read_annotations(items)
-        print(f"epochs: {epochs}")
+        print(f"epochs: {epochs.info}")
         epochs.load_data()
-        epochs.filter(l_freq=0.3, h_freq=35, n_jobs='cuda', method='fir')
         epochs = epochs.resample(100)
+        print(f"resample epochs: {epochs.info}")
+        epochs = epochs.filter(l_freq=0.3, h_freq=35, n_jobs='cuda', method='fir')
 
         bads = epochs.info['bads']
         badsidx = [epochs[_] for _ in bads]
@@ -48,23 +43,28 @@ for _, path in enumerate([spindle_path_E1, spindle_path_E2]):
         n_epochs = len(epochs)//2000
         for i in range(n_epochs):
             choose_idx[i] = 0
+        bucket_num = 0
         for times in anno:
+            print(f'times: {times["onset"]}')
             begin_ind = epochs.time_as_index(times=times['onset'])[0]
+            print(f'times after: {begin_ind}')
+            print(f'end: {times["onset"]+times["duration"]}')
             end_ind = epochs.time_as_index(times=times['onset']+times['duration'])[0]
+            print(f'end after: { epochs.time_as_index(times["onset"]+times["duration"])[0]}')
             bucket_begin = begin_ind//2000
             butcket_end = end_ind//2000
             print(f"bucket_begin: {bucket_begin}, butcket_end: {butcket_end}")
-            if butcket_end==bucket_begin:
+            if butcket_end == bucket_begin:
                 if butcket_end in choose_idx:
                     choose_idx[butcket_end] = 1
                     print(f"saving bucket_begin:{bucket_begin}")
             else:
                 end_begin = butcket_end*2000
-                if (end_begin-begin_ind) //(butcket_end-bucket_begin) > 0.25:
+                if (end_begin-begin_ind) // (end_ind-begin_ind) >= 0.25:
                     if bucket_begin in choose_idx:
                         choose_idx[bucket_begin] = 1
                         print(f"saving bucket_begin:{bucket_begin}, end_begin: {end_begin}, begin_ind:{begin_ind}, butcket_end:{butcket_end}")
-                if (butcket_end-end_begin) //(butcket_end-bucket_begin) > 0.25:
+                if (end_ind-end_begin + 1) //(end_ind-begin_ind) >= 0.25:
                     if butcket_end in choose_idx:
                         choose_idx[butcket_end] = 1
             labels[begin_ind:end_ind] = 1
@@ -73,13 +73,16 @@ for _, path in enumerate([spindle_path_E1, spindle_path_E2]):
         print(epochs.shape)
         labels = labels[:n_epochs*2000]
         epochs = np.split(epochs, n_epochs, axis=1)
+        print(f'max: {np.max(epochs)}, min:{np.min(epochs)}')
+        epochs = np.clip(epochs, a_min=-150*1e-6, a_max=150*1e-6)
         labels = np.split(labels, n_epochs, axis=0)
-        print(f"epochs.shape: {len(epochs)}")
+        print(f"epochs.shape: {epochs.shape}")
         print(f'labels: {len(labels)}')
         cnt=0
-        filename='/home/cuizaixu_lab/huangweixuan/data/MASS/SS2' + f"/{expert}"
+        filename='/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2' + f"/{expert}"
         for k, v in choose_idx.items():
-            if v==1:
+            if v == 1:
+
                 save_epochs = epochs[k]
                 save_labels = labels[k]
                 dataframe = pd.DataFrame(
@@ -98,7 +101,7 @@ for _, path in enumerate([spindle_path_E1, spindle_path_E2]):
                 gc.collect()
 
 print('End')
-E1_sub = '/home/cuizaixu_lab/huangweixuan/data/MASS/SS2/E1/*'
+E1_sub = '/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2/E1/*'
 names = []
 nums = []
 for sub in glob.glob(E1_sub):
@@ -119,7 +122,7 @@ names = np.array(names)
 nums = np.array(nums)
 k_split = n//5
 res = {}
-path = '/home/cuizaixu_lab/huangweixuan/data/MASS/SS2/'
+path = '/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2/'
 for i in range(5):
     st = i*k_split
     ed = (i+1)*k_split
@@ -138,7 +141,7 @@ for i in range(5):
 np.save(os.path.join(path, f'all_split_E1'), arr= res,allow_pickle=True)
 
 
-E1_sub = '/home/cuizaixu_lab/huangweixuan/data/MASS/SS2/E2/*'
+E1_sub = '/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2/E2/*'
 names = []
 nums = []
 for sub in glob.glob(E1_sub):
@@ -159,7 +162,7 @@ names = np.array(names)
 nums = np.array(nums)
 k_split = n//5
 res = {}
-path = '/home/cuizaixu_lab/huangweixuan/data/MASS/SS2'
+path = '/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2'
 for i in range(5):
     st = i*k_split
     ed = (i+1)*k_split

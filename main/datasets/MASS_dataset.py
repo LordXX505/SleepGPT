@@ -38,7 +38,8 @@ class MASSDataset(BaseDatatset):
                 nums=items['nums']
         kwargs.pop('kfold')
         kwargs.pop('expert')
-
+        # print(f'len names:{len(names)}, expert:{expert}')
+        # print(len(names), len(nums))
         super().__init__(names=names, concatenate=False, nums=nums, split=split, *args, **kwargs)
 
     def __getitem__(self, index):
