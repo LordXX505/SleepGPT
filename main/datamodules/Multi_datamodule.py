@@ -8,6 +8,7 @@ from . import _datamodules
 class MultiDataModule(LightningDataModule):
 
     def __init__(self, _config, kfold=None):
+        self.collate_val = None
         self.collate = None
         self.test_sampler = None
         self.val_sampler = None
@@ -44,6 +45,7 @@ class MultiDataModule(LightningDataModule):
             dm.setup(stage, **config_dict)
         if stage == 'fit':
             self.collate = self.dms[0].train_dataset.collate
+            self.collate_val = self.dms[0].val_dataset.collate
             if self.pretrain:
                 self.train_dataset = ConcatDataset([dm.train_dataset for dm in self.dms if dm.train_dataset is not None])
                 self.val_dataset = ConcatDataset([dm.val_dataset for dm in self.dms if dm.val_dataset is not None])
@@ -87,7 +89,7 @@ class MultiDataModule(LightningDataModule):
         if self.dist:
             if stage == 'test':
                 self.test_sampler = DistributedSampler(self.test_dataset, shuffle=False)
-            elif stage=='validate':
+            elif stage == 'validate':
                 self.val_sampler = DistributedSampler(self.val_dataset, shuffle=True, )
             else:
                 self.train_sampler = DistributedSampler(self.train_dataset, shuffle=True)
@@ -118,7 +120,7 @@ class MultiDataModule(LightningDataModule):
             batch_size=batch_size if batch_size is not None else self.batch_size,
             sampler=self.val_sampler,
             num_workers=self.num_workers,
-            collate_fn=self.collate,
+            collate_fn=self.collate if self.collate_val is None else self.collate_val,
         )
         return loader
 

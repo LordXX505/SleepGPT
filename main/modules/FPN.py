@@ -44,7 +44,7 @@ class UnetBlock(nn.Module):
     def __init__(self, in_channel, out_channel, stride=1, kernel_size=3, padding=1, batchnorm=True, depth=None):
         super(UnetBlock, self).__init__()
         self.block = nn.Sequential()
-        for i in depth:
+        for i in range(depth):
             self.block.append(UnetLayer(in_channel=in_channel, out_channel=out_channel, stride=stride,
                                         kernel_size=kernel_size, padding=padding, batchnorm=batchnorm))
     def forward(self, x):
@@ -100,5 +100,5 @@ class FPN(nn.Module):
             if i != self.layers - 1:
                 x = getattr(self, f'up_{i}')(x)
         x = self.last(x).permute(0, 2, 1)
-        x = F.softmax(x)
+        x = F.softmax(x, dim=-1)
         return x[..., 0]

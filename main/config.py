@@ -162,7 +162,9 @@ def config():
     Spindle_decoder_depth = 4
     Spindle_enc_dim = 384
     num_queries = 400
-    FPN_resnet=False
+    FPN_resnet = False
+    CE_Weight = 10
+
 @ex.named_config
 def test():
     data_dir = './data'
@@ -362,7 +364,7 @@ def finetune_MASS_Spindle():
 
     # data
     datasets = ['MASS']
-    data_dir = ["/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2"]
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/data/data/MASS_aug_new_2/SS2"]
     mass_settings = ['MASS']
     # train configs
     dropout = 0
@@ -842,17 +844,17 @@ def visualization_sp():
     batch_size = 169
     max_epoch = 50
     accum_iter = 2
-    mask_ratio = None
-
+    mask_ratio = 0.5
+    patch_time = 20
     # data
     datasets = ['MASS']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2"]
     # data_dir = ["/home/cuizaixu_lab/huangweixuan/data/data/MASS/SS2"]
-    data_dir = ["/Users/hwx_admin/Sleep/data/data/MASS/SS2"]
     mass_settings = ['MASS']
     # train configs
     dropout = 0
     loss_names = _loss_names({"mtm": 1})
-    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3]], "mode": ["shuffle"]})
+    transform_keys = _train_transform_keys({"keys": [[0, 3]], "mode": ["random"]})
 
     start_epoch = 0
     num_workers = 0
@@ -878,7 +880,7 @@ def visualization_sp():
     # device
     device = 'cuda'
     deepspeed = False
-    dist_on_itp = True
+    dist_on_itp = False
 
     # evaluation
     dist_eval = False

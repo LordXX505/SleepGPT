@@ -34,8 +34,8 @@ class MASSDataset(BaseDatatset):
                 names = items.item()[f'{split}_{k}']['names']
                 nums = items.item()[f'{split}_{k}']['nums']
             else:
-                names=items['names']
-                nums=items['nums']
+                names = items['names']
+                nums = items['nums']
         kwargs.pop('kfold')
         kwargs.pop('expert')
         # print(f'len names:{len(names)}, expert:{expert}')
@@ -49,4 +49,14 @@ class MASSDataset(BaseDatatset):
     @property
     def channels(self):
         return np.array([4, 5, 16, 18, 22, 36, 38, 52])
+
+    def get_name(self, index):
+        # print(f'idx_2_nums : {self.idx_2_nums}')
+        idx = np.where(self.idx_2_nums <= index)[0][-1]
+        start_idx = index - self.nums_2_idx[idx]
+        # print(f'before start idx: {start_idx}')
+        if self.pool_all:
+            start_idx *= self.split_len
+        # print(f'after start idx: {start_idx}')
+        return int(self.idx_2_name[idx].split('/')[-2].split('-')[-1])
 

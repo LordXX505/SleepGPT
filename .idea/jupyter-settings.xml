@@ -74,14 +74,7 @@
         <entry key="$PROJECT_DIR$/.idea/Sleep.iml">
           <value>
             <JupyterConnectionParameters>
-              <option name="authType" value="notebook" />
-              <option name="token" value="Hwx990519!" />
-              <option name="urlString" value="http://192.168.10.100:8890/" />
-              <authParams2>
-                <map>
-                  <entry key="token" value="Hwx990519!" />
-                </map>
-              </authParams2>
+              <option name="managed" value="true" />
             </JupyterConnectionParameters>
           </value>
         </entry>

@@ -201,8 +201,13 @@ class Model(LightningModule):
                 else:
                     self.pooler = heads.Pooler(self.num_features * 2, self.num_features * 2)
                     self.pooler.apply(init_weights)
-
+        self.weight = None
         if config['loss_names']['FpFn'] > 0:
+            self.store_real_data = torch.zeros((20, 3000, 8, 1000), device=self.device)
+            self.store_whole_eeg = torch.zeros((20, 3000, 1000), device=self.device)
+            self.store_whole_label = torch.zeros((20, 3000, 1000), device=self.device)
+            self.max_index = torch.zeros(20, device=self.device)
+            self.weight = config['CE_Weight']
             self.spindle_pred_proj = heads.Spindle_Head(self.num_features, self.transformer.patch_size,
                                                         Use_FPN=config['Use_FPN'],
                                                         decoder_depth=config['Spindle_decoder_depth'],
@@ -240,6 +245,7 @@ class Model(LightningModule):
             self.Masked_docoder_fft = heads.Masked_decoder2(self.transformer.embed_dim, self.transformer.patch_size,
                                                             self.transformer.num_patches,
                                                             self.transformer.max_channels)
+        self.mask_same = False
         set_metrics(self)
         self.current_tasks = list()
         self.init_weights()
@@ -426,7 +432,7 @@ class Model(LightningModule):
             if block_log:
                 self.first_log_gpu = True
 
-    def infer(self, batch, time_mask=False, stage="train"):
+    def infer(self, batch, time_mask=False, stage="train", mask_same=False):
         cls_feats_fft = None
         epochs = batch['epochs']  # time, fft
         attention_mask = batch['mask']
@@ -434,8 +440,12 @@ class Model(LightningModule):
             mask_w = batch['random_mask'][0]
         else:
             mask_w = None
-        res = self.transformer.embed(epochs, attn_mask=attention_mask[1],
-                                     mask=time_mask, mask_w=mask_w)
+        if mask_same is True:
+            res = self.transformer.embed(epochs, attn_mask=attention_mask[1],
+                                         mask=time_mask, mask_w=mask_w, mask_w_fft=mask_w)
+        else:
+            res = self.transformer.embed(epochs, attn_mask=attention_mask[1],
+                                         mask=time_mask, mask_w=mask_w)
         # res = self.transformer.embed(epochs, attn_mask=attention_mask[1],
         #                              mask=False)  # get embeddings  # ret:{embed:[N,L_t + L_f + 2,D], mask:[N, L_t]}
         attention_mask = torch.cat(attention_mask, dim=-1)  # batch, L_t+L_f+2
@@ -462,6 +472,7 @@ class Model(LightningModule):
         # print('x_embeds, fft_embeds', torch.isnan(x_embeds).sum(), torch.isnan(fft_embeds).sum())
         x = co_embeds
         all_hiddens = []
+
         for i, blk in enumerate(self.transformer.blocks):
             x = blk(x, mask=attention_mask, modality_type='tf', relative_position_bias=None,
                     relative_position_index=self.time_fft_relative_position_index)
@@ -580,6 +591,10 @@ class Model(LightningModule):
 
             cls_feats = self.Masked_docoder(time_feats)  # b, L*t, patch_size
             cls_feats_fft = self.Masked_docoder_fft(fft_feats)
+            # if self.mask_same:
+            #     print(f"res['time_mask_patch']: {res['time_mask_patch']}, res['fft_mask_patch']: {res['fft_mask_patch']}")
+            #     assert res['time_mask_patch'] == res['fft_mask_patch'], f"res['time_mask_patch']: {res['time_mask_patch']}" \
+            #                                                             f"res['fft_mask_patch']: {res['fft_mask_patch']}"
         ret = {
             "local_feats": local_feats,
             "cls_feats": cls_feats,
@@ -718,7 +733,7 @@ class Model(LightningModule):
         patch_size = (2, 100)
         patches = (labels.shape[2] // patch_size[0], labels.shape[3] // patch_size[1])
         x = labels.reshape(shape=(
-        labels.shape[0], labels.shape[1], patches[0], patch_size[0], patch_size[1]))  # N, c, patches, patch_size
+            labels.shape[0], labels.shape[1], patches[0], patch_size[0], patch_size[1]))  # N, c, patches, patch_size
         x = x.reshape(labels.shape[0], labels.shape[1] * patches[0], -1)
         return x
 
@@ -905,24 +920,38 @@ class Model(LightningModule):
 
         assert len(self.current_tasks) == 1 and self.current_tasks[0] in ['CrossEntropy', 'FpFn', 'mtm']
         if self.current_tasks[0] == 'mtm':
-            ret.update(self.infer(batch, stage=stage, time_mask=True))
+            ret.update(self.infer(batch, stage=stage, time_mask=True, mask_same=self.mask_same))
         if self.current_tasks[0] == 'CrossEntropy':
             ret.update(objectives.compute_ce(self, batch, stage=stage))
             if self.training:
                 self.gpu_monitor(batch['epochs'][0], phase='compute_ce last gpu', block_log=True)
         if self.current_tasks[0] == 'FpFn':
-            ret.update(objectives.compute_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=batch, stage=stage,
-                                               use_fpfn=self.hparams.config['use_fpfn'],
-                                               store=(self.global_step >= 2000)))
-            if self.global_step % 10 == 0:
-                rank_zero_info(f'self.global_step: {self.global_step}')
+            if stage == 'train':
+                if self.trainer.max_steps is None or self.trainer.max_steps == -1:
+                    max_steps = (
+                            len(self.trainer.datamodule.train_dataloader())
+                            * self.trainer.max_epochs
+                            // self.trainer.accumulate_grad_batches
+                    )
+                else:
+                    max_steps = self.trainer.max_steps
+                # rank_zero_info(f'weight: {self.weight}')
+                ret.update(objectives.compute_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=batch, stage=stage,
+                                                   use_fpfn=self.hparams.config['use_fpfn'],
+                                                   store=False, weight=self.weight))
+            else:
+                rank_zero_info('==========Using compute_entire_fpfn==========')
+                rank_zero_info(f'forward weight: {self.weight}')
+                ret.update(
+                    objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=batch, stage=stage,
+                                                   use_fpfn=self.hparams.config['use_fpfn'],
+                                                   store=True, compute=True, aggregate=True, weight=self.weight))
+
+            # if self.global_step % 10 == 0:
+            #     rank_zero_info(f'self.global_step: {self.global_step}')
             if self.training:
                 self.gpu_monitor(batch['epochs'][0], phase='compute_fpfn last gpu', block_log=True)
-        # if "FpFn" in self.current_tasks:
-        #     ret.update(objectives.compute_FpFn(self, batch))
-        #
-        # if "CrossEntropy" in self.current_tasks:
-        #     ret.update(objectives.compute_timeonly_mlm(self, batch))
+
         return ret
 
     def training_step(self, batch) -> STEP_OUTPUT:
@@ -961,6 +990,11 @@ class Model(LightningModule):
 
     def on_test_epoch_end(self) -> None:
         rank_zero_info("on_test_epoch_end")
+        if self.current_tasks[0] == 'FpFn':
+            output = objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=None, stage='test',
+                                                    use_fpfn=self.hparams.config['use_fpfn'],
+                                                    store=True, compute=False, aggregate=True)
+            rank_zero_info(f'test output: {output}')
         self.epoch_end(stage="test")
 
     def validation_step(self, batch, batch_idx):
@@ -977,8 +1011,13 @@ class Model(LightningModule):
             self.res_feats.append(output['feats'].reshape(-1, self.time_size))
 
     def on_validation_epoch_end(self) -> None:
+        if self.current_tasks[0] == 'FpFn':
+            output = objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=None,
+                                                    stage='validation',
+                                                    use_fpfn=self.hparams.config['use_fpfn'],
+                                                    store=True, compute=False, aggregate=True, weight=self.weight)
+            rank_zero_info(f'validation output: {output}')
         self.epoch_end(stage="validation")
-
     def lr_scheduler_step(self, scheduler: LRSchedulerTypeUnion, metric: Optional[Any]) -> None:
         # for params in self.optimizers().param_groups:
         #     print(params['lr'], params['weight_decay'])
@@ -1071,5 +1110,9 @@ class Model(LightningModule):
                 getattr(self, f"{phase}_FpFn_TP").reset()
                 getattr(self, f"{phase}_FpFn_FN").reset()
                 getattr(self, f"{phase}_FpFn_FP").reset()
+                self.store_real_data = torch.zeros((20, 3000, 8, 1000), device=self.device)
+                self.store_whole_eeg = torch.zeros((20, 3000, 1000), device=self.device)
+                self.store_whole_label = torch.zeros((20, 3000, 1000), device=self.device)
+                self.max_index = torch.zeros(20, device=self.device)
             the_metric += value
         self.log(f"{phase}/the_metric", the_metric, prog_bar=True, on_epoch=True, sync_dist=True)

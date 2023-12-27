@@ -22,11 +22,17 @@ def init_weights(module):
     if isinstance(module, nn.Linear) and module.bias is not None:
         module.bias.data.zero_()
 
+
+def one_hot(x, num_classes, on_value=1., off_value=0., device='cuda'):
+    x = x.long().view(-1, 1)
+    return torch.full((x.size()[0], num_classes), off_value, device=device).scatter_(1, x, on_value)
+
+
 def Dice_loss(inputs, target, beta=1, smooth=1e-5):
     n, h = inputs.size()
     nt, ht = target.size()
     if h != ht:
-        inputs = F.interpolate(inputs, size=(ht),  align_corners=True)
+        inputs = F.interpolate(inputs, size=(ht), align_corners=True)
     tp = torch.sum(target * inputs, dim=1)
     fp = torch.sum(inputs, dim=1) - tp
     fn = torch.sum(target, dim=1) - tp
@@ -47,7 +53,6 @@ class Fpfn(nn.Module):
 
         listdir_info = os.listdir(save_dir)
 
-
         existing_versions = []
         for listing in listdir_info:
             d = listing
@@ -59,49 +64,63 @@ class Fpfn(nn.Module):
             return 0
 
         return len(existing_versions) + 1
-    def forward(self, output: torch.Tensor, target: torch.Tensor, data_idx, store) -> torch.Tensor:
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor, data_idx=None, store=False,
+                weight=None, stage='fit') -> torch.Tensor:
         target = target.float()
+        sum1 = torch.sum(target, -1)
+        sum2 = torch.sum(1 - target, -1)
+        B = output.shape[0]
+        # rank_zero_info(f'forward output: {output.shape}, targe: {target.shape}')
         if self.use_fpfn == 'Fpfn':
             sum1 = torch.sum(target, -1)
             sum2 = torch.sum(1 - target, -1)
             # rank_zero_info(f'ouput:{torch.max(output, dim=-1), torch.min(output, dim=-1), output[0]}, targe:{sum1, sum2, target[0]}')
-            loss = torch.sum(output * (1 - target), -1) / sum2 + torch.sum((1 - output) * target, -1) / sum1
-            # rank_zero_info(f'output: {torch.max(output), torch.min(output)} loss: {loss}')
-            if store:
-                idx = torch.where(loss > 0.9)[0]
-                if idx.shape[0] != 0:
-                    import numpy as np
-                    torch.set_printoptions(threshold=np.inf)
-                    # rank_zero_info(f'outlier: {loss[torch.where(loss > 0.9)]},'
-                    #                f'output: {output[torch.where(loss > 0.9)]},'
-                    #                f'target: {target[torch.where(loss > 0.9)]}')
-                    rootdir = '/home/cuizaixu_lab/huangweixuan/data/ver_log'
-                    os.makedirs(rootdir,
-                                exist_ok=True)
-                    torch.save({"output": output[torch.where(loss>1.05)], "target": target[torch.where(loss>1.05)], "idx": data_idx},
-                               f'{rootdir}/version_{self._get_next_version(rootdir)}.ckpt')
-                idx = torch.where(loss < 0.5)[0]
-                if idx.shape[0] != 0:
-                    import numpy as np
-                    torch.set_printoptions(threshold=np.inf)
-                    # rank_zero_info(f'outlier: {loss[torch.where(loss < 0.5)]},'
-                    #                f'output: {output[torch.where(loss < 0.5)]},'
-                    #                f'target: {target[torch.where(loss < 0.5)]}')
-                    rootdir = '/home/cuizaixu_lab/huangweixuan/data/ver_log'
-                    os.makedirs(rootdir,
-                                exist_ok=True)
-                    torch.save(
-                        {"output": output[torch.where(loss < 0.5)], "target": target[torch.where(loss < 0.5)], "idx": data_idx},
-                        f'{rootdir}/version_{self._get_next_version(rootdir)}.ckpt')
-            return torch.mean(loss)
+            loss = torch.sum(output * (1 - target), -1) / (sum2 + 1e-6) + \
+                   torch.sum((1 - output) * target, -1) / (sum1 + 1e-6)
         elif self.use_fpfn == 'BCE':
+            output = output.view(-1, 1)
             target = target.float()
-            loss = F.binary_cross_entropy_with_logits(output, target, weight=torch.tensor([1, 10], device=output.device))
-            return loss
+            output_0 = 1 - output.detach().clone()
+            output = torch.cat([output_0, output], dim=-1)
+            target = one_hot(target, num_classes=2)
+            # rank_zero_info(f'output: {output.shape}, targe: {target.shape}')
+            # rank_zero_info(f'others: {weight}')
+            ce = nn.CrossEntropyLoss(weight=torch.tensor([1, int(weight)], device=output.device), reduction='none')
+            loss = ce(output, target)
         else:
             target = target.float()
-            loss = 0.5*F.binary_cross_entropy_with_logits(output, target) + 0.5*Dice_loss(output, target)
-            return loss
+            loss = 0.5 * F.binary_cross_entropy_with_logits(output, target, reduction='none') + 0.5 * Dice_loss(output, target)
+        if store is True:
+            if loss.shape[1] == 1:
+                loss = loss.reshape(B, -1)
+            idx = torch.where(loss > 0.9)[0]
+            if idx.shape[0] != 0:
+                import numpy as np
+                torch.set_printoptions(threshold=np.inf)
+                # rank_zero_info(f'outlier: {loss[torch.where(loss > 0.9)]},'
+                #                f'output: {output[torch.where(loss > 0.9)]},'
+                #                f'target: {target[torch.where(loss > 0.9)]}')
+                rootdir = '/home/cuizaixu_lab/huangweixuan/data/ver_log'
+                os.makedirs(rootdir, exist_ok=True)
+                version = self._get_next_version(rootdir)
+                torch.save({"output": output[torch.where(loss > 1.05)], "target": target[torch.where(loss > 1.05)],
+                            "idx": data_idx},
+                           f'{rootdir}/version_{version}_{stage}_1.ckpt')
+                rank_zero_info(f'Saving stage: {stage} result in {rootdir}/version_{version}_{stage}_1')
+            idx = torch.where(loss < 0.5)[0]
+            if idx.shape[0] != 0:
+                import numpy as np
+                torch.set_printoptions(threshold=np.inf)
+                rootdir = '/home/cuizaixu_lab/huangweixuan/data/ver_log'
+                os.makedirs(rootdir, exist_ok=True)
+                version = self._get_next_version(rootdir)
+                torch.save(
+                    {"output": output[torch.where(loss < 0.5)], "target": target[torch.where(loss < 0.5)],
+                     "idx": data_idx},
+                    f'{rootdir}/version_{version}_{stage}_0_5.ckpt')
+                rank_zero_info(f'Saving stage: {stage}  result in {rootdir}/version_{version}_{stage}_0_5')
+        return torch.mean(loss, dim=-1)
 
 
 class Event(nn.Module):
@@ -112,6 +131,7 @@ class Event(nn.Module):
         self.freq = freq
         self.time = time
         self.len_threshold = int(freq * time)
+        # rank_zero_info(f'freq:{self.freq}, time:{self.time}, len_threshold:{self.len_threshold}')
         self.device = device
 
     def get_event(self, seq, processingpost=None, prob=True):
@@ -208,6 +228,7 @@ class By_Event(nn.Module):
         super(By_Event, self).__init__()
         self.threshold = threshold
         self.IOU_threshold = IOU_threshold
+        # rank_zero_info(f'threshold: {self.threshold}, IOU_threshold:{self.IOU_threshold}')
         self.get_event = Event(threshold, device, **kwargs)
         self.device = device
 
@@ -508,8 +529,10 @@ def set_metrics(pl_module, ):
                 setattr(pl_module, f"{split}_{k}_accuracy", Accuracy())
                 setattr(pl_module, f"{split}_{k}_loss", Scalar())
 
+
 if __name__ == '__main__':
     import torch
+
     # ckpt = torch.load('../../data/case.ckpt', map_location=torch.device('cpu'))
     # cls = ckpt['cls']
     # spindle = ckpt['Spindle_label']
@@ -524,6 +547,7 @@ if __name__ == '__main__':
     for path in path_list:
         ckpt = torch.load(path, map_location=torch.device('cpu'))
         import matplotlib.pyplot as plt
+
         x = range(2000)
         cls = ckpt['output']
         spindle = ckpt['Spindle_label']

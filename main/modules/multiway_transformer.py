@@ -1,4 +1,3 @@
-
 import os
 
 import numpy as np
@@ -175,7 +174,10 @@ class Attention(nn.Module):
         # print("Memory Free: ", meminfo.free/unit)
         # print("Memory Used: ", meminfo.used/unit)
         return x
+
+
 1
+
 
 class Block(nn.Module):
     def __init__(
@@ -278,7 +280,8 @@ class Block(nn.Module):
         self.max_time_len = max_time_len
         rank_zero_info(f'max_time_len: {self.max_time_len}')
 
-    def forward(self, x, mask=None, modality_type=None, relative_position_bias=None, relative_position_index=None, not_use_tf=False):
+    def forward(self, x, mask=None, modality_type=None, relative_position_bias=None, relative_position_index=None,
+                not_use_tf=False):
         # unit = 1024*1024*1024
         # print("*******blk********")
         # handle = pynvml.nvmlDeviceGetHandleByIndex(0)
@@ -355,7 +358,7 @@ class PatchEmbed(nn.Module):
         if not fft_only:
             self.proj = nn.Conv1d(
                 in_chans,
-                in_chans*embed_dim,
+                in_chans * embed_dim,
                 kernel_size=patch_size,
                 stride=patch_size,
                 bias=False if no_patch_embed_bias else True,
@@ -370,7 +373,7 @@ class PatchEmbed(nn.Module):
             # torch.nn.init.xavier_uniform_(w_fft.view([w_fft.shape[0], -1]))
             self.fft_proj = nn.Conv2d(
                 in_channels=in_chans,
-                out_channels=in_chans*embed_dim,
+                out_channels=in_chans * embed_dim,
                 kernel_size=(2, 100),
                 stride=(2, 100),
                 bias=False if no_patch_embed_bias else True,
@@ -387,15 +390,15 @@ class PatchEmbed(nn.Module):
             assert C == self.max_channels
             time_proj = rearrange(self.proj(x[0]), 'B (C D) P -> B (C P) D', C=self.in_chans)
             fft_proj = rearrange(self.fft_proj(x[1]).squeeze(-1), 'B (C D) P -> B (C P) D', C=self.in_chans)
-        # print('self.fft_proj.weight', torch.isnan(self.fft_proj.weight).sum())
-        # os.makedirs('./result/', exist_ok=True)
-        # torch.save(self.state_dict(), './result/fft_proj.pt')
+            # print('self.fft_proj.weight', torch.isnan(self.fft_proj.weight).sum())
+            # os.makedirs('./result/', exist_ok=True)
+            # torch.save(self.state_dict(), './result/fft_proj.pt')
 
-        # print('max(self.fft_proj.weight), min(self.fft_proj.weight)', torch.max(self.fft_proj.weight), torch.min(self.fft_proj.weight))
-        # print('max(x[:, self.max_channels:]), min(x[:, self.max_channels:])', torch.max(x[:, self.max_channels:]), torch.min(x[:, self.max_channels:]))
-        # print('torch.isnan(time_proj).sum(), torch.isnan(fft_proj).sum()', torch.isnan(time_proj).sum(),
-        #       torch.isnan(fft_proj).sum())
-        # print('self.fft_proj.weight.data', self.fft_proj.weight.data)
+            # print('max(self.fft_proj.weight), min(self.fft_proj.weight)', torch.max(self.fft_proj.weight), torch.min(self.fft_proj.weight))
+            # print('max(x[:, self.max_channels:]), min(x[:, self.max_channels:])', torch.max(x[:, self.max_channels:]), torch.min(x[:, self.max_channels:]))
+            # print('torch.isnan(time_proj).sum(), torch.isnan(fft_proj).sum()', torch.isnan(time_proj).sum(),
+            #       torch.isnan(fft_proj).sum())
+            # print('self.fft_proj.weight.data', self.fft_proj.weight.data)
             res = [time_proj, fft_proj]
             res = torch.concatenate(res, dim=1)
             return res
@@ -411,7 +414,7 @@ class PatchEmbed(nn.Module):
             assert len_ >= 0
 
             assert C == self.choose_channels.shape[0]
-            fft_proj =  rearrange(self.fft_proj(x[len_-1]), 'B (C D) P -> B (C P) D', C=self.in_chans)
+            fft_proj = rearrange(self.fft_proj(x[len_ - 1]), 'B (C D) P -> B (C P) D', C=self.in_chans)
 
             return fft_proj
 
@@ -468,18 +471,14 @@ class MultiWayTransformer(nn.Module):
             config: (dict): other hyper from pytorch-lighting
         """
         super().__init__()
+        self.actual_channels = None
         drop_path_rate = drop_path_rate if config is None else config["drop_path_rate"]
         rank_zero_info("drop path rate: {}".format(drop_path_rate))
         # self.choose_channels = torch.tensor([4, 15, 16, 18, 22, 36, 38, 52])
         # self.choose_channels = torch.tensor([0, 1, 2, 3, 4, 5, 6, 7])
         # self.choose_channels = torch.tensor([0, 1, 2, 3])  # c=4
         self.choose_channels = torch.tensor(torch.arange(config['random_choose_channels']))
-        if config['actual_channels'] == 'shhs':
-            self.actual_channels = torch.tensor(torch.arange(4))
-        elif config['actual_channels'] == 'physio':
-            self.actual_channels = torch.tensor([0, 1 ,2 ,3 ,4, 6])
-        else:
-            self.actual_channels = None
+        self.get_actual_channels(config['actual_channels'])
         self.use_abs_pos_emb = use_abs_pos_emb
         self.use_relative_pos_emb = use_relative_pos_emb
         self.need_relative_position_embed = need_relative_position_embed
@@ -540,7 +539,7 @@ class MultiWayTransformer(nn.Module):
         ]  # stochastic depth decay rule
         rank_zero_info(f"dpr: {dpr}")
         max_time_len = len(self.actual_channels) if self.actual_channels is not None else self.max_channels
-        self.max_time_len = self.num_patches*max_time_len
+        self.max_time_len = self.num_patches * max_time_len
         rank_zero_info(f'choose max_time_len: {max_time_len}, self.max_time_len: {self.max_time_len}')
 
         self.blocks = nn.ModuleList(
@@ -599,6 +598,16 @@ class MultiWayTransformer(nn.Module):
     def no_weight_decay(self):
         return {"pos_embed", "cls_token"}
 
+    def get_actual_channels(self, actual_channels):
+        if actual_channels == 'shhs':
+            self.actual_channels = torch.tensor(torch.arange(4))
+        elif actual_channels == 'physio':
+            self.actual_channels = torch.tensor([0, 1, 2, 3, 4, 6])
+        elif actual_channels == 'MASS_SP':
+            self.actual_channels = torch.tensor([0])
+        else:
+            self.actual_channels = None
+
     def random_masking2(self, x, mask_ratio, attn_mask, mask_w):
         B, L, _ = x.shape
 
@@ -607,36 +616,43 @@ class MultiWayTransformer(nn.Module):
         x = x * (1 - w) + mask_token * w
         return x, mask_w
 
-    def random_masking(self, x, mask_ratio, attn_mask):
+    def random_masking(self, x, mask_ratio, attn_mask, mask_w_fft):
         """
         Perform per-sample random masking by per-sample shuffling.
         Per-sample shuffling is done by argsort random noise.
         x: [N, L, D], sequence
         """
-        N, L, D = x.shape  # batch, length, dim
-        len_keep = int(L * (1 - mask_ratio))
+        if mask_w_fft is None:
+            N, L, D = x.shape  # batch, length, dim
+            len_keep = int(L * (1 - mask_ratio))
 
-        noise = torch.rand(N, L, device=x.device)  # noise in [0, 1]
+            noise = torch.rand(N, L, device=x.device)  # noise in [0, 1]
 
-        # sort noise for each sample
-        ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
-        ids_restore = torch.argsort(ids_shuffle, dim=1)
+            # sort noise for each sample
+            ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+            ids_restore = torch.argsort(ids_shuffle, dim=1)
 
-        mask_tokens = self.mask_token.repeat(x.shape[0], L - len_keep, 1)
+            mask_tokens = self.mask_token.repeat(x.shape[0], L - len_keep, 1)
 
-        ids_keep = ids_shuffle[:, :len_keep]
-        # print("ids_keep: ", ids_keep)
-        # generate the binary mask: 0 is keep, 1 is remove
-        mask = torch.ones([N, L], device=x.device)
-        mask[:, :len_keep] = 0
-        # unshuffle to get the binary mask
-        mask = torch.gather(mask, dim=1, index=ids_restore)
+            ids_keep = ids_shuffle[:, :len_keep]
+            # print("ids_keep: ", ids_keep)
+            # generate the binary mask: 0 is keep, 1 is remove
+            mask = torch.ones([N, L], device=x.device)
+            mask[:, :len_keep] = 0
+            # unshuffle to get the binary mask
+            mask = torch.gather(mask, dim=1, index=ids_restore)
 
-        x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
-        x_masked = torch.cat([x_masked, mask_tokens], dim=1)
-        x_masked = torch.gather(x_masked, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, D))
-        mask = mask * attn_mask
-        return x_masked, mask  # [N,L,D], [N, L]
+            x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+            x_masked = torch.cat([x_masked, mask_tokens], dim=1)
+            x_masked = torch.gather(x_masked, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, D))
+            mask = mask * attn_mask
+            return x_masked, mask  # [N,L,D], [N, L]
+        else:
+            B, L, _ = x.shape
+            mask_token = self.mask_token.expand(B, L, -1)
+            w = mask_w_fft.unsqueeze(-1).type_as(mask_token)
+            x = x * (1 - w) + mask_token * w
+            return x, mask_w_fft
 
     def time_embed(self, _x, attn_mask, mask=False, mask_w=None):
         ret = {}
@@ -701,7 +717,7 @@ class MultiWayTransformer(nn.Module):
 
         return ret
 
-    def embed(self, _x, attn_mask, mask, mask_w=None):
+    def embed(self, _x, attn_mask, mask, mask_w=None, mask_w_fft=None):
         ret = {}
         x = self.patch_embed(_x)
         # print('self.patch_embed(_x): ', torch.isnan(x).sum())
@@ -709,7 +725,7 @@ class MultiWayTransformer(nn.Module):
         #     0], self.num_patches
         # x = x.permute(0, 2, 1)
         B, L, _ = x.shape
-        start_idx = self.num_patches*self.max_channels
+        start_idx = self.num_patches * self.max_channels
         x_time = x[:, :start_idx]
         x_fft = x[:, start_idx:]
         assert x_time.shape == x_fft.shape
@@ -718,8 +734,8 @@ class MultiWayTransformer(nn.Module):
             assert mask_w is not None
             x_time, time_mask_patch = self.random_masking2(x_time, self.mask_ratio, attn_mask,
                                                            mask_w)  # [N,L_t,D], [N, L_t]
-            x_fft, fft_mask_patch = self.random_masking(x_fft, 0, attn_mask,
-                                                           )  # [N,L_t,D], [N, L_t]
+            x_fft, fft_mask_patch = self.random_masking(x_fft, 0, attn_mask, mask_w_fft
+                                                        )  # [N,L_t,D], [N, L_t]
         else:
             time_mask_patch = None
             fft_mask_patch = None
@@ -747,12 +763,12 @@ class MultiWayTransformer(nn.Module):
             x_fft_actual = rearrange(x_fft_actual[:, self.actual_channels.to(x_time.device)],
                                      'B C P D -> B (C P) D', C=len(self.actual_channels))
             assert x_time_actual.shape == x_fft_actual.shape
-            assert x_time_actual.shape[1] == len(self.actual_channels)*self.num_patches
+            assert x_time_actual.shape[1] == len(self.actual_channels) * self.num_patches
             x_time = torch.cat([x_time[:, 0, :].unsqueeze(1), x_time_actual], dim=1)
             x_fft = torch.cat([x_fft[:, 0, :].unsqueeze(1), x_fft_actual], dim=1)
 
         x = torch.cat([x_time, x_fft], dim=1)
-        assert x.shape[1] == self.max_time_len*2 + 2
+        assert x.shape[1] == self.max_time_len * 2 + 2
         x = self.pos_drop(x)
         ret.update({'x': x})
         ret.update({'x_len': x_time.shape[1]})
@@ -799,6 +815,7 @@ class MultiWayTransformer(nn.Module):
         # print('res = torch.concatenate(res, dim=-1)', torch.isnan(res).sum())
         return res, attn_mask_fft
 
+
 class FilterbankShape(object):
 
     def lin_tri_filter_shape(self, nfilt=20, nfft=512, samplerate=16000, lowfreq=0, highfreq=None):
@@ -811,27 +828,28 @@ class FilterbankShape(object):
         :param highfreq: highest band edge of mel filters, default samplerate/2
         :returns: A numpy array of size nfilt * (nfft/2 + 1) containing filterbank. Each row holds 1 filter.
         """
-        highfreq = highfreq or samplerate/2
-        assert highfreq <= samplerate/2, "highfreq is greater than samplerate/2"
+        highfreq = highfreq or samplerate / 2
+        assert highfreq <= samplerate / 2, "highfreq is greater than samplerate/2"
 
         # compute points evenly spaced in mels
-        #lowmel = self.hz2mel(lowfreq)
-        #highmel = self.hz2mel(highfreq)
-        #melpoints = np.linspace(lowmel,highmel,nfilt+2)
-        hzpoints = torch.linspace(lowfreq,highfreq,nfilt+2)
+        # lowmel = self.hz2mel(lowfreq)
+        # highmel = self.hz2mel(highfreq)
+        # melpoints = np.linspace(lowmel,highmel,nfilt+2)
+        hzpoints = torch.linspace(lowfreq, highfreq, nfilt + 2)
         # our points are in Hz, but we use fft bins, so we have to convert
         #  from Hz to fft bin number
-        bin = np.floor((nfft+1)*hzpoints/samplerate)
+        bin = np.floor((nfft + 1) * hzpoints / samplerate)
 
-        fbank = torch.zeros([nfilt,nfft//2+1])
-        for j in range(0,nfilt):
-            for i in range(int(bin[j]), int(bin[j+1])):
-                fbank[j,i] = (i - bin[j]) / (bin[j+1]-bin[j])
-            for i in range(int(bin[j+1]), int(bin[j+2])):
-                fbank[j,i] = (bin[j+2]-i) / (bin[j+2]-bin[j+1])
+        fbank = torch.zeros([nfilt, nfft // 2 + 1])
+        for j in range(0, nfilt):
+            for i in range(int(bin[j]), int(bin[j + 1])):
+                fbank[j, i] = (i - bin[j]) / (bin[j + 1] - bin[j])
+            for i in range(int(bin[j + 1]), int(bin[j + 2])):
+                fbank[j, i] = (bin[j + 2] - i) / (bin[j + 2] - bin[j + 1])
         fbank = torch.transpose(fbank)
         fbank.astype(torch.float32)
         return fbank
+
 
 def backbone_base_patch200(pretrained=False, **kwargs):
     patch_size = kwargs.pop("patch_size", 200)
@@ -860,6 +878,7 @@ def backbone_base_plus_patch200(pretrained=False, **kwargs):
         layer_scale_init_values=None, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
+
 def backbone_base_plus_patch200_without(pretrained=False, **kwargs):
     patch_size = kwargs.pop("patch_size", 100)
     model = MultiWayTransformer(
@@ -868,6 +887,8 @@ def backbone_base_plus_patch200_without(pretrained=False, **kwargs):
         use_abs_pos_emb=True, need_relative_position_embed=False,
         layer_scale_init_values=None, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
+
+
 backbone_base_patch200 = backbone_base_patch200
 backbone_large_patch200 = backbone_large_patch200
 backbone_base_plus_patch200 = backbone_base_plus_patch200

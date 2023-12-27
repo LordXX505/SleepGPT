@@ -10,7 +10,6 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelSummary
 from lightning.pytorch.strategies import DDPStrategy
 import os
-from main.modules import Test
 from main.datamodules import TestData
 from main.datamodules.Multi_datamodule import MultiDataModule
 from main.modules import Model, Model_Pre
@@ -20,13 +19,14 @@ from lightning.pytorch.tuner import Tuner
 from main.modules.get_mu_std import Mu_Std
 from torch.distributed.elastic.multiprocessing.errors import record
 
+
 @record
 @ex.automain
 def main(_config):
     _config = copy.deepcopy(_config)
     pl.seed_everything(_config['seed'])
     print(_config)
-    version=None
+    version = None
     # np.random.seed(SEED)
     # torch.manual_seed(SEED)
     # torch.cuda.manual_seed_all(SEED)
@@ -41,7 +41,7 @@ def main(_config):
     else:
         model = Model(_config)
     dm = MultiDataModule(_config, kfold=k)
-    logger_path =_config["log_dir"]
+    logger_path = _config["log_dir"]
     rank_zero_info(f'logger_path: {logger_path}')
     os.makedirs(logger_path, exist_ok=True)
     name = f'{exp_name}_{_config["lr_policy"]}_{_config["model_arch"]}_{_config["loss_function"]}'
@@ -55,8 +55,10 @@ def main(_config):
         name += '_pretrain'
     else:
         name += '_' + _config['mode']
-    if _config['all_time']:
-        name += '_all_time_' + _config['use_pooling']
+    if _config['all_time'] is not None:
+        name += '_all_time_'
+    if _config['use_pooling'] is not None:
+        name += _config['use_pooling']
     if _config["eval"]:
         name += 'eval'
 
@@ -65,10 +67,17 @@ def main(_config):
         name=name,
     )
     monitor = 'validation/the_metric' if _config['mode'] == 'pretrain' else "CrossEntropy/validation/max_accuracy_epoch"
-
+    if _config['loss_names']['FpFn'] > 0:
+        filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={FpFN/validation/F1:.4f}-val_score={' \
+                   'validation/the_metric:.4f}'
+    elif _config['loss_names']['CrossEntropy'] > 0:
+        filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={' \
+                   'CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}'
+    else:
+        filename = None
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=f'/data/checkpoint/{k}_fold/{name}/version_{logger.version}',
-        filename='ModelCheckpoint-epoch={epoch:02d}-val_acc={CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}',
+        filename=filename,
         save_top_k=20,
         verbose=True,
         monitor=monitor,
@@ -135,4 +144,3 @@ def main(_config):
     # trainer.validate(model, datamodule=dm)
     # test_dm = dm.dms[0].test_dataset
     trainer.test(model, datamodule=dm)
-

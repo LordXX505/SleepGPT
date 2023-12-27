@@ -91,7 +91,7 @@ class BaseDatatset(data.Dataset):
                     self.idx_2_name[_] = name
                     self.nums_2_idx[_] = all_num
                     self.idx_2_nums.append(all_num)
-                    all_num += nums[_] // self.split_len if nums[_]%self.split_len == 0 \
+                    all_num += nums[_] // self.split_len if nums[_] % self.split_len == 0 \
                         else ((nums[_] // self.split_len) + 1)
                     # if nums[_]%self.time_size==0:
                     #     all_num += nums[_]//self.time_size
@@ -112,7 +112,7 @@ class BaseDatatset(data.Dataset):
         self.max_channels = 57
         assert 'x' in self.column_names
         # self.choose_channels = np.array([4, 5, 16, 18]) for shhs
-        self.choose_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52]) # for all pertrain
+        self.choose_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52])  # for all pertrain
         # self.choose_channels = np.array([4, 5, 16, 18, 22, 38]) # for physionet
         # self.choose_channels = np.array([4, 5, 15, 18, 22, 36, 38, 52])
         # self.choose_channels = np.array([4, 5, 15, 16, 18, 22, 23, 36, 38, 39, 52])
@@ -161,7 +161,8 @@ class BaseDatatset(data.Dataset):
         if self.pool_all:
             start_idx *= self.split_len
         print(f'after start idx: {start_idx}')
-        return os.path.join(self.idx_2_name[idx], str(start_idx).zfill(5)+'.arrow')
+        return os.path.join(self.idx_2_name[idx], str(start_idx).zfill(5) + '.arrow')
+
     def get_epochs(self, data):
         try:
             x = np.array(data.as_py())
@@ -183,7 +184,6 @@ class BaseDatatset(data.Dataset):
         assert x.shape[0] == channel.shape[0], f"x shape: {x.shape[0]}, c shape: {channel.shape[0]}"
 
         return {'x': [x, channel]}
-
 
     def get_stage(self, data):
         return {'Stage_label': torch.from_numpy(np.array(data)).long()}
@@ -212,9 +212,9 @@ class BaseDatatset(data.Dataset):
             spindles = []
             epoch_mask = []
             indexs = []
-            idx_2_name = self.idx_2_name[idx]
+            idx_2_name = self.get_name(index)
             if start_idx + self.time_size >= self.nums[idx]:
-                start_idx = self.nums[idx]-self.time_size
+                start_idx = self.nums[idx] - self.time_size
             for i in range(self.time_size):
                 if (start_idx + i) >= self.nums[idx]:
                     # print('(start_idx + i) >= self.nums[idx]')
@@ -222,19 +222,22 @@ class BaseDatatset(data.Dataset):
                     epochs.append(torch.zeros(len(self.channels), 3000) + 1e-6)
                     channel.append(torch.zeros(len(self.channels)))
                     if self.stage:
-                        stages.append(torch.ones(1, dtype=torch.long)*(-100))
+                        stages.append(torch.ones(1, dtype=torch.long) * (-100))
                     epoch_mask.append(torch.zeros(1))
                     indexs.append(torch.tensor(-1))
                     continue
                 else:
-                    name = os.path.join(self.idx_2_name[idx], str(start_idx + i).zfill(5)+'.arrow')
+                    # print(f"self.idx_2_name[idx]: {self.idx_2_name[idx]}")
+                    name = os.path.join(self.idx_2_name[idx], str(start_idx + i).zfill(5) + '.arrow')
+                    # print(f'self.data_dir: {self.data_dir}, name:{name}, self.idx_2_name[idx]: {self.idx_2_name[idx]}')
                     epoch_mask.append(torch.ones(1))
                 if not os.path.isfile(name):
                     name2 = os.path.join(self.data_dir, '/'.join(name.split('/')[-3:]))
                     name = os.path.join(self.data_dir, '/'.join(name.split('/')[-2:]))
                     if not os.path.isfile(name):
                         if not os.path.isfile(name2):
-                            raise RuntimeError(f"Error while read file idx  {index} in {name} or {name2}, File not exits")
+                            raise RuntimeError(
+                                f"Error while read file idx  {index} in {name} or {name2}, File not exits")
                         else:
                             name = name2
                 tables = pa.ipc.RecordBatchFileReader(
@@ -251,7 +254,7 @@ class BaseDatatset(data.Dataset):
                     if self.spindle:
                         spindle = self.get_spindle(tables['Spindles'])
                         spindles.append(spindle['Spindle_label'])
-                    indexs.append(torch.tensor(index))
+                    indexs.append(torch.tensor(start_idx + i))
                 except Exception as e:
                     print(f"Error while read file idx {index} in {name} -> {e}")
                     sys.exit(0)
@@ -260,10 +263,13 @@ class BaseDatatset(data.Dataset):
                 ret['Stage_label'] = torch.stack(stages)
             if self.spindle:
                 ret['Spindle_label'] = torch.stack(spindles)
-
             ret['epoch_mask'] = torch.cat(epoch_mask)
             ret.update({'index': torch.stack(indexs).reshape(-1, 1)})
-            ret.update({'name': idx_2_name})
+            if type(idx_2_name) == int:
+                ret.update({'name': torch.tensor(idx_2_name)})  # idx_2_name is int
+            else:
+                ret.update({'name': idx_2_name})
+            # rank_zero_info(f'ret["index"]: {ret["index"]}, name:{idx_2_name}')
             return ret
         else:
             name = self.names[index]
@@ -282,7 +288,7 @@ class BaseDatatset(data.Dataset):
                         ret.update(self.get_stage(tables['stage']))
                     if self.spindle:
                         ret.update(self.get_spindle(tables['spindle'][0]))
-                    ret.update({'index': torch.ones(1)*index})
+                    ret.update({'index': torch.ones(1) * index})
                 except Exception as e:
                     print(f"Error while read file idx {index} in {name} -> {e}")
                     sys.exit(0)
@@ -311,17 +317,19 @@ class BaseDatatset(data.Dataset):
                 if self.random_choose_channels >= self.choose_channels.shape[0]:
                     res_epochs = torch.zeros((self.random_choose_channels, 3000))
                     attention_mask = torch.zeros(self.random_choose_channels)
-                    random_mask_w_temp = torch.zeros(len(self.choose_channels)*15)
+                    random_mask_w_temp = torch.zeros(len(self.choose_channels) * 15)
                     colletc_idx = []
+                    seq_len_3000 = True
                     for i, index in enumerate(self.select_channels):
                         idx = np.where(channel == index)[0]
                         if idx.shape[0] != 0:
                             if _x[idx].shape[1] != 3000:
+                                seq_len_3000 = False
                                 res_epochs[i, :_x[idx].shape[1]] = _x[idx]
                             else:
                                 res_epochs[i] = _x[idx]
                             attention_mask[i] = 1
-                            colletc_idx.append(np.arange(i*15, (i+1)*15))
+                            colletc_idx.append(np.arange(i * 15, (i + 1) * 15))
                     if self.mask_ratio is not None and len(random_mask_w) == 0:
                         # N = len(random_mask_w_temp)
                         # noise = torch.rand(N)
@@ -330,11 +338,23 @@ class BaseDatatset(data.Dataset):
                         # random_mask_w_temp[ids_shuffle[:len_shuffle]] = 1
                         # random_mask_w.append(random_mask_w_temp)
                         colletc_idx = np.concatenate(colletc_idx)
-                        N = colletc_idx.shape[0]
+                        if seq_len_3000:
+                            N = colletc_idx.shape[0]
+                        else:
+                            N = (colletc_idx.shape[0] // 15) * 10
                         noise = torch.rand(N)
                         ids_shuffle = torch.argsort(noise)
                         len_shuffle = int(N * self.mask_ratio)
-                        random_mask_w_temp[colletc_idx[ids_shuffle[:len_shuffle]]] = 1
+                        if seq_len_3000:
+                            final_choose_idx = colletc_idx[ids_shuffle[:len_shuffle]]
+                        else:
+                            num_channels = (colletc_idx.shape[0] // 15)
+                            mat_temp = []
+                            for i in range(num_channels):
+                                mat_temp.append(torch.arange(i * 15, i * 15 + 10))
+                            mat_temp = torch.cat(mat_temp, dim=0)
+                            final_choose_idx = colletc_idx[mat_temp[ids_shuffle[:len_shuffle]]]
+                        random_mask_w_temp[final_choose_idx] = 1
                         random_mask_w.append(random_mask_w_temp)
                     # print(f"res_epochs: {res_epochs}")
                     res_epochs = self.normalize(res_epochs, attention_mask)
@@ -383,4 +403,3 @@ class BaseDatatset(data.Dataset):
         # print(dict_batch['random_mask'].shape)
         dict_batch.pop('x')
         return dict_batch
-

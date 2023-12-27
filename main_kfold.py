@@ -57,9 +57,9 @@ def main(_config):
             name += '_pretrain'
         else:
             name += '_' + _config['mode']
-        if _config['all_time']:
+        if _config['all_time'] is not None:
             name += '_all_time_'
-        if  _config['use_pooling']:
+        if _config['use_pooling'] is not None:
             name += _config['use_pooling']
         if _config["eval"]:
             name += 'eval'
@@ -74,10 +74,17 @@ def main(_config):
             monitor = 'FpFn/validation/F1'
         else:
             "CrossEntropy/validation/max_accuracy_epoch"
-
+        if _config['loss_names']['FpFn'] > 0:
+            filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={FpFn/validation/F1:.4f}-val_score={' \
+                       'validation/the_metric:.4f}'
+        elif _config['loss_names']['CrossEntropy'] > 0:
+            filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={' \
+                       'CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}'
+        else:
+            filename = None
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             dirpath=f'/home/cuizaixu_lab/huangweixuan/data/checkpoint/{k}_fold/{name}/version_{logger.version}',
-            filename='ModelCheckpoint-epoch={epoch:02d}-val_acc={CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}',
+            filename=filename,
             save_top_k=20,
             verbose=True,
             monitor=monitor,

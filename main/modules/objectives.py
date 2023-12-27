@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -8,8 +10,7 @@ import json
 import tqdm
 import functools
 import torch.distributed as dist
-from main.utils import Fpfn, By_Event
-
+from main.utils import Fpfn, By_Event, cal_F1_score, cal_Recall, cal_Precision
 
 from torch.utils.data.distributed import DistributedSampler
 from einops import rearrange
@@ -120,8 +121,8 @@ def compute_time_fft_only(pl_module, batch, stage, aggregate=True):
                    ) / 4
     else:
         itc_loss = (
-                F.cross_entropy(logits_per_w.float(), ground_truth)
-                + F.cross_entropy(logits_per_s.float(), ground_truth))/2
+                           F.cross_entropy(logits_per_w.float(), ground_truth)
+                           + F.cross_entropy(logits_per_s.float(), ground_truth)) / 2
     itc_total_loss = itc_loss
     ret = {
         "itc_loss": itc_total_loss,
@@ -129,7 +130,7 @@ def compute_time_fft_only(pl_module, batch, stage, aggregate=True):
         "itc_labels": ground_truth,
     }
     if pl_module.time_only:
-        ret.update({ "itc_logit_mask_scale": logit_mask_scale})
+        ret.update({"itc_logit_mask_scale": logit_mask_scale})
         mask_feats = res['mask_feats']
         epochs = batch['epochs'][0]
         time_mask_patch = res['time_mask_patch']  # [N, L_t]
@@ -172,6 +173,7 @@ def compute_time_fft_only(pl_module, batch, stage, aggregate=True):
 def compute_fft_only(pl_module, batch, stage):
     pass
 
+
 def compute_mtm(pl_module, batch, stage):
     """
     The implementation of masked time-fft reconstruction refers to MAE (https://github.com/facebookresearch/mae)
@@ -208,8 +210,8 @@ def compute_mtm(pl_module, batch, stage):
     loss = getattr(pl_module, f"{phase}_mtm_loss")(ret["mtm_loss"])
     loss2 = getattr(pl_module, f"{phase}_mtm_loss2")(ret["mtm_loss2"])
 
-    pl_module.log(f"mtm/{phase}/loss", loss,  on_step=True, sync_dist_group=True, prog_bar=True)
-    pl_module.log(f"mtm/{phase}/loss2", loss2,  on_step=True, sync_dist_group=True, prog_bar=True)
+    pl_module.log(f"mtm/{phase}/loss", loss, on_step=True, sync_dist_group=True, prog_bar=True)
+    pl_module.log(f"mtm/{phase}/loss2", loss2, on_step=True, sync_dist_group=True, prog_bar=True)
 
     return ret
 
@@ -366,13 +368,13 @@ def compute_itm_hardneg(pl_module, batch, sim_f2t, sim_t2f, stage):
         ret["itm_logits"], ret["itm_labels"]
     )
     pl_module.log(f"itm/{phase}/loss", loss, on_step=True, sync_dist_group=True, prog_bar=True)
-    pl_module.log(f"itm/{phase}/accuracy", acc, on_step=True, sync_dist_group=True,  prog_bar=True)
+    pl_module.log(f"itm/{phase}/accuracy", acc, on_step=True, sync_dist_group=True, prog_bar=True)
 
     return ret
 
 
 # The implementation of image-text contrastive refers to open_clip (https://github.com/mlfoundations/open_clip)
-def compute_itc(pl_module, batch,  stage, aggregate=True):
+def compute_itc(pl_module, batch, stage, aggregate=True):
     """
     The implementation of time-fft contrastive refers to open_clip (https://github.com/mlfoundations/open_clip)
     Args:
@@ -512,7 +514,6 @@ def compute_itc(pl_module, batch,  stage, aggregate=True):
 
     tf_scale = getattr(pl_module, f"{phase}_itc_tf_logit_scale")(ret["itc_logit_tf_scale"])
     if aggregate and dist.is_available() and dist.is_initialized():
-
         tf_f2t_acc = getattr(pl_module, f"{phase}_itc_tf_f2t_accuracy")(
             logits_per_tfffn_fft, ret["itc_labels"]
         )
@@ -524,7 +525,8 @@ def compute_itc(pl_module, batch,  stage, aggregate=True):
     pl_module.log(f"itc/{phase}/tf_logit_scale", tf_scale)
     return ret
 
-def compute_ce(pl_module, batch,  stage):
+
+def compute_ce(pl_module, batch, stage):
     res = {}
     for name in pl_module.multi_y:
         if name == 'tf':
@@ -546,7 +548,7 @@ def compute_ce(pl_module, batch,  stage):
             res[k] = v.float()
         preds = res[k]
         # print(preds.shape)
-        if k=='tf':
+        if k == 'tf':
             preds2 = preds.detach().clone()
         # preds = preds[target != -100]
         res[k] = preds
@@ -587,7 +589,7 @@ def compute_ce(pl_module, batch,  stage):
     else:
         total_loss = 0.0
         for k, v in res.items():
-            ce_loss = F.cross_entropy(v, target,  ignore_index=-100)
+            ce_loss = F.cross_entropy(v, target, ignore_index=-100)
             total_loss += ce_loss
         # if pl_module.local_pooling:
         #     ce_loss_local = F.cross_entropy(preds_local, target, ignore_index=-100)
@@ -596,7 +598,7 @@ def compute_ce(pl_module, batch,  stage):
             print('Using F.cross_entropy Loss')
     num = len(res)
 
-    total_loss = total_loss/num
+    total_loss = total_loss / num
     index2 = index.detach().clone()
     target2 = target.detach().clone()
     # print(f" index2: {index2.shape}, target2: {target2.shape}")
@@ -642,11 +644,12 @@ def compute_ce(pl_module, batch,  stage):
 
     return ret
 
-def confusion(cm:torch.Tensor):
+
+def confusion(cm: torch.Tensor):
     sum0 = cm.sum(axis=0)
     sum1 = cm.sum(axis=1)
     all_sum = cm.sum()
-    p0 = torch.diag(cm).sum()/all_sum
+    p0 = torch.diag(cm).sum() / all_sum
     FP = sum0 - torch.diag(cm)
     FN = sum1 - torch.diag(cm)
     TP = torch.diag(cm)
@@ -656,19 +659,124 @@ def confusion(cm:torch.Tensor):
 
     recall = TP / (TP + FN)
 
-    pe=(sum0*sum1).sum()/(all_sum**2)
+    pe = (sum0 * sum1).sum() / (all_sum ** 2)
 
     kappa = (p0 - pe) / (1 - pe)
-    sensitivity = TP.sum() / (TP.sum()+ FN.sum())
+    sensitivity = TP.sum() / (TP.sum() + FN.sum())
     specificity = TN / (FP.sum() + TN)
     return precision, recall, kappa, sensitivity, specificity
 
 
-def compute_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True, store=False):
+# only ues in inference stage
+def compute_entire_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True,
+                        store=False, compute=False, aggregate=True, weight=None):
+    # rank_zero_info(f'compute_entire_fpfn weight: {weight}')
+    if compute:
+        infer = pl_module.infer(batch, time_mask=False)
+        cls_feats = infer['cls_feats']
+        for feats, label, name, index, real_data in zip(cls_feats, batch['Spindle_label'], batch['name'], batch['index'], batch['epochs'][0]):
+            index = index.squeeze()
+            pl_module.store_real_data[name][index] = real_data[:, 500:1500].detach().clone().to('cuda')
+            pl_module.store_whole_eeg[name][index] = feats[500:1500].detach().clone().to('cuda')
+            pl_module.store_whole_label[name][index] = label[500:1500].detach().clone().to('cuda')
+            pl_module.max_index[name] = torch.max(pl_module.max_index[name], index.detach().clone().to('cuda'))
+        # print(f'pl_module.store_whole_eeg: {pl_module.store_whole_eeg}')
+        return {}
+    else:
+        phase = stage
+        res_epoch = pl_module.store_whole_eeg.detach().clone().to('cuda')
+        res_label = pl_module.store_whole_label.detach().clone().to('cuda')
+        res_index = pl_module.max_index.detach().clone().to('cuda')
+        res_real = pl_module.store_real_data.detach().clone().to('cuda')
+        if aggregate and dist.is_available() and dist.is_initialized():
+            world_size = dist.get_world_size()
+            gathered_batch = [
+                torch.zeros_like(res_epoch) for _ in range(world_size)
+            ]
+            gathered_label = [
+                torch.zeros_like(res_label) for _ in range(world_size)
+            ]
+            gathered_index = [
+                torch.zeros_like(res_index) for _ in range(world_size)
+            ]
+            gathered_real = [
+                torch.zeros_like(res_real) for _ in range(world_size)]
+            dist.all_gather(gathered_batch, pl_module.store_whole_eeg.detach().clone().to('cuda'))
+            dist.all_gather(gathered_label, pl_module.store_whole_label.detach().clone().to('cuda'))
+            dist.all_gather(gathered_index, pl_module.max_index.detach().clone().to('cuda'))
+            dist.all_gather(gathered_real, pl_module.store_real_data.detach().clone().to('cuda'))
+            for batch_index in gathered_index:
+                for name in range(len(batch_index)):
+                    res_index[name] = torch.max(res_index[name], batch_index[name])
+            for batch, batch_label, max_index, batch_real in zip(gathered_batch, gathered_label, res_index, gathered_real):
+                for i in range(len(batch)):
+                    for j in range(len(batch[i])):
+                        if j > max_index:
+                            break
+                        if torch.sum(batch[i][j]) == 0:
+                            continue
+                        res_epoch[i][j] = batch[i][j]
+                        res_label[i][j] = batch_label[i][j]
+                        # rank_zero_info(f'res_real: {res_real.shape}, batch_real: {batch_real.shape}')
+                        res_real[i][j] = batch_real[i][j]
+        for name in range(res_epoch.shape[0]):
+            epoch = []
+            label = []
+            real_epoch = []
+            if torch.sum(res_epoch[name]) == 0:
+                rank_zero_info(f'subject: {name} is not exist')
+                continue
+            for i, (item, item_label, item_real) in enumerate(zip(res_epoch[name], res_label[name], res_real[name])):
+                if i > res_index[name]:
+                    break
+                real_epoch.append(item_real)
+                epoch.append(item)
+                label.append(item_label)
+            epoch = torch.cat(epoch, dim=0)
+            label = torch.cat(label, dim=0)
+            real_epoch = torch.cat(real_epoch, dim=-1)
+            fpfn = Fpfn(use_fpfn=use_fpfn)
+            # rank_zero_info(f'loss weight: {weight}')
+            loss = fpfn(epoch.unsqueeze(0), label.unsqueeze(0), weight=weight, store=store)
+            by_e = By_Event(threshold=prob, IOU_threshold=IOU_th, device=epoch.device)
+            TP, FN, FP = by_e(epoch.detach().clone().unsqueeze(0), label.detach().clone().unsqueeze(0))
+            Recall = cal_Recall(TP, FN)
+            Precision = cal_Precision(TP, FP)
+            F1 = cal_F1_score(Precision, Recall)
+            pl_module.log(f"FpFn/{phase}/{name}/F1", F1, sync_dist_group=True, prog_bar=True)
+            pl_module.log(f"FpFn/{phase}/{name}/TP", TP, sync_dist_group=True, prog_bar=True)
+            pl_module.log(f"FpFn/{phase}/{name}/FN", FN, sync_dist_group=True, prog_bar=True)
+            pl_module.log(f"FpFn/{phase}/{name}/FP", FP, sync_dist_group=True, prog_bar=True)
+            pl_module.log(f"FpFn/{phase}/{name}/Precision", Precision, sync_dist_group=True, prog_bar=True)
+            pl_module.log(f"FpFn/{phase}/{name}/Recall", Recall, sync_dist_group=True, prog_bar=True)
+            pl_module.log(f"FpFn/{phase}/{name}/loss", loss, sync_dist_group=True, prog_bar=True)
+            rootdir = '/home/cuizaixu_lab/huangweixuan/data/ver_log'
+            if stage == 'test':
+                rank_zero_info(f'stage == test, saveing the results')
+                os.makedirs(f'{rootdir}/test_result', exist_ok=True)
+                torch.save({'epoch': epoch, 'label': label, 'real': real_epoch}, f'{rootdir}/test_result/{name}.ckpt')
+            # accumulate and the average of the loss
+            loss = getattr(pl_module, f"{phase}_FpFn_loss")(loss)
+            TP = getattr(pl_module, f"{phase}_FpFn_TP")(TP)
+            FN = getattr(pl_module, f"{phase}_FpFn_FN")(FN)
+            FP = getattr(pl_module, f"{phase}_FpFn_FP")(FP)
+            rank_zero_info(f'name: subject_{name}, loss: {loss}, TP: {TP}, FN: {FN}, FP: {FP}')
+
+        ret = {
+            'loss': loss,
+            'TP': TP,
+            'FN': FN,
+            'FP': FP,
+        }
+        return ret
+
+
+# use in training stage
+def compute_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True, store=False, weight=None):
     infer = pl_module.infer(batch, time_mask=False)
     cls_feats = infer['cls_feats']
     fpfn = Fpfn(use_fpfn=use_fpfn)
-    loss = fpfn(cls_feats, batch['Spindle_label'], data_idx=batch['index'], store=store)
+    loss = fpfn(cls_feats, batch['Spindle_label'], data_idx=batch['index'], store=store, weight=weight)
     by_e = By_Event(threshold=prob, IOU_threshold=IOU_th, device=cls_feats.device)
     TP, FN, FP = by_e(cls_feats.detach().clone(), batch['Spindle_label'].detach().clone())
     ret = {
@@ -685,8 +793,3 @@ def compute_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True, store=Fal
     FP = getattr(pl_module, f"{phase}_FpFn_FP")(ret["FP"])
     pl_module.log(f"FpFn/{phase}/loss", loss, on_step=True, sync_dist_group=True, prog_bar=True)
     return ret
-
-
-
-
-

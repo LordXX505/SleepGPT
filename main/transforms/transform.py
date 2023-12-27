@@ -46,7 +46,6 @@ class Multi_Transform:
     def __call__(self, x, label=None):
         if label is not None:
             labels = []
-
         else:
             labels = None
         res = []
@@ -100,7 +99,31 @@ class normalize:
             return (x - self.mu4.unsqueeze(-1)) / self.std4.unsqueeze(-1)
         else:
             return (x - self.mu.unsqueeze(-1)) / self.std.unsqueeze(-1)
-
+class unnormalize:
+    def __init__(self):
+        # self.mu = torch.tensor([-6.8460e-02,  1.9104e-01,  4.1165e+01,  3.8937e-01, -2.0938e+00,
+        #  1.6496e-03, -2.6778e-03, -4.8439e-05,  8.1125e-04, -8.7787e-04,
+        #  7.1748e-05])
+        # self.std = torch.tensor([34.6887,  34.9556, 216.6215,  23.2826,  35.4035,  26.8738,  26.9540,
+        #   4.9272,  25.1366,  24.5395,   3.6142])
+        # self.mu = torch.tensor([-6.8460e-02,  1.9104e-01,  4.1165e+01, -2.0938e+00,
+        #  1.6496e-03, -4.8439e-05,  8.1125e-04,
+        #  7.1748e-05])
+        # self.std4 = torch.tensor([34.6887,  34.9556, 216.6215,  35.4035,  26.8738,
+        #  4.9272,  25.1366,   3.6142])
+        self.mu4 = torch.tensor([-6.8460e-02,  1.9104e-01,  3.8937e-01, -2.0938e+00,
+         ])
+        self.std4 = torch.tensor([34.6887,  34.9556, 23.2826,  35.4035])
+        self.mu = torch.tensor([-6.8460e-02,  1.9104e-01,  3.8937e-01, -2.0938e+00,
+         1.6496e-03,-4.8439e-05,  8.1125e-04,
+         7.1748e-05])
+        self.std = torch.tensor([34.6887,  34.9556, 23.2826,  35.4035,  26.8738,
+          4.9272,  25.1366,   3.6142])
+    def __call__(self, x, attention_mask):
+        if x.shape[0] == 4:
+            return x * self.std4.unsqueeze(-1) + self.mu4.unsqueeze(-1)
+        else:
+            return x * self.std.unsqueeze(-1) + self.mu.unsqueeze(-1)
 
 class Compose:
 
@@ -114,10 +137,10 @@ class Compose:
         # print(f"Using transforms: {len(self.transforms)}")
         if self.mode == 'random':
             index = random.randint(0, len(self.transforms) - 1)
-            x = self.transforms[index](x, label)
+            x, label = self.transforms[index](x, label)
         elif self.mode == 'full':
             for t in self.transforms:
-                x = t(x, label)
+                x, label = t(x, label)
         elif self.mode == 'shuffle':
             transforms = np.random.choice(self.transforms, len(self.transforms), replace=False)
             for t in transforms:
