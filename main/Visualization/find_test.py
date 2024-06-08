@@ -25,7 +25,7 @@ from mne.preprocessing import (
     compute_proj_eog,
 )
 # from sklearn.linear_model import LinearRegression
-path = '../../data/data/MASS_aug1/SS2/E1/01-02-0001/train'
+path = '../../data/data/MASS_aug1/SS2/E2/01-02-0001/train'
 
 all_path = sorted(glob.glob(path+'/*'))
 print(len(all_path))

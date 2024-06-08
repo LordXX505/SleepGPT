@@ -26,15 +26,17 @@ def main(_config):
     _config = copy.deepcopy(_config)
     pl.seed_everything(_config['seed'])
     print(_config)
-    version=None
-    # np.random.seed(SEED)
-    # torch.manual_seed(SEED)
-    # torch.cuda.manual_seed_all(SEED)
-    for k in range(_config['kfold']):
-        if k == 1:
-            sys.exit(0)
+    torch.multiprocessing.set_sharing_strategy('file_system')
+    if _config['resume_during_training'] is not None:
+        start_idx = int(_config['resume_during_training'])
+    else:
+        start_idx = 0
+    for k in range(start_idx, _config['kfold']):
+        version = None
         # if k==0 or k==1: #resume
         #     continue
+        # if k == 7:
+        #     sys.exit(0)
         rank_zero_info(f'Using k fold: now is {k}')
         exp_name = f'{_config["exp_name"]}'
         # model = Mu_Std(_config)
@@ -42,13 +44,17 @@ def main(_config):
             model = Model_Pre(_config)
         else:
             model = Model(_config)
+        if _config['mode'] == 'Spindledetection':
+            data_dir_temp = _config['data_dir'][0]
+            mass_aug_times = _config['mass_aug_times']
+            data_dir_temp_list = data_dir_temp.split('/')
+            data_dir_temp_list[-2] = 'MASS_aug_new_' + str(mass_aug_times)
+            _config['data_dir'] = ['/'.join(data_dir_temp_list)]
+            rank_zero_info(f"Modified data dir: {_config['data_dir']}")
         dm = MultiDataModule(_config, kfold=k)
-        logger_path = _config["log_dir"]
-        rank_zero_info(f'logger_path: {logger_path}')
-        os.makedirs(logger_path, exist_ok=True)
         name = f'{exp_name}_{_config["lr_policy"]}_{_config["model_arch"]}_{_config["loss_function"]}'
         if _config['extra_name'] is not None:
-            name = f'{_config["extra_name"]}_{_config["lr_policy"]}_{_config["model_arch"]}_{_config["loss_function"]}'
+            name = f'{_config["extra_name"]}_{_config["lr_policy"]}_{_config["model_arch"]}_{_config["optim"]}'
         if _config['fft_only'] is True:
             name += '_fft_only'
         elif _config['time_only'] is True:
@@ -58,38 +64,55 @@ def main(_config):
         else:
             name += '_' + _config['mode']
         if _config['all_time'] is not None:
-            name += '_all_time_'
+            name += '_all_time'
         if _config['use_pooling'] is not None:
             name += _config['use_pooling']
+        if _config['Use_FPN'] is not None:
+            name += '_' + _config['Use_FPN']
+        if _config['use_fpfn'] is not None:
+            name += '_' + _config['use_fpfn']
+        if _config['expert'] is not None:
+            name += '_' + _config['expert']
         if _config["eval"]:
-            name += 'eval'
-
+            name += '_eval'
+        if _config['EDF_Mode'] is not None:
+            name += '_' + _config['EDF_Mode']
+        if _config['subset'] is not None:
+            name += '_data_' + str(_config['subset'])
+        logger_path = os.path.join(_config["log_dir"], name)
+        rank_zero_info(f'logger_path: {logger_path}')
+        os.makedirs(logger_path, exist_ok=True)
         logger = pl.loggers.TensorBoardLogger(
             logger_path,
-            name=name,
+            name=f'fold_{k}',
         )
         if _config['mode'] == 'pretrain':
             monitor = 'validation/the_metric'
         elif _config['mode'] == 'Spindledetection':
             monitor = 'FpFn/validation/F1'
+        elif 'downstream' in _config['mode']:
+            monitor = "CrossEntropy/test/score"
         else:
-            "CrossEntropy/validation/max_accuracy_epoch"
+            monitor = "CrossEntropy/validation/max_accuracy_epoch"
+        rank_zero_info(f'monitor: {monitor}')
         if _config['loss_names']['FpFn'] > 0:
             filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={FpFn/validation/F1:.4f}-val_score={' \
                        'validation/the_metric:.4f}'
         elif _config['loss_names']['CrossEntropy'] > 0:
             filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={' \
-                       'CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}'
+                       'CrossEntropy/validation/max_accuracy_epoch:.4f}' \
+                       '-val_macro={CrossEntropy/validation/tf/macro_f1:.4f}' \
+                       '-val_score={validation/the_metric:.4f}'
         else:
             filename = None
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            dirpath=f'/home/cuizaixu_lab/huangweixuan/data/checkpoint/{k}_fold/{name}/version_{logger.version}',
+            dirpath=f'/home/cuizaixu_lab/huangweixuan/data/checkpoint/{name}/{k}_fold/version_{logger.version}',
             filename=filename,
-            save_top_k=20,
+            save_top_k=int(_config['save_top_k']),
             verbose=True,
             monitor=monitor,
             # monitor="CrossEntropy/validation/max_accuracy_epoch",
-            mode="max",
+            mode="min" if 'score' in monitor else 'max',
             save_last=True,
             auto_insert_metric_name=False
         )
@@ -114,7 +137,6 @@ def main(_config):
                 accelerator=_config["device"],
                 strategy="auto",
                 deterministic=True,
-                # benchmark=True,
                 max_epochs=_config["max_epoch"],
                 max_steps=max_steps,
                 # callbacks=callbacks,
@@ -122,7 +144,8 @@ def main(_config):
                 accumulate_grad_batches=accum_iter,
                 log_every_n_steps=1,
                 val_check_interval=_config["val_check_interval"],
-                limit_val_batches=_config['limit_val_batches']
+                limit_val_batches=_config['limit_val_batches'],
+                gradient_clip_val=_config['gradient_clip_val']
             )
         else:
             trainer = pl.Trainer(
@@ -141,7 +164,8 @@ def main(_config):
                 accumulate_grad_batches=accum_iter,
                 log_every_n_steps=1,
                 val_check_interval=_config["val_check_interval"],
-                limit_val_batches=_config['limit_val_batches']
+                limit_val_batches=_config['limit_val_batches'],
+                gradient_clip_val=_config['gradient_clip_val']
             )
 
         if _config["fft_only"] is True:
@@ -155,16 +179,16 @@ def main(_config):
 
             for name, param in model.named_parameters():
                 rank_zero_info("{}\t{}".format(name, param.requires_grad))
-        if _config["all_time"] is True and _config['grad_name'] == 'partial' != 'all':
+        if _config["all_time"] is True and _config['grad_name'].startswith('partial'):
             if _config['get_param_method'] == 'layer_decay' or _config['get_param_method'] == 'no_layer_decay':
                 for param in model.parameters():
                     param.requires_grad = False
 
                 grad_name = ["fc_norm", "transformer.norm", "pooler",
                              "decoder_transformer_block", "stage_pred", "spindle_pred_proj"]
-                if _config['grad_name'] == 'partial':
-                    grad_name.append("transformer.blocks.10")
-                    grad_name.append("transformer.blocks.11")
+                if _config['grad_name'].startswith('partial'):
+                    for _ in range(int(_config['grad_name'].split('_')[-1]), 12):
+                        grad_name.append(f"transformer.blocks.{_}")
                 if _config['use_pooling'] == 'cls':
                     grad_name.append("cls_token")
                 if _config['use_relative_pos_emb']:
@@ -176,14 +200,16 @@ def main(_config):
             for name, param in model.named_parameters():
                 rank_zero_info("{}\t{}\t{}".format(name, param.requires_grad, param.shape))
         if not _config["eval"]:
-            trainer.fit(model, datamodule=dm,)
-            # trainer.fit(model, datamodule=dm,
-            #             ckpt_path='/data/checkpoint/1_fold/Finetune_phy_cosine_backbone_large_patch200_l1_finetune_all_time_swin/version_1/last.ckpt')
+            flag = True
+            if _config['resume_during_training'] is not None and k == int(_config['resume_during_training']):
+                rank_zero_info(f'k == {k}, resuming checkpoints, loaded from : {_config["resume_ckpt_path"]}')
+                if _config["resume_ckpt_path"] != "":
+                    flag = False
+                    trainer.fit(model, datamodule=dm,
+                                ckpt_path=_config['resume_ckpt_path'])
+            if flag is True:
+                rank_zero_info(f'k == {k}, no resuming checkpoints')
+                trainer.fit(model, datamodule=dm,)
         else:
-            import numpy as np
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
-            # trainer.validate(model, datamodule=dm)
-            # test_dm = dm.dms[0].test_dataset
             trainer.test(model, datamodule=dm)
 

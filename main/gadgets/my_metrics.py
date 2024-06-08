@@ -61,3 +61,26 @@ class ACC(Metric):
         self.scalar += scalar
     def compute(self):
         return self.scalar
+
+
+class ChannelwiseScalar(Metric):
+    def __init__(self, n_channels, dist_sync_on_step=False, need_sum=True):
+
+        super().__init__(dist_sync_on_step=dist_sync_on_step)
+        self.n_channels = n_channels
+
+        self.add_state("sums", default=torch.zeros(n_channels), dist_reduce_fx="sum")
+        self.add_state("channel_counts", default=torch.zeros(n_channels), dist_reduce_fx="sum")
+        self.need_sum = need_sum
+    def update(self, scalar: torch.Tensor):
+        if self.need_sum:
+            self.sums += torch.sum(scalar, dim=0)  # along batch dim
+            self.channel_counts += scalar.size(0)
+        else:
+            assert len(self.sums) == len(scalar), f'sums: {len(self.sums)}, scalar: {len(scalar)}'
+            self.sums += scalar
+            self.channel_counts += 1
+
+    def compute(self):
+
+        return self.sums / self.channel_counts

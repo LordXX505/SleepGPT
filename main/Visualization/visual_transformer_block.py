@@ -185,7 +185,6 @@ def main(_config):
     dm = MultiDataModule(_config)
     dm.setup(stage='predict')
     pre_train.eval()
-    pre_train.training=True
     c = pre_train.transformer.choose_channels.shape[0]
     print(c)
     for _, _dm in enumerate(dm.dms):
@@ -201,7 +200,6 @@ def main(_config):
             infer = pre_train(batch, stage="test")
             print(infer)
             cache = get_local.cache
-
             attention_maps = cache['Attention.forward']
             print(len(attention_maps))
             for i in range(len(attention_maps)):

@@ -9,9 +9,9 @@ import pandas as pd
 from PIL import Image
 from .base_dataset import BaseDatatset
 
+
 class MASSDataset(BaseDatatset):
 
-    """This is a dataset for physio 2018"""
     split = 'train'
     transform_keys = ['full']
     data_dir = ['./']
@@ -21,7 +21,7 @@ class MASSDataset(BaseDatatset):
     stage = True
     spindle = False
 
-    def __init__(self, split="", *args, **kwargs):
+    def __init__(self, split="", SSNum=None, *args, **kwargs):
 
         assert split in ['train', 'val', 'test']
         k = kwargs['kfold']
@@ -29,7 +29,13 @@ class MASSDataset(BaseDatatset):
         if k is None:
             raise NotImplementedError
         else:
-            items = np.load(os.path.join(kwargs['data_dir'], f'all_split_{expert}.npy'), allow_pickle=True)
+            if 'file_name' not in kwargs.keys():
+                file_name = f'split_k_20_SS{SSNum}.npy'
+            else:
+                file_name = kwargs['file_name']
+                kwargs.pop('file_name')
+            print(f'mass datasets items file name: {file_name}')
+            items = np.load(os.path.join(kwargs['data_dir'], f'{file_name}'), allow_pickle=True)
             if items.dtype == np.dtype('O'):
                 names = items.item()[f'{split}_{k}']['names']
                 nums = items.item()[f'{split}_{k}']['nums']
@@ -49,6 +55,7 @@ class MASSDataset(BaseDatatset):
     @property
     def channels(self):
         return np.array([4, 5, 16, 18, 22, 36, 38, 52])
+    # np.array([4, 5, 16, 18, 22, 36, 38, 52]) for all pertrain [C3, C4, EMG, EOG, F3, Fpz, O1, Pz]
 
     def get_name(self, index):
         # print(f'idx_2_nums : {self.idx_2_nums}')
@@ -58,5 +65,10 @@ class MASSDataset(BaseDatatset):
         if self.pool_all:
             start_idx *= self.split_len
         # print(f'after start idx: {start_idx}')
-        return int(self.idx_2_name[idx].split('/')[-2].split('-')[-1])
+        try:
+            return self.idx_2_name[idx].split('/')[-1]
+        except:
+            return int(self.idx_2_name[idx].split('/')[-2].split('-')[-1])
+
+
 

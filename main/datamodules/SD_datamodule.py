@@ -13,14 +13,14 @@ class SDDataModule(BaseDataModule):
 
     @property
     def column_names(self):
-        if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['physio_settings']:
+        if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['data_setting']:
             return ['x', 'Stage_label']
         else:
             return ['x']
 
     @property
     def stage(self):
-        if self.config['mode'] == 'pretrain' or 'visualization' in self.config['physio_settings']:
+        if self.config['mode'] == 'pretrain' or 'visualization' in self.config['data_setting']:
             return False
         else:
             return True
@@ -37,14 +37,14 @@ class SDDataModule(BaseDataModule):
     def dataset_name(self):
         return 'SD'
 
-    def setup(self, stage):
+    def setup(self, stage, **kwargs):
         if stage == 'test':
             if self.setup_flag == 0:
-                self.set_test_dataset()
+                self.set_test_dataset(**kwargs)
                 print('SD S')
                 self.setup_flag += 1
         else:
             if self.setup_flag == 0:
-                self.set_train_dataset()
+                self.set_train_dataset(**kwargs)
                 self.setup_flag += 1
                 print('SD s')

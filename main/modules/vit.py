@@ -159,7 +159,7 @@ class PositionalEncoding(nn.Module):
     def __init__(self, out_features, dropout=0.1):
         super(PositionalEncoding, self).__init__()
 
-        self.max_len = 600
+        self.max_len = 20
 
         print('[INFO] Maximum length of pos_enc: {}'.format(self.max_len))
 
@@ -408,12 +408,12 @@ class Transformer(nn.Module):
         if use_time:
             x_time = self.pos_drop(self.pos_encoding(x_time))
             # x_time = x_time.reshape(x_time.shape[0], -1, self.model_dim)
-            x_time = rearrange(x_time, "B T C D -> B (C T) D")
+            # x_time = rearrange(x_time, "B T C D -> B (C T) D")
             x_time = x_time + self.token_type_embed(torch.zeros((x_time.shape[0], x_time.shape[1]), dtype=torch.long,
                                                       device=x_time.device))
         if use_fft:
             x_fft = self.pos_drop(self.pos_encoding(x_fft))
-            x_fft = rearrange(x_fft, "B T C D -> B (C T) D")
+            # x_fft = rearrange(x_fft, "B T C D -> B (C T) D")
             # x_fft = x_fft.reshape(x_fft.shape[0], -1, self.model_dim)
             x_fft = x_fft + self.token_type_embed(torch.ones((x_fft.shape[0], x_fft.shape[1]), dtype=torch.long,
                                                                 device=x_fft.device))
@@ -454,7 +454,6 @@ class Transformer(nn.Module):
         if self.use_global_fft:
             repeat_nums += 1
 
-        epoch_mask = epoch_mask.repeat(1, repeat_nums*self.channels)
         # epoch_mask = epoch_mask.repeat_interleave(self.channels, dim=-1)
         # epoch_mask = epoch_mask.repeat(1, repeat_nums)
         # if 0 in before:
@@ -481,20 +480,14 @@ class Transformer(nn.Module):
             modality_type = 'time'
         else:
             modality_type = 'fft'
-        # if not self.use_g_mid_print:
-        #     rank_zero_info(f'********* use_g_mid_print *********')
-        #     self.use_g_mid_print=True
-        # mid = int(x.size(0)//2) + 1
-        # if self.pool =='attn':
-        #     x[mid, :, :] = x[mid, :, :] + self.predict_token
-        if self.use_multiway=='multiway':
+        if self.use_multiway == 'multiway':
             if len(self.multi_y) == 1:
                 for blk in self.blocks:
-                    x = blk(x, mask=epoch_mask, modality_type='tf',
+                    x = blk(x, modality_type='tf',
                             relative_position_index=self.time_fft_relative_position_index)
             else:
                 for blk in self.blocks:
-                    x = blk(x, mask=epoch_mask, modality_type=modality_type,
+                    x = blk(x, modality_type=modality_type,
                             relative_position_index=None)
         elif self.use_multiway=='one_stream':
             if len(self.multi_y) == 1:
@@ -517,9 +510,10 @@ class Transformer(nn.Module):
         x = self.dropout(x)
         if self.use_all_label == 'all' and use_tf:
             assert self.pool is None
-            time_res = x[:, :self.time_size*self.channels]
+            time_res = x[:, :self.time_size]
+            fft_res = x[:, self.time_size:]
+            x = torch.cat([time_res, fft_res], dim=-1)
             # time_res = rearrange(time_res, "B (C T) D -> (B T) C D", T=self.time_size)
-            time_res = rearrange(time_res, "B (C T) D -> B T (C D)", T=self.time_size)
             if self.use_global_fft:
                 fft_res = x[:, (self.time_size*self.channels):2*(self.time_size*self.channels)]
                 # fft_res = rearrange(fft_res, "B (C T) D -> (B T) C D", T=self.time_size)
@@ -571,11 +565,13 @@ class Transformer(nn.Module):
 class SpindleDecoderTransformer(nn.Module):
     def __init__(self, hidden_size, patch_size, weight=None, decoder_depth=6, enc_dim=512, num_heads=16, mlp_ratio=4.0,
                  qkv_bias=True, drop_rate=0.0, attn_drop_rate=0.0, dpr=None, norm_layer=nn.LayerNorm, num_layers=1,
-                 seq_len=10, *args, **kwargs):
+                 seq_len=10, multi=False, n_classes=5, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         self.first = nn.Sequential(nn.Linear(hidden_size, enc_dim),
                                    nn.LayerNorm(enc_dim))
-        self.token_type_embeddings = nn.Embedding(2, enc_dim)
+        if multi:
+            self.token_type_embeddings = nn.Embedding(2, enc_dim)
         self.blocks = nn.ModuleList()
         if dpr is not None:
             drop_path_rate = [x.item() for x in (torch.linspace(0.00, dpr, decoder_depth))]
@@ -591,12 +587,12 @@ class SpindleDecoderTransformer(nn.Module):
                                      drop_path=drop_path_rate[i] if dpr is not None else 0.0,
                                      norm_layer=norm_layer,
                                      ))
-        self.last = nn.Linear(enc_dim * 2, 200)
+        self.last = nn.Linear(enc_dim * 2, n_classes)
         # self.last_act = nn.GELU()
         # self.predic_all = nn.Linear(2000, 2000)
         self.pe = PositionalEncoding(out_features=enc_dim)
 
-    def forward(self, x):
+    def forward_multimodal(self, x):
         time_c3, fft_c3 = x
         B = time_c3.shape[0]
         L = time_c3.shape[1]
@@ -625,3 +621,31 @@ class SpindleDecoderTransformer(nn.Module):
         # x = F.sigmoid(self.predic_all(self.last_act(self.last(x).reshape(B, -1))))
         x = F.sigmoid(self.last(x).reshape(B, -1))
         return x
+    def forward_single(self, x):
+        time_c3 = x
+        B = time_c3.shape[0]
+        L = time_c3.shape[1]
+        x = self.first(x)
+        time_c3 = x[:, :L]
+        time_c3 = (
+            self.pe(time_c3),
+        )
+        x_embeds = (
+            time_c3)
+        inputs = x_embeds
+        for block in self.blocks:
+            inputs = block(inputs)
+        x_embeds = (
+            inputs[:, :L],
+        )
+        x = x_embeds
+        # x = F.sigmoid(self.predic_all(self.last_act(self.last(x).reshape(B, -1))))
+        x = self.last(x).reshape(B, -1)
+        return {'tf': x}
+
+    def forward(self, x, multi=False):
+        if multi is True:
+            res = self.forward_multimodal(x)
+        else:
+            res = self.foward_single(x)
+        return res

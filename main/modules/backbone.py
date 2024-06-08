@@ -1,5 +1,6 @@
 import copy
 import os
+from lightning.pytorch.utilities import grad_norm
 import sys
 from functools import partial
 from einops import rearrange
@@ -12,7 +13,7 @@ import numpy as np
 from lightning.pytorch.cli import LRSchedulerTypeUnion
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 from . import get_optm
-from main.Visualization import plot_conf
+from main.Visualization import plot_conf, Visual_cal_all
 from main.utils import init_weights, set_metrics
 from pytorch_lightning.utilities.rank_zero import rank_zero_info
 from scipy import interpolate
@@ -31,7 +32,7 @@ import torch.distributed as dist
 
 
 class Model(LightningModule):
-    def __init__(self, config):
+    def __init__(self, config, **kwargs):
         super().__init__()
         self.time_fft_relative_position_index = None
         self.fft_relative_position_index = None
@@ -50,10 +51,30 @@ class Model(LightningModule):
         self.res_label = []
         self.res_feats = []
         self.res_name = {}
+        self.visual = config['visual']
+        if 'fold_now' in kwargs:
+            self.fold_now = kwargs['fold_now']
+        if self.visual is True:
+            self.min_loss = 1000
+            self.min_idx = -1
         # only for test
         # mask_ex = torch.ones((32, 57))
         # mask_ex[:, :50] = 0
         # self.example_input_array = {"batch": {"epochs": torch.Tensor(32, 57, 3000), 'mask': mask_ex}}
+        if 'persub' in kwargs:
+            self.persub = kwargs['persub']
+            self.test_names = kwargs['test_sub_names']
+            rank_zero_info(f'test_names: {self.test_names}')
+            self._ckpt = kwargs['_ckpt']
+            if 'persub_mode' in kwargs:
+                self.persub_mode = kwargs['persub_mode']
+        else:
+            self.persub = False
+
+        if 'kfold' in kwargs:
+            self.kfold = kwargs['kfold']
+            rank_zero_info(f'model kfold: {self.kfold}')
+
         self.prob = config['sp_prob']
         self.IOU_th = config['IOU_th']
         self.mode = config['mode']
@@ -73,6 +94,7 @@ class Model(LightningModule):
             dpr = config["drop_path_rate"]
         rank_zero_info(f"dpr_backbone: {dpr}")
         self.transformer = multiway_transformer.__dict__[config["model_arch"]](
+            patch_size=self.patch_size,
             pretrained=False,
             drop_rate=0,
             drop_path_rate=config["drop_path_rate"],
@@ -85,7 +107,7 @@ class Model(LightningModule):
         self.tfffn_start_layer_index = self.transformer.tfffn_start_layer_index  # 12
         self.num_layers = len(self.transformer.blocks)
         self.num_features = self.transformer.num_features
-
+        self.window_size = config['Swin_window_size']
         self.all_time = config['all_time']
         self.decoder_features = config['decoder_features']
         self.time_size = config['time_size']
@@ -93,6 +115,15 @@ class Model(LightningModule):
         self.time_mask_last = False
         if self.patch_time != 30:
             self.time_mask_last = True
+        if len(config['visual_setting']) != 0:
+            if 'mask_same' in config['visual_setting'].keys():
+                self.mask_same = config['visual_setting']['mask_same']
+            else:
+                self.mask_same = False
+            if 'mode' in config['visual_setting'].keys():
+                self.visual_mode = config['visual_setting']['mode']
+            rank_zero_info(f'visual_setting: {self.mask_same}')
+
         self.token_type_embeddings = nn.Embedding(2, self.num_features)
         self.mixup_fn = None
         self.use_g_mid = config['use_g_mid']
@@ -112,6 +143,7 @@ class Model(LightningModule):
         self.time_only = config['time_only']
         self.fft_only = config['fft_only']
         self.multi_y = config['multi_y']
+        self.return_alpha = config['return_alpha']
         self.use_local_f = config['local_pooling']
         assert self.time_only is False
         assert self.fft_only is False
@@ -119,16 +151,27 @@ class Model(LightningModule):
             # task layers
             if self.use_pooling is not None:
                 if self.all_time:
-                    if self.use_pooling == 'attn':
+                    if self.use_pooling == 'linear':
+                        self.pooler = heads.Attn(self.num_features * 2, self.decoder_features * 2, reshape=False,
+                                                 channels=self.transformer.num_patches, double=False,
+                                                 channel_wise=False, )
+                        self.pooler.apply(init_weights)
+                    elif 'Trans' in self.use_pooling:
                         self.time_norm = nn.LayerNorm(self.decoder_features)
                         self.fft_norm = nn.LayerNorm(self.decoder_features)
-                        self.pooler_fft = heads.Attn(self.num_features, self.decoder_features, reshape=False,
-                                                     channels=self.transformer.max_channels, double=False,
-                                                     channel_wise=True)
+                        if 'cls' not in self.use_pooling:
+                            self.pooler_fft = heads.Attn(self.num_features, self.decoder_features, reshape=False,
+                                                         channels=self.transformer.max_channels, double=False,
+                                                         channel_wise=True)
+                            self.pooler_time = heads.Conv_embed(self.num_features, self.decoder_features,
+                                                                kernel_size=self.transformer.num_patches,
+                                                                reshape=True, )
+                        else:
+                            self.pooler_fft = nn.Linear(self.num_features, self.decoder_features)
+                            self.pooler_time = nn.Linear(self.num_features, self.decoder_features)
                         self.pooler_fft.apply(init_weights)
-                        self.pooler_time = heads.Conv_embed(self.num_features, self.decoder_features,
-                                                            kernel_size=self.transformer.num_patches, reshape=True, )
                         self.pooler_time.apply(init_weights)
+
                         self.decoder_transformer_block = \
                             vit.Transformer(dim=self.decoder_features, out_features=self.decoder_features,
                                             nheads=config['decoder_heads'],
@@ -145,62 +188,34 @@ class Model(LightningModule):
                     elif self.use_pooling == 'swin':
                         self.pooler = heads.Attn(self.num_features * 2, self.decoder_features, reshape=False,
                                                  channels=self.transformer.num_patches, double=False,
-                                                 channel_wise=False, )
+                                                 channel_wise=False, return_alpha=self.return_alpha)
                         self.pooler.apply(init_weights)
+                        self.subject_tp = {}
+                        self.subject_num = {}
                         self.decoder_transformer_block = Swin_transformer.GlobalSwin(
                             time_size=self.time_size, num_classes=5,
                             embed_dim=self.decoder_features,
-                            window_size=self.time_size * 3, mlp_ratio=4., qkv_bias=True, qk_scale=None,
+                            window_size=self.window_size, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                             drop_rate=0., attn_drop_rate=0., drop_path_rate=config["drop_path_rate"],
                             norm_layer=nn.LayerNorm, ape=False, patch_norm=True,
                             use_checkpoint=False, fused_window_process=False,
                             patches_resolution=self.time_size * self.transformer.num_patches,
                         )
                     else:
-                        self.pooler_time = nn.Linear(self.num_features, self.decoder_features)
-                        self.pooler_fft = nn.Linear(self.num_features, self.decoder_features)
-                        self.pooler_time.apply(init_weights)
-                        self.pooler_fft.apply(init_weights)
-                        # for name in self.multi_y:
-                        #     setattr(self, f"pooler_{name}", nn.Linear(self.num_features, self.decoder_features))
-                        # for name in self.multi_y:
-                        #     getattr(self, f"pooler_{name}", nn.Linear(self.num_features, self.decoder_features)).apply(init_weights)
-
                         self.decoder_transformer_block = \
-                            vit.Transformer(dim=self.decoder_features, out_features=self.decoder_features,
-                                            nheads=config['decoder_heads'],
-                                            feedforward_dim=self.decoder_features * 4, dropout=0.,
-                                            num_encoder_layers=self.num_encoder_layers, pool=config['pool'],
-                                            attn_drop_rate=0, norm_layer=partial(nn.LayerNorm, eps=1e-6),
-                                            use_all_label=self.use_all_label,
-                                            use_global_fft=config['use_global_fft'], drop_rate=0,
-                                            num_patches=self.time_size, multi_y=self.multi_y,
-                                            use_relative_pos_emb=self.use_relative_pos_emb,
-                                            use_multiway=config['use_multiway'],
-                                            drop_path_rate=dpr[12:])
+                            vit.DecoderTransformer(hidden_size=self.transformer.embed_dim,
+                                                   decoder_depth=config['decoder_depth'],
+                                                   enc_dim=self.decoder_features,
+                                                   num_heads=24,
+                                                   dpr=config["drop_path_rate"],
+                                                   multi=False
+                                                   )
                         self.decoder_transformer_block.apply(init_weights)
             else:
-                # no use
-                if self.all_time:
-                    self.pooler = heads.Pooler(self.num_features * 2, self.decoder_features)
-                    self.pooler.apply(init_weights)
-                    self.decoder_transformer_block = \
-                        vit.Transformer(dim=self.decoder_features, out_features=self.decoder_features,
-                                        nheads=config['decoder_heads'],
-                                        feedforward_dim=self.decoder_features * 4, dropout=0.0,
-                                        num_encoder_layers=self.num_encoder_layers,
-                                        pool=config['pool'], multi_y=self.multi_y,
-                                        attn_drop_rate=0, norm_layer=partial(nn.LayerNorm, eps=1e-6),
-                                        use_all_label=self.use_all_label,
-                                        use_global_fft=config['use_global_fft'], drop_rate=0,
-                                        num_patches=self.time_size,
-                                        use_relative_pos_emb=self.use_relative_pos_emb,
-                                        use_multiway=config['use_multiway'],
-                                        drop_path_rate=dpr[12:])
-                    self.decoder_transformer_block.apply(init_weights)
-                else:
-                    self.pooler = heads.Pooler(self.num_features * 2, self.num_features * 2)
-                    self.pooler.apply(init_weights)
+                self.pooler = heads.Attn(self.num_features * 2, self.decoder_features * 2, reshape=False,
+                                         channels=self.transformer.num_patches, double=False,
+                                         channel_wise=False, )
+                self.pooler.apply(init_weights)
         self.weight = None
         if config['loss_names']['FpFn'] > 0:
             self.store_real_data = torch.zeros((20, 3000, 8, 1000), device=self.device)
@@ -214,7 +229,7 @@ class Model(LightningModule):
                                                         enc_dim=config['Spindle_enc_dim'],
                                                         dpr=config["drop_path_rate"], num_queries=config['num_queries'],
                                                         seq_len=self.patch_time * 100, FPN_resnet=config['FPN_resnet'])
-        if config['loss_names']['CrossEntropy'] > 0 and self.use_pooling != 'swin':
+        if config['loss_names']['CrossEntropy'] > 0 and self.use_pooling != 'swin' and self.use_pooling != 'Trans':
             # self.stage_pred_proj = heads.Stage_Head(self.num_features)
             if self.all_time:
                 if self.use_local_f:
@@ -245,8 +260,7 @@ class Model(LightningModule):
             self.Masked_docoder_fft = heads.Masked_decoder2(self.transformer.embed_dim, self.transformer.patch_size,
                                                             self.transformer.num_patches,
                                                             self.transformer.max_channels)
-        self.mask_same = False
-        set_metrics(self)
+        set_metrics(self, **kwargs)
         self.current_tasks = list()
         self.init_weights()
         self.load_pretrained_weight()
@@ -254,8 +268,13 @@ class Model(LightningModule):
     def load_pretrained_weight(self):
         print(self.hparams.config["load_path"])
         if self.hparams.config["load_path"] != "":
+
             config = self.hparams.config
-            ckpt = torch.load(self.hparams.config["load_path"], map_location="cpu")
+            if isinstance(self.hparams.config["load_path"], list):
+                ckpt = torch.load(self.hparams.config["load_path"][self.kfold], map_location="cpu")
+            else:
+                ckpt = torch.load(self.hparams.config["load_path"], map_location="cpu")
+
             rank_zero_info("Load ckpt from: {}".format(self.hparams.config["load_path"]))
 
             state_dict = None
@@ -414,8 +433,8 @@ class Model(LightningModule):
             mask_last_matrix = mask_last_matrix.unsqueeze(0).repeat(1, c)
             attention_mask = attention_mask * mask_last_matrix
             attention_mask_fft = attention_mask_fft * mask_last_matrix
-        if not self.first_log_gpu:
-            rank_zero_info(f"attention_mask: {attention_mask}, attention_mask_fft: {attention_mask_fft}")
+        # if not self.first_log_gpu:
+        #     rank_zero_info(f"attention_mask: {attention_mask}, attention_mask_fft: {attention_mask_fft}")
         return [cls_token, attention_mask, cls_token_fft, attention_mask_fft]
 
     def gpu_monitor(self, x, phase='transformer.block', block_log=True):
@@ -448,7 +467,7 @@ class Model(LightningModule):
                                          mask=time_mask, mask_w=mask_w)
         # res = self.transformer.embed(epochs, attn_mask=attention_mask[1],
         #                              mask=False)  # get embeddings  # ret:{embed:[N,L_t + L_f + 2,D], mask:[N, L_t]}
-        attention_mask = torch.cat(attention_mask, dim=-1)  # batch, L_t+L_f+2
+        attention_mask = torch.cat(attention_mask, dim=-1)  # batch, 1 + L_t + 1 + L_f
         if not self.first_log_gpu:
             rank_zero_info(f"attention_mask.shape : {attention_mask.shape}")
         time_max_len = res['x_len']  # 1+num_patches*max_channels
@@ -492,29 +511,30 @@ class Model(LightningModule):
                 x_time = time_feats[:, 1:].mean(1)
                 x_fft = fft_feats[:, 1:].mean(1)
                 local_feats = self.local_norm(torch.cat([x_time, x_fft], dim=-1))
-
-            if self.use_pooling == 'attn':
-
-                x_time = time_feats[:, 1:]
-                # print("x_time:shape", x_time.shape)
-                x_fft = fft_feats[:, 1:].reshape(-1, self.transformer.max_channels, self.transformer.num_patches,
-                                                 self.num_features)
-
+            if self.use_pooling == 'linear':
+                C = len(
+                    self.transformer.actual_channels) if self.transformer.actual_channels is not None else self.transformer.max_channels
+                x_time = rearrange(time_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
+                x_fft = rearrange(fft_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
+                x_pool = torch.cat([x_time, x_fft], dim=-1)
+                attention_mask_t = rearrange(attention_mask[:, 1:time_max_len], 'B (C P) -> (B P) C', C=C)
+                cls_feats = {'tf': self.pooler(x_pool, attn_mask=attention_mask_t)}
+            elif 'Trans' in self.use_pooling:
+                if 'cls' not in self.use_pooling:
+                    x_time = time_feats[:, 1:]
+                    # print("x_time:shape", x_time.shape)
+                    x_fft = fft_feats[:, 1:].reshape(-1, self.transformer.max_channels, self.transformer.num_patches,
+                                                     self.num_features)
+                else:
+                    x_time = time_feats[:, :1]
+                    x_fft = fft_feats[:, :1]
                 x_time = self.time_norm(
-                    self.pooler_time(x_time).reshape(-1, self.time_size, self.transformer.max_channels,
-                                                     self.decoder_features))
+                    self.pooler_time(x_time).reshape(-1, self.time_size, self.decoder_features))
                 # rank_zero_info(f"x_time shape:{x_time.shape}")
                 # rank_zero_info(f"x_fft shape:{x_fft.shape}")
 
                 x_fft = self.fft_norm(
-                    self.pooler_fft(x_fft, time_split=-1).reshape(-1, self.time_size, self.transformer.max_channels,
-                                                                  self.decoder_features))
-                # print('x_time.shape, x_fft.shape', x_time.shape, x_fft.shape)
-                # x_all = torch.cat([x_time, x_fft], dim=1)
-                # x_all_cls = torch.cat([x_time_cls, x_fft_cls], dim=-1)
-                # print('x_all shape:', x_all.shape)
-                # x = self.fc_norm(torch.mean(x_all, 1))
-                # print('x shape:', x.shape)
+                    self.pooler_fft(x_fft, time_split=-1).reshape(-1, self.time_size, self.decoder_features))
                 if self.all_time:
                     # cls_feats = torch.cat([token[:, -1, :], self.decoder_transformer_block(token, batch['epochs'][:, :self.transformer.max_channels])], dim=-1)
                     cls_feats = self.decoder_transformer_block(x_time, x_fft, batch=batch['epochs'][0], use_tf=True,
@@ -566,9 +586,12 @@ class Model(LightningModule):
                 x_time = rearrange(time_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
                 x_fft = rearrange(fft_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
                 x_pool = torch.cat([x_time, x_fft], dim=-1)
-                token = self.pooler(x_pool)
-                # rank_zero_info(f"token : {token.shape}")
+                attention_mask_t = rearrange(attention_mask[:, 1:time_max_len], 'B (C P) -> (B P) C', C=C)
+                token = self.pooler(x_pool, attn_mask=attention_mask_t)
+                if self.return_alpha is True:
+                    rank_zero_info(f'token: {token[0]}')
 
+                    return {'token': token}
                 cls_feats = self.decoder_transformer_block(rearrange(token, '(B T) P D ->B (T P) D', T=self.time_size))
 
         elif self.current_tasks[0] == 'FpFn':
@@ -784,11 +807,6 @@ class Model(LightningModule):
         """
         patch_label = self.patchify(labels)
         assert predict.shape == patch_label.shape
-        # assert predict.shape[1] == self.transformer.num_patches * self.hparams.config['random_choose_channels']
-        # compare_idx = torch.gather(input=predict, dim=1, index=(torch.where(time_mask_patch == 1)[0]).unsqueeze(0).unsqueeze(-1).repeat(1, 1, 200))[0]
-        # compare_idx_x = compare_idx.unsqueeze(0)
-        # compare_idx_y = compare_idx.unsqueeze(1)
-        # print(torch.abs(compare_idx_x-compare_idx_y))
         if self.hparams.config['loss_function'] == 'l1':
             l1loss = nn.L1Loss(reduction='none')
             loss = l1loss(predict, patch_label)
@@ -796,12 +814,15 @@ class Model(LightningModule):
             loss = (predict - patch_label) ** 2
         else:
             loss = (predict - patch_label) ** 2
+        global_variance = torch.var(labels, dim=-1)
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
         loss = (loss * time_mask_patch).reshape(predict.shape[0], self.hparams.config['random_choose_channels'],
                                                 -1).sum(dim=-1)  # mean loss on removed patches
         loss = loss / time_mask_patch.reshape(predict.shape[0], self.hparams.config['random_choose_channels'], -1).sum(
             dim=-1)
-        return loss
+        assert loss.shape == global_variance.shape, f'loss shape: {loss.shape}, var shape: {global_variance.shape}'
+        nmse = torch.where(global_variance != 0, loss / global_variance, 0)
+        return nmse
 
     def forward_masked_loss(self, predict, labels, time_mask_patch):
         """
@@ -861,8 +882,44 @@ class Model(LightningModule):
         else:
             loss = (predict - patch_label) ** 2
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+        assert time_mask_patch.sum() != 0
         loss = (loss * time_mask_patch).sum() / time_mask_patch.sum()  # mean loss on removed patches
         return loss
+
+    def forward_masked_loss_2D_channel(self, predict, labels, time_mask_patch):
+        """
+        Args:
+            predict:  [N, L_t, patch_size:200]
+            labels:   [N, L_t, fs*duration]
+            time_mask_patch:
+
+        Returns:
+
+        """
+        patch_label = self.patchify_2D(labels)  # N, 15*C, 2*100
+        if isinstance(self.transformer.mask_ratio, list) and self.transformer.mask_ratio[1] == 0.0:
+            return torch.tensor(torch.nan)
+        assert predict.shape == patch_label.shape
+        assert predict.shape[1] == self.transformer.num_patches * self.transformer.max_channels
+        if not self.first_log_gpu:
+            rank_zero_info(f"predict shape: {predict.shape}, patch_label shape: {patch_label.shape}")
+            rank_zero_info(f"time_mask_patch: {time_mask_patch}")
+        if self.hparams.config['loss_function'] == 'l1':
+            l1loss = nn.L1Loss(reduction='none')
+            loss = l1loss(predict, patch_label)
+        elif self.hparams.config['loss_function'] == 'l2':
+            loss = (predict - patch_label) ** 2
+        else:
+            loss = (predict - patch_label) ** 2
+        global_variance = torch.var(labels, dim=(-2, -1))
+        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+        assert time_mask_patch.sum() != 0
+        loss = (loss * time_mask_patch).reshape(predict.shape[0], self.hparams.config['random_choose_channels'],
+                                                -1).sum(dim=-1)  # mean loss on removed patches
+        loss = loss / time_mask_patch.reshape(predict.shape[0], self.hparams.config['random_choose_channels'], -1).sum(
+            dim=-1)
+        nmse = torch.where(global_variance != 0, loss / global_variance, 0)
+        return nmse
 
     def prepare_forward(self):
         pass
@@ -922,7 +979,7 @@ class Model(LightningModule):
         if self.current_tasks[0] == 'mtm':
             ret.update(self.infer(batch, stage=stage, time_mask=True, mask_same=self.mask_same))
         if self.current_tasks[0] == 'CrossEntropy':
-            ret.update(objectives.compute_ce(self, batch, stage=stage))
+            ret.update(objectives.compute_ce(self, batch, stage=stage, persub=self.persub))
             if self.training:
                 self.gpu_monitor(batch['epochs'][0], phase='compute_ce last gpu', block_log=True)
         if self.current_tasks[0] == 'FpFn':
@@ -945,7 +1002,7 @@ class Model(LightningModule):
                 ret.update(
                     objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=batch, stage=stage,
                                                    use_fpfn=self.hparams.config['use_fpfn'],
-                                                   store=True, compute=True, aggregate=True, weight=self.weight))
+                                                   store=False, compute=True, aggregate=True, weight=self.weight))
 
             # if self.global_step % 10 == 0:
             #     rank_zero_info(f'self.global_step: {self.global_step}')
@@ -979,11 +1036,19 @@ class Model(LightningModule):
         if self.training:
             raise Exception(f"self.training is not False in test")
         self.set_task()
-        output = self(batch, stage="test")
-        if self.current_tasks[0] == 'CrossEntropy':
-            self.res_index.append(output['index'].reshape(-1, self.time_size))
-            self.res_label.append(output['label'].reshape(-1, self.time_size))
-            self.res_feats.append(output['feats'].reshape(-1, self.time_size))
+        if self.visual is True:
+            min_idx = Visual_cal_all.visual(batch, self, self.persub)
+            self.min_idx = batch['name'][min_idx]
+            rank_zero_info(f"min_idx: {min_idx}, batch_idx: {batch['name'][min_idx]}")
+        else:
+            output = self(batch, stage="test")
+            if self.return_alpha is True:
+                for i, stage in enumerate(batch['Stage_label']):
+                    getattr(self, f"{stage}_mapping")(output['token'][i].view(-1))
+            elif self.current_tasks[0] == 'CrossEntropy':
+                self.res_index.append(output['index'].reshape(-1, self.time_size))
+                self.res_label.append(output['label'].reshape(-1, self.time_size))
+                self.res_feats.append(output['feats'].reshape(-1, self.time_size))
         rank_zero_info("test_step end")
 
         # rank_zero_info(f'total_loss: {total_loss}')
@@ -993,7 +1058,7 @@ class Model(LightningModule):
         if self.current_tasks[0] == 'FpFn':
             output = objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=None, stage='test',
                                                     use_fpfn=self.hparams.config['use_fpfn'],
-                                                    store=True, compute=False, aggregate=True)
+                                                    store=True, compute=False, aggregate=True, path=self.logger.version)
             rank_zero_info(f'test output: {output}')
         self.epoch_end(stage="test")
 
@@ -1014,17 +1079,18 @@ class Model(LightningModule):
         if self.current_tasks[0] == 'FpFn':
             output = objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=None,
                                                     stage='validation',
-                                                    use_fpfn=self.hparams.config['use_fpfn'],
+                                                    use_fpfn=self.hparams.config['use_fpfn'], path=self.logger.version,
                                                     store=True, compute=False, aggregate=True, weight=self.weight)
             rank_zero_info(f'validation output: {output}')
         self.epoch_end(stage="validation")
+
     def lr_scheduler_step(self, scheduler: LRSchedulerTypeUnion, metric: Optional[Any]) -> None:
         # for params in self.optimizers().param_groups:
         #     print(params['lr'], params['weight_decay'])
         # if self.hparams.config["lr_policy"] in ['cosine', 'polynomial_decay'] or isinstance(self.hparams.config["lr_policy"], int):
         #     scheduler.step(self.global_step)  # type: ignore[call-arg]
         # else:
-        if self.hparams.config['mode'] == 'finetune' or self.hparams.config['mode'] == 'Spindledetection':
+        if 'finetune' in self.hparams.config['mode'].lower() or self.hparams.config['mode'] == 'Spindledetection':
             mode = True
         else:
             mode = False
@@ -1047,72 +1113,153 @@ class Model(LightningModule):
             v >= 1
         ]
 
+    def save(self, dict, path):
+        if hasattr(self, '_ckpt'):
+            path = os.path.join(path, f'{self._ckpt.split("/")[-1]}')
+        os.makedirs(
+            os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result/{self.hparams.config["datasets"][0]}',
+                         f'{path}'),
+            exist_ok=True)
+        torch.save(dict, os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result/{self.hparams.config["datasets"][0]}',
+                                      f'{path}', 'res.ckpt'))
     def epoch_end(self, stage):
         phase = stage
         the_metric = 5
-        # if (stage == 'validation' or stage == 'test') and self.global_rank == 0:
-        #     torch.save({'index': self.res_index, 'feats': self.res_feats, 'label': self.res_label},
-        #                f'/data/data/tensor_{stage}.pt')
+        if hasattr(self, 'fold_now'):
+            kfold = self.fold_now
+        else:
+            kfold = self.hparams.config["kfold"] if self.hparams.config['kfold'] is not None else '0'
+        if self.visual is True:
+            value = getattr(self, f"{phase}_loss").compute()
+            value2 = getattr(self, f"{phase}_loss2").compute()
+            getattr(self, f"{phase}_loss").reset()
+            getattr(self, f"{phase}_loss2").reset()
+            for c in range(self.transformer.choose_channels.shape[0]):
+                self.log(f"{phase}_c{c}_loss", value[c], prog_bar=True, on_epoch=True, sync_dist=True)
+                self.log(f"{phase}_c{c}_loss2", value2[c], prog_bar=True, on_epoch=True, sync_dist=True)
+            persubject_loss = {}
+            if self.persub:
+                for tn in self.test_names.values():
+                    _tn = tn.split('/')[-1]
+                    sub_loss = getattr(self, f"test_{_tn}_loss").compute()
+                    sub_loss2 = getattr(self, f"test_{_tn}_loss2").compute()
+                    persubject_loss[_tn] = {'loss1': sub_loss, 'loss2': sub_loss2}
+                if hasattr(self, 'fold_now'):
+                    kfold = self.fold_now
+                else:
+                    kfold = self.hparams.config["kfold"] if self.hparams.config['kfold'] is not None else '0'
+                mode = self.visual_mode
+                self.save(path=f'{mode}/{kfold}', dict=persubject_loss)
+        else:
+            for loss_name, v in self.hparams.config["loss_names"].items():
+                if v < 1:
+                    continue
+                metric = 0
+                if loss_name == 'CrossEntropy':
+                    if self.return_alpha is True:
+                        res_dict= {}
+                        for stage in [0, 1, 2, 3, 4]:
+                            value = getattr(self, f'{stage}_mapping').compute()
+                            res_dict[stage] = value
+                            for i in range(value.shape[0]):
+                                self.log(f"{loss_name}/{stage}/value_{i}", value[i], prog_bar=True, on_epoch=True, sync_dist=True)
+                        self.save(res_dict, path=f'attn/{kfold}')
+                        return
+                    value = getattr(self, f"{phase}_{loss_name}_loss").compute()
+                    self.log(f"{loss_name}/{phase}/score", value, prog_bar=True, on_epoch=True, sync_dist=True)
+                    getattr(self, f"{phase}_{loss_name}_loss").reset()
+                    max_acc = 0.0
+                    max_macro = 0.0
+                    multi_y = copy.deepcopy(self.multi_y)
+                    if self.local_pooling:
+                        multi_y.append('local')
+                    for name in multi_y:
+                        value_acc = float(
+                            format(getattr(self, f"{phase}_{loss_name}_accuracy_{name}").compute(), '.3f'))
+                        max_acc = max(max_acc, value_acc)
+                        self.log(f"{loss_name}/{phase}/{name}/accuracy_epoch", value_acc, prog_bar=True, on_epoch=True,
+                                 sync_dist=True)
+                        getattr(self, f"{phase}_{loss_name}_accuracy_{name}").reset()
+                        value = value_acc - value
 
-        for loss_name, v in self.hparams.config["loss_names"].items():
-            if v < 1:
-                continue
-            value = 0
-            if loss_name == 'CrossEntropy':
-                value = getattr(self, f"{phase}_{loss_name}_loss").compute()
-                self.log(f"{loss_name}/{phase}/score", value, prog_bar=True, on_epoch=True, sync_dist=True)
-                getattr(self, f"{phase}_{loss_name}_loss").reset()
-                max_acc = 0.0
-                multi_y = copy.deepcopy(self.multi_y)
-                if self.local_pooling:
-                    multi_y.append('local')
-                for name in multi_y:
-                    value_acc = float(format(getattr(self, f"{phase}_{loss_name}_accuracy_{name}").compute(), '.3f'))
-                    max_acc = max(max_acc, value_acc)
-                    self.log(f"{loss_name}/{phase}/{name}/accuracy_epoch", value_acc, prog_bar=True, on_epoch=True,
-                             sync_dist=True)
-                    getattr(self, f"{phase}_{loss_name}_accuracy_{name}").reset()
-                    value = value_acc - value
-                    confmat = getattr(self, f"{phase}_{loss_name}_conf_{name}").compute()
-                    if stage == 'validation':
-                        rank_zero_info(f"{name}: {confmat}")
-                    precision, recall, kappa, sensitivity, specificity = objectives.confusion(confmat)
-                    macro_f1 = torch.mean(2 * precision * recall / (precision + recall), dim=-1)
-                    self.log(f"{loss_name}/{phase}/{name}/macro_f1", macro_f1, prog_bar=True, on_epoch=True,
-                             sync_dist=True)
-                    self.log(f"{loss_name}/{phase}/{name}/kappa_score", kappa, prog_bar=True, on_epoch=True,
-                             sync_dist=True)
-                    if not self.training and stage == 'test':
-                        confmat = confmat.cpu()
-                        figure = plot_conf.plot_confusion_matrix(confmat, classes=5, normalize=False,
-                                                                 title='Normalized confusion matrix')
-                        tensorboard = self.logger.experiment
-                        tensorboard.add_figure(f'Validation Normalized confusion matrix {self.global_step}', figure)
-                        # plt.close('all')
+                        confmat = getattr(self, f"{phase}_{loss_name}_conf_{name}").compute()
+                        if stage == 'validation':
+                            rank_zero_info(f"{name}: {confmat}")
+                        precision, recall, kappa, sensitivity, specificity = objectives.confusion(confmat)
+                        macro_f1 = torch.mean(2 * precision * recall / (precision + recall), dim=-1)
+                        max_macro = max(max_macro, macro_f1)
+                        self.log(f"{loss_name}/{phase}/{name}/macro_f1", macro_f1, prog_bar=True, on_epoch=True,
+                                 sync_dist=True)
+                        self.log(f"{loss_name}/{phase}/{name}/kappa_score", kappa, prog_bar=True, on_epoch=True,
+                                 sync_dist=True)
+                        for i in range(len(precision)):
+                            self.log(f"ce/{phase}/ce_{i}_precision_{name}", precision[i])
+                            self.log(f"ce/{phase}/ce_{i}_recall_{name}", recall[i])
+                        if not self.training and stage == 'test':
+                            confmat = confmat.cpu()
+                            figure = plot_conf.plot_confusion_matrix(confmat, classes=5, normalize=False,
+                                                                     title='Normalized confusion matrix')
+                            tensorboard = self.logger.experiment
+                            tensorboard.add_figure(f'Validation Normalized confusion matrix {self.global_step}', figure)
+                            persubject_acc = {}
+                            if self.persub:
+                                for tn in self.test_names.values():
+                                    _tn = tn.split('/')[-1]
+                                    sub_conf = getattr(self, f"test_{_tn}_conf").compute()
+                                    persubject_acc[_tn] = sub_conf
+                                os.makedirs(
+                                    f'/home/cuizaixu_lab/huangweixuan/DATA/temp_log/{self.hparams.config["kfold"]}',
+                                    exist_ok=True)
+                                torch.save(persubject_acc, f'/home/cuizaixu_lab/'
+                                                           f'huangweixuan/DATA/temp_log/{self.hparams.config["kfold"]}/{self._ckpt.split("/")[-1]}')
+                            # plt.close('all')
 
-                    getattr(self, f"{phase}_{loss_name}_conf_{name}").reset()
-                self.log(f"{loss_name}/{phase}/max_accuracy_epoch", max_acc, prog_bar=True, on_epoch=True,
-                         sync_dist=True, )
-            elif loss_name == 'FpFn':
-                value = getattr(self, f"{phase}_{loss_name}_loss").compute()
-                self.log(f"{loss_name}/{phase}/score", value, prog_bar=True, on_epoch=True, sync_dist=True)
-                getattr(self, f"{phase}_{loss_name}_loss").reset()
-                TP = getattr(self, f"{phase}_FpFn_TP").compute()
-                FN = getattr(self, f"{phase}_FpFn_FN").compute()
-                FP = getattr(self, f"{phase}_FpFn_FP").compute()
-                Recall = cal_Recall(TP, FN)
-                # print(Recall)
-                Precision = cal_Precision(TP, FP)
-                F1 = cal_F1_score(Precision, Recall)
-                self.log(f"{loss_name}/{phase}/Recall", Recall, prog_bar=True, on_epoch=True, sync_dist=True)
-                self.log(f"{loss_name}/{phase}/Precision", Precision, prog_bar=True, on_epoch=True, sync_dist=True)
-                self.log(f"{loss_name}/{phase}/F1", F1, prog_bar=True, on_epoch=True, sync_dist=True)
-                getattr(self, f"{phase}_FpFn_TP").reset()
-                getattr(self, f"{phase}_FpFn_FN").reset()
-                getattr(self, f"{phase}_FpFn_FP").reset()
-                self.store_real_data = torch.zeros((20, 3000, 8, 1000), device=self.device)
-                self.store_whole_eeg = torch.zeros((20, 3000, 1000), device=self.device)
-                self.store_whole_label = torch.zeros((20, 3000, 1000), device=self.device)
-                self.max_index = torch.zeros(20, device=self.device)
-            the_metric += value
-        self.log(f"{phase}/the_metric", the_metric, prog_bar=True, on_epoch=True, sync_dist=True)
+                        getattr(self, f"{phase}_{loss_name}_conf_{name}").reset()
+                    metric = max_acc + max_macro
+                    self.log(f"{loss_name}/{phase}/max_accuracy_epoch", max_acc, prog_bar=True, on_epoch=True,
+                             sync_dist=True, )
+                elif loss_name == 'FpFn':
+                    value = getattr(self, f"{phase}_{loss_name}_loss").compute()
+                    self.log(f"{loss_name}/{phase}/score", value, prog_bar=True, on_epoch=True, sync_dist=True)
+                    getattr(self, f"{phase}_{loss_name}_loss").reset()
+                    TP = getattr(self, f"{phase}_FpFn_TP").compute()
+                    FN = getattr(self, f"{phase}_FpFn_FN").compute()
+                    FP = getattr(self, f"{phase}_FpFn_FP").compute()
+                    if stage == 'train':
+                        Recall = cal_Recall(TP, FN)
+                        Precision = cal_Precision(TP, FP)
+                        F1 = cal_F1_score(Precision, Recall)
+                    else:
+                        Recall = getattr(self, f"{phase}_FpFn_Recall").compute()
+                        # print(Recall)
+                        Precision = getattr(self, f"{phase}_FpFn_Precision").compute()
+                        F1 = getattr(self, f"{phase}_FpFn_F1").compute()
+                    rank_zero_info(f'end: stage: {stage}, TP:{TP}, FN: {FN}, FP: {FP}, value: {value}, '
+                                   f'recall: {Recall}, Precision:{Precision}, F1: {F1}')
+                    self.log(f"{loss_name}/{phase}/Recall", Recall, prog_bar=True, on_epoch=True, sync_dist=True)
+                    self.log(f"{loss_name}/{phase}/Precision", Precision, prog_bar=True, on_epoch=True, sync_dist=True)
+                    self.log(f"{loss_name}/{phase}/F1", F1, prog_bar=True, on_epoch=True, sync_dist=True)
+                    getattr(self, f"{phase}_FpFn_TP").reset()
+                    getattr(self, f"{phase}_FpFn_FN").reset()
+                    getattr(self, f"{phase}_FpFn_FP").reset()
+                    if stage != 'train':
+                        getattr(self, f"{phase}_FpFn_Recall").reset()
+                        getattr(self, f"{phase}_FpFn_Precision").reset()
+                        getattr(self, f"{phase}_FpFn_F1").reset()
+                    self.store_real_data = torch.zeros((20, 3000, 8, 1000), device=self.device)
+                    self.store_whole_eeg = torch.zeros((20, 3000, 1000), device=self.device)
+                    self.store_whole_label = torch.zeros((20, 3000, 1000), device=self.device)
+                    self.max_index = torch.zeros(20, device=self.device)
+                    metric = value
+                the_metric += metric
+            self.log(f"{phase}/the_metric", the_metric, prog_bar=True, on_epoch=True, sync_dist=True)
+
+    def on_before_optimizer_step(self, optimizer):
+        norms = grad_norm(self.transformer, norm_type=2)
+        self.log_dict(norms)
+        if hasattr(self, "spindle_pred_proj"):
+            norms2 = grad_norm(self.spindle_pred_proj, norm_type=2)
+            self.log_dict(norms2)
+        if hasattr(self, "decoder_transformer_block"):
+            norms2 = grad_norm(self.decoder_transformer_block, norm_type=2)
+            self.log_dict(norms2)

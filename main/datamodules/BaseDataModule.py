@@ -173,14 +173,14 @@ class BaseDataModule(LightningModule):
 
         )
 
-    def setup(self, stage):
+    def setup(self, stage, **kwargs):
         if not self.setup_flag:
             if stage == 'predict':
-                self.set_val_dataset()
+                self.set_val_dataset(**kwargs)
             else:
-                self.set_train_dataset()
-                self.set_test_dataset()
-                self.set_val_dataset()
+                self.set_train_dataset(**kwargs)
+                self.set_test_dataset(**kwargs)
+                self.set_val_dataset(**kwargs)
             self.setup_flag = True
 
     def train_dataloader(self):

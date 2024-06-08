@@ -1,9 +1,9 @@
 from lightning import LightningDataModule
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import ConcatDataset
 from . import _datamodules
-
+import numpy as np
 
 class MultiDataModule(LightningDataModule):
 
@@ -26,10 +26,13 @@ class MultiDataModule(LightningDataModule):
         self.batch_size = self.dms[0].batch_size
         self.num_workers = self.dms[0].num_workers
 
-        self.dist = _config['dist_on_itp'] and (_config['device'] == 'cuda')
+        self.dist = _config['dist_on_itp'] is True and (_config['device'] == 'cuda')
         self.pretrain = _config['mode'] == 'pretrain'
         self.kfold = kfold
         self.expert = _config['expert']
+        self.patch_size = _config['patch_size']
+        self.subest = _config['subset']
+        self.show_transform_param = _config['show_transform_param']
 
     def prepare_data(self) -> None:
         for dm in self.dms:
@@ -37,15 +40,21 @@ class MultiDataModule(LightningDataModule):
 
     def setup(self, stage: str) -> None:
         for dm in self.dms:
-            config_dict = {}
+            config_dict = {'patch_size': self.patch_size, 'show_transform_param': self.show_transform_param}
             if self.kfold is not None:
                 config_dict['kfold'] = self.kfold
             if self.expert is not None:
                 config_dict['expert'] = self.expert
             dm.setup(stage, **config_dict)
         if stage == 'fit':
-            self.collate = self.dms[0].train_dataset.collate
-            self.collate_val = self.dms[0].val_dataset.collate
+            for i in range(len(self.dms)):
+                if hasattr(self.dms[i], 'train_dataset') and self.dms[i].train_dataset is not None:
+                    self.collate = self.dms[i].train_dataset.collate
+                    break
+            for i in range(len(self.dms)):
+                if hasattr(self.dms[i], 'val_dataset') and self.dms[i].val_dataset is not None:
+                    self.collate_val = self.dms[i].val_dataset.collate
+                    break
             if self.pretrain:
                 self.train_dataset = ConcatDataset([dm.train_dataset for dm in self.dms if dm.train_dataset is not None])
                 self.val_dataset = ConcatDataset([dm.val_dataset for dm in self.dms if dm.val_dataset is not None])
@@ -75,6 +84,7 @@ class MultiDataModule(LightningDataModule):
                 num = 0
                 for dm in self.dms:
                     if dm.val_dataset is not None:
+                        print(f'***************len of val datasets:{len(dm.val_dataset)} ****************')
                         num += 1
                 print(f'***************Using {num} val datasets****************')
                 print(f'***************len of val datasets:{len(self.val_dataset )} ****************')
@@ -86,18 +96,30 @@ class MultiDataModule(LightningDataModule):
         elif stage == 'test':
             self.collate = self.dms[0].test_dataset.collate
             self.test_dataset = ConcatDataset([dm.test_dataset for dm in self.dms])
+            num = 0
+            for dm in self.dms:
+                if dm.test_dataset is not None:
+                    num += 1
+                    print(f'***************len of test datasets:{len(dm.test_dataset)} ****************')
+            print(f'***************Using {num} test datasets****************')
+            print(f'***************len of test datasets:{len(self.test_dataset)} ****************')
+        if self.subest is not None and stage == 'fit':
+            subset_size = int(self.subest * len(self.train_dataset))
+            print(f'Train dataloader is partially used. subset_size: {subset_size}')
+            indices = np.random.choice(len(self.train_dataset), subset_size, replace=False)
+            self.train_dataset = Subset(self.train_dataset, indices)
         if self.dist:
             if stage == 'test':
                 self.test_sampler = DistributedSampler(self.test_dataset, shuffle=False)
             elif stage == 'validate':
-                self.val_sampler = DistributedSampler(self.val_dataset, shuffle=True, )
+                self.val_sampler = DistributedSampler(self.val_dataset, shuffle=False, )
             else:
                 self.train_sampler = DistributedSampler(self.train_dataset, shuffle=True)
                 # self.train_sampler = None
                 if not self.pretrain:
-                    self.val_sampler = DistributedSampler(self.val_dataset, shuffle=True,)
+                    self.val_sampler = DistributedSampler(self.val_dataset, shuffle=False,)
                 else:
-                    self.val_sampler = DistributedSampler(self.val_dataset, shuffle=True)
+                    self.val_sampler = DistributedSampler(self.val_dataset, shuffle=False)
         else:
             self.train_sampler = None
             self.val_sampler = None
@@ -105,6 +127,7 @@ class MultiDataModule(LightningDataModule):
         print('setup s')
 
     def train_dataloader(self):
+
         loader = DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,

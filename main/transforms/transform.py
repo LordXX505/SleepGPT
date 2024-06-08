@@ -40,17 +40,18 @@ class TwoTransform:
 
 
 class Multi_Transform:
-    def __init__(self, transform):
+    def __init__(self, transform, show_param):
         self.transform = transform
+        self.show_param = show_param
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, ):
         if label is not None:
             labels = []
         else:
             labels = None
         res = []
         for transform in self.transform:
-            item = transform(x, label)
+            item = transform(x, label, self.show_param)
             if label is not None:
                 labels.append(item[1])
                 res.append(item[0])
@@ -94,11 +95,12 @@ class normalize:
         self.std = torch.tensor([34.6887,  34.9556, 23.2826,  35.4035,  26.8738,
           4.9272,  25.1366,   3.6142])
 
-    def __call__(self, x, attention_mask):
+    def __call__(self, x, attention_mask=None):
         if x.shape[0] == 4:
             return (x - self.mu4.unsqueeze(-1)) / self.std4.unsqueeze(-1)
         else:
             return (x - self.mu.unsqueeze(-1)) / self.std.unsqueeze(-1)
+
 class unnormalize:
     def __init__(self):
         # self.mu = torch.tensor([-6.8460e-02,  1.9104e-01,  4.1165e+01,  3.8937e-01, -2.0938e+00,
@@ -119,6 +121,7 @@ class unnormalize:
          7.1748e-05])
         self.std = torch.tensor([34.6887,  34.9556, 23.2826,  35.4035,  26.8738,
           4.9272,  25.1366,   3.6142])
+
     def __call__(self, x, attention_mask):
         if x.shape[0] == 4:
             return x * self.std4.unsqueeze(-1) + self.mu4.unsqueeze(-1)
@@ -132,19 +135,19 @@ class Compose:
         self.mode = mode
         # self.normalize = normalize()
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, *args, **kwargs):
         # x = self.normalize(x)
         # print(f"Using transforms: {len(self.transforms)}")
         if self.mode == 'random':
             index = random.randint(0, len(self.transforms) - 1)
-            x, label = self.transforms[index](x, label)
+            x, label = self.transforms[index](x, label, *args, **kwargs)
         elif self.mode == 'full':
             for t in self.transforms:
-                x, label = t(x, label)
+                x, label = t(x, label, *args, **kwargs)
         elif self.mode == 'shuffle':
             transforms = np.random.choice(self.transforms, len(self.transforms), replace=False)
             for t in transforms:
-                x, label = t(x, label)
+                x, label = t(x, label, *args, **kwargs)
         else:
             raise NotImplementedError
         if label is None:
@@ -165,11 +168,11 @@ class default:
     def __init__(self):
         pass
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, *args, **kwargs):
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
@@ -201,32 +204,34 @@ class Permutation:
             if label is not None:
                 return x, label
             else:
-                return x
+                return x, None
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
 
 class RandomAmplitudeScale:
 
-    def __init__(self, range=(0.5, 2.0), p=0.5):
+    def __init__(self, range=(0.5, 2.0), p=0.5,):
         self.range = range
         self.p = p
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, show_param=False):
         if torch.rand(1) < self.p:
             scale = random.uniform(self.range[0], self.range[1])
+            if show_param is True:
+                print(f'RandomAmplitudeScale: {scale}')
             if label is not None:
                 return x * scale, label
             else:
-                return x * scale
+                return x * scale, None
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
@@ -238,17 +243,19 @@ class RandomDCShift:
         self.range = range
         self.p = p
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, show_param=False):
         if torch.rand(1) < self.p:
             shift = random.uniform(self.range[0], self.range[1])
+            if show_param is True:
+                print(f'RandomDCShift: {shift}')
             if label is not None:
                 return x + shift, label
             else:
-                return x + shift
+                return x + shift, None
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
@@ -262,10 +269,12 @@ class RandomTimeShift:
         self.cval = cval
         self.p = p
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, show_param=False):
         # if torch.rand(1) < 1:
         if torch.rand(1) < self.p:
             t_shift = random.randint(self.range[0], self.range[1])
+            if show_param is True:
+                print(f'RandomTimeShift: {RandomTimeShift}')
             if label is not None:
                 L = label.shape[0]
                 tmp = x
@@ -277,7 +286,7 @@ class RandomTimeShift:
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
@@ -303,7 +312,7 @@ class RandomZeroMasking:
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
@@ -315,17 +324,19 @@ class RandomAdditiveGaussianNoise:
         self.range = range
         self.p = p
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, show_param=False):
         if torch.rand(1) < self.p:
             sigma = random.uniform(self.range[0], self.range[1])
+            if show_param is True:
+                print(f'RandomAdditiveGaussianNoise, sigma: {sigma}')
             if label is not None:
                 return x + torch.normal(0, sigma, x.shape), label
             else:
-                return x + torch.normal(0, sigma, x.shape)
+                return x + torch.normal(0, sigma, x.shape), None
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
@@ -349,11 +360,11 @@ class RandomBandStopFilter:
             if label is not None:
                 return x, label
             else:
-                return x
+                return x, None
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'
@@ -377,7 +388,7 @@ class RandomTimeInverted:
         if label is not None:
             return x, label
         else:
-            return x
+            return x, None
 
     def __repr__(self):
         return self.__class__.__name__ + '()'

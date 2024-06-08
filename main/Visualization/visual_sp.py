@@ -36,11 +36,11 @@ def main(_config):
     # pre_train = Model_Pre(_config)
 
     pre_train = Model(_config)
+    # pre_train.mask_same = True
     print(_config)
     pl.seed_everything(512)
     dm = MultiDataModule(_config, kfold=0)
     dm.setup(stage='test')
-    pre_train.training = True
     # pre_train.eval()
     c = pre_train.transformer.choose_channels.shape[0]
     pre_train.set_task()
@@ -49,14 +49,19 @@ def main(_config):
     for _, _dm in enumerate(dm.dms):
         n = len(_dm.test_dataset)
         idx = np.arange(n)
+        np.random.seed(2024)
         np.random.shuffle(idx)
         for id in idx:
-            cnt += 1
-            if cnt > 3:
-                sys.exit(0)
             batch = _dm.test_dataset[id]
-            batch2 = _dm.test_dataset[id + 1]
-            batch = dm.collate([batch, batch2])
+            if cnt > 20:
+                sys.exit(0)
+            else:
+                cnt += 1
+            print(f'cnt: {cnt}')
+            # test_list = ['shhs1-202110']
+            # if batch['name'] not in test_list:
+            #     continue
+            batch = dm.collate([batch])
             fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(30, 32))
             fig.suptitle('Masked RandomPlot')
             color = get_param(c)
@@ -65,37 +70,37 @@ def main(_config):
             epochs = res['batch']['epochs'][0]
             epochs_fft = res['batch']['epochs'][1]
             loss = pre_train.forward_masked_loss_channel(res['cls_feats'], epochs, res['time_mask_patch'])
-            loss2 = pre_train.forward_masked_loss_2D(res['cls_feats_fft'], epochs_fft, res['fft_mask_patch'])
-            # return
+            loss2 = pre_train.forward_masked_loss_2D_channel(res['cls_feats_fft'], epochs_fft, res['fft_mask_patch'])
+            idx = torch.where(loss > 100)
+            print(f'loss: {loss} loss2: {loss2}')
             patch_epochs = pre_train.patchify(epochs)
             patch_epochs_fft = pre_train.patchify_2D(epochs_fft)
             mask = res['time_mask_patch'].bool()
             mask_fft = res['fft_mask_patch'].bool()
-            print('loss:', loss)
-            print('loss2', loss2)
+
             patch_epochs_mask = patch_epochs.masked_fill(mask[:, :, None], np.nan)
             patch_epochs_mask2 = patch_epochs_fft.masked_fill(mask_fft[:, :, None], np.nan)
-            patch_epochs_mask = pre_train.unpatchify(patch_epochs_mask)[1]
-            patch_epochs_mask2 = pre_train.unpatchify_2D(patch_epochs_mask2)[1]
-            spindle_label = res['batch']['Spindle_label'][1]
-            masked_time = pre_train.unpatchify(res['cls_feats'].masked_fill(~mask[:, :, None], np.nan))[1]
-            masked_fft = pre_train.unpatchify_2D(res['cls_feats_fft'].masked_fill(~mask_fft[:, :, None], np.nan))[1]
+            patch_epochs_mask = pre_train.unpatchify(patch_epochs_mask)[0]
+            patch_epochs_mask2 = pre_train.unpatchify_2D(patch_epochs_mask2)[0]
+            # spindle_label = res['batch']['Spindle_label'][1]
+            masked_time = pre_train.unpatchify(res['cls_feats'].masked_fill(~mask[:, :, None], np.nan))[0]
+            masked_fft = pre_train.unpatchify_2D(res['cls_feats_fft'].masked_fill(~mask_fft[:, :, None], np.nan))[0]
             # masked_fft = pre_train.unpatchify_2D(res['mtm_logits_fft'])[1]
-            patch_epochs = pre_train.unpatchify(patch_epochs)[1]
-            patch_epochs_fft = pre_train.unpatchify_2D(patch_epochs_fft)[1]
+            patch_epochs = pre_train.unpatchify(patch_epochs)[0]
+            patch_epochs_fft = pre_train.unpatchify_2D(patch_epochs_fft)[0]
             names = get_names()
             for i, channels in enumerate(range(len(patch_epochs_mask))):
                 axes = Axes[i][0]
                 print(patch_epochs_mask[i])
                 axes.plot(range(3000), patch_epochs_mask[i][:3000].detach().numpy(), color[-2])
                 # axes.grid(True)
-                axes.set_title(names[i] + ' ' + format(loss[1][i].item(), '.3f'))
+                axes.set_title(names[i] + ' ' + format(loss[0][i].item(), '.3f'))
                 # axes.set_xticks(np.arange(0, 3000, 200))
                 # axes.set_yticks(np.arange(0, 2, 0.1))
                 axes = Axes[i][1]
                 axes.plot(range(3000), masked_time[i].detach().numpy(), color[-2])
                 axes.plot(range(3000), patch_epochs[i].detach().numpy(), 'r', alpha=0.2)
-                axes.plot(range(2000), spindle_label.detach().numpy(), color[-1])
+                # axes.plot(range(2000), spindle_label.detach().numpy(), color[-1])
                 axes.set_title(names[i])
 
                 # axes.set_yticks(np.arange(0, 2, 0.1))
@@ -118,4 +123,4 @@ def main(_config):
             print('save fft png')
             os.makedirs(f"./result/{path}/{_config['datasets'][_]}", exist_ok=True)
             plt.savefig(f"./result/{path}/{_config['datasets'][_]}/predict_fft_nu_{id}.svg", format='svg')
-            plt.close("all")
+            plt.close()

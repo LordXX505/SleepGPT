@@ -165,7 +165,7 @@ def main():
 
         # Select only sleep periods
         w_edge_mins = 30
-        nw_idx = np.where(y != stage_dict["W"])[0]  # 653 epoch # select sleep
+        nw_idx = np.where(y != 6)[0]  # 653 epoch # select sleep
         start_idx = nw_idx[0] - (w_edge_mins * 2)  # 916
         end_idx = nw_idx[-1] + (w_edge_mins * 2)  # 1801
         if start_idx < 0: start_idx = 0

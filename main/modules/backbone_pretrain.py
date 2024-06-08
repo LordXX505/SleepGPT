@@ -36,6 +36,7 @@ class Model_Pre(LightningModule):
         self.mode = config['mode']
         self.patch_size = config['patch_size']
         self.transformer = multiway_transformer.__dict__[config["model_arch"]](
+            patch_size=self.patch_size,
             pretrained=False,
             drop_rate=0,
             drop_path_rate=config["drop_path_rate"],
@@ -58,7 +59,7 @@ class Model_Pre(LightningModule):
         if config['loss_names']['mtm'] > 0:
             self.Masked_docoder = heads.Masked_decoder(self.transformer.embed_dim, self.transformer.patch_size, self.transformer.num_patches,
                                                        self.transformer.max_channels)
-            self.Masked_docoder_fft = heads.Masked_decoder2(self.transformer.embed_dim, self.transformer.patch_size, self.transformer.num_patches,
+            self.Masked_docoder_fft = heads.Masked_decoder2(self.transformer.embed_dim, 200, self.transformer.num_patches,
                                                        self.transformer.max_channels)
 
         if config['loss_names']['itc'] > 0:
@@ -571,7 +572,8 @@ class Model_Pre(LightningModule):
 
         """
         patch_label = self.patchify(labels)
-        assert predict.shape == patch_label.shape
+        assert predict.shape == patch_label.shape, \
+            f'predict.shape: {predict.shape}, patch_label: {patch_label.shape}, patch_size: {self.patch_size}'
         # assert predict.shape[1] == self.transformer.num_patches * self.hparams.config['random_choose_channels']
         # compare_idx = torch.gather(input=predict, dim=1, index=(torch.where(time_mask_patch == 1)[0]).unsqueeze(0).unsqueeze(-1).repeat(1, 1, 200))[0]
         # compare_idx_x = compare_idx.unsqueeze(0)
@@ -603,7 +605,8 @@ class Model_Pre(LightningModule):
         if not self.first_log_gpu:
             rank_zero_info(f"predict shape: {predict.shape}, patch_label shape: {patch_label.shape}")
             rank_zero_info(f"time_mask_patch: {time_mask_patch}")
-        assert predict.shape == patch_label.shape
+        assert predict.shape == patch_label.shape, \
+            f'predict.shape: {predict.shape}, patch_label: {patch_label.shape}, patch_size: {self.patch_size}'
         # compare_idx = torch.gather(input=predict, dim=1, index=(torch.where(time_mask_patch == 1)[0]).unsqueeze(0).unsqueeze(-1).repeat(1, 1, 200))[0]
         # compare_idx_x = compare_idx.unsqueeze(0)
         # compare_idx_y = compare_idx.unsqueeze(1)
@@ -630,7 +633,7 @@ class Model_Pre(LightningModule):
 
         """
         patch_label = self.patchify_2D(labels)  # N, 15*C, 2*100
-        assert predict.shape == patch_label.shape
+        assert predict.shape == patch_label.shape, f'predict: {predict.shape}, patch_label: {patch_label.shape}'
         assert predict.shape[1] == self.transformer.num_patches*self.transformer.max_channels
         if not self.first_log_gpu:
             rank_zero_info(f"predict shape: {predict.shape}, patch_label shape: {patch_label.shape}")

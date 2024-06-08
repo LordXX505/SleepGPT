@@ -117,7 +117,7 @@ class WindowAttention(nn.Module):
         relative_position_index[0:, 0:] = rel_pos_mat
         torch.set_printoptions(threshold=np.inf)
 
-        rank_zero_info(f"swin rpe: {rel_pos_mat}")
+        # rank_zero_info(f"swin rpe: {rel_pos_mat}")
         self.register_buffer("relative_position_index", relative_position_index)
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
@@ -348,7 +348,7 @@ class PatchMerging(nn.Module):
         B, L, C = x.shape
         assert L == W, "input feature has wrong size"
         assert W % self.reduce_ratio == 0, f"x size ({W}) are devided by {self.reduce_ratio}."
-        x = x.view(B, -1, self.reduce_ratio * C)  # B H/2*W/2 4*C
+        x = x.view(B, -1, self.reduce_ratio * C)  # B L/5, 5*D
 
         x = self.norm(x)
         x = self.reduction(x)
@@ -578,6 +578,7 @@ class GlobalSwin(nn.Module):
         x = self.forward_features(x)
         x = self.head(x)
         return {'tf': x}
+
 
 class SwinTransformer(nn.Module):
     r""" Swin Transformer

@@ -30,6 +30,7 @@ class YoungDataset(BaseDatatset):
             names = np.load(os.path.join(kwargs['data_dir'], 'val.npy'), allow_pickle=True)
         elif split == 'test':
             names = np.load(os.path.join(kwargs['data_dir'], 'test.npy'), allow_pickle=True)
+        kwargs.pop('kfold', None)
 
         super().__init__(names=names, split=split, concatenate=True,  nums=None, *args, **kwargs)
 

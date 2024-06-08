@@ -1,3 +1,4 @@
+import glob
 import time
 
 import torch
@@ -26,27 +27,24 @@ def main(_config):
     _config = copy.deepcopy(_config)
     pl.seed_everything(_config['seed'])
     print(_config)
-    version = None
     # np.random.seed(SEED)
     # torch.manual_seed(SEED)
     # torch.cuda.manual_seed_all(SEED)
-    k = _config['kfold_test']
+    k = _config['kfold']
+    # for k in range(0, _config['kfold']):
+    version = f"version_{_config['kfold_test']}"
     # if k==0 or k==1: #resume
     #     continue
     rank_zero_info(f'Using k fold: now is {k}')
     exp_name = f'{_config["exp_name"]}'
     # model = Mu_Std(_config)
-    if _config['mode'] == 'pretrain':
-        model = Model_Pre(_config)
-    else:
-        model = Model(_config)
-    dm = MultiDataModule(_config, kfold=k)
+
     logger_path = _config["log_dir"]
     rank_zero_info(f'logger_path: {logger_path}')
     os.makedirs(logger_path, exist_ok=True)
     name = f'{exp_name}_{_config["lr_policy"]}_{_config["model_arch"]}_{_config["loss_function"]}'
     if _config['extra_name'] is not None:
-        name = f'{_config["extra_name"]}_{_config["lr_policy"]}_{_config["model_arch"]}_{_config["loss_function"]}'
+        name = f'{_config["extra_name"]}_{_config["lr_policy"]}_{_config["model_arch"]}_{_config["optim"]}'
     if _config['fft_only'] is True:
         name += '_fft_only'
     elif _config['time_only'] is True:
@@ -56,44 +54,35 @@ def main(_config):
     else:
         name += '_' + _config['mode']
     if _config['all_time'] is not None:
-        name += '_all_time_'
+        name += '_all_time'
     if _config['use_pooling'] is not None:
         name += _config['use_pooling']
-    if _config["eval"]:
-        name += 'eval'
-
+    if _config['Use_FPN'] is not None:
+        name += '_' + _config['Use_FPN']
+    if _config['use_fpfn'] is not None:
+        name += '_' + _config['use_fpfn']
+    if _config['expert'] is not None:
+        name += '_' + _config['expert']
+    if _config['EDF_Mode'] is not None:
+        name += '_' + _config['EDF_Mode']
+    if _config['subset'] is not None:
+        name += '_data_' + str(_config['subset'])
+    ckpt_path = os.path.join(_config['kfold_load_path'], f'{name}/{k}_fold/{version}')
+    rank_zero_info(f'ckpt_path: {ckpt_path}')
+    ckpt_path_list = glob.glob(ckpt_path + '/*')
+    ckpt_path_list = sorted(ckpt_path_list, reverse=True)[:10]
     logger = pl.loggers.TensorBoardLogger(
         logger_path,
         name=name,
-    )
-    monitor = 'validation/the_metric' if _config['mode'] == 'pretrain' else "CrossEntropy/validation/max_accuracy_epoch"
-    if _config['loss_names']['FpFn'] > 0:
-        filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={FpFN/validation/F1:.4f}-val_score={' \
-                   'validation/the_metric:.4f}'
-    elif _config['loss_names']['CrossEntropy'] > 0:
-        filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={' \
-                   'CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}'
-    else:
-        filename = None
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        dirpath=f'/data/checkpoint/{k}_fold/{name}/version_{logger.version}',
-        filename=filename,
-        save_top_k=20,
-        verbose=True,
-        monitor=monitor,
-        # monitor="CrossEntropy/validation/max_accuracy_epoch",
-        mode="max",
-        save_last=True,
-        auto_insert_metric_name=False
     )
     summary = ModelSummary(
         max_depth=-1)
     lr_callback = pl.callbacks.LearningRateMonitor(
         logging_interval="step")
-    callbacks = [checkpoint_callback, lr_callback, summary]
+    callbacks = [lr_callback, summary]
     accum_iter = _config['accum_iter']
     max_steps = _config["max_steps"] if _config["max_steps"] is not None else None
-    if _config['dist_on_itp']:
+    if _config['dist_on_itp'] is True:
         distributed_strategy = 'ddp'
     elif _config['deepspeed']:
         distributed_strategy = 'deepspeed'
@@ -137,10 +126,24 @@ def main(_config):
             val_check_interval=_config["val_check_interval"],
             limit_val_batches=_config['limit_val_batches']
         )
-
     import numpy as np
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     # trainer.validate(model, datamodule=dm)
     # test_dm = dm.dms[0].test_dataset
-    trainer.test(model, datamodule=dm)
+    # ckpt_path_list = ['/home/cuizaixu_lab/huangweixuan/data/checkpoint/Finetune_edf_cosine_backbone_large_patch200_Lion_finetune_all_timeswin_2018_Finetune/6_fold/version_0/ModelCheckpoint-epoch=37-val_acc=0.8260-val_score=5.3318.ckpt',
+    #                   '/home/cuizaixu_lab/huangweixuan/data/checkpoint/Finetune_edf_cosine_backbone_large_patch200_Lion_finetune_all_timeswin_2018_Finetune/6_fold/version_0/ModelCheckpoint-epoch=28-val_acc=0.8290-val_score=5.3443.ckpt']
+    # ckpt_path_list = ['/home/cuizaixu_lab/huangweixuan/data/checkpoint/Finetune_edf_cosine_backbone_large_patch200_Lion_finetune_all_timeswin_2018_Finetune/7_fold/version_0/ModelCheckpoint-epoch=39-val_acc=0.8810-val_score=5.5265.ckpt',
+    #                   '/home/cuizaixu_lab/huangweixuan/data/checkpoint/Finetune_edf_cosine_backbone_large_patch200_Lion_finetune_all_timeswin_2018_Finetune/7_fold/version_0/ModelCheckpoint-epoch=30-val_acc=0.8840-val_score=5.5266.ckpt']
+    # ckpt_path_list = [os.path.join(ckpt_path, 'ModelCheckpoint-epoch=21-val_acc=0.8860-val_score=5.5298.ckpt'),
+                      # os.path.join(ckpt_path, 'ModelCheckpoint-epoch=30-val_acc=0.8850-val_score=5.5256.ckpt'),
+                      # os.path.join(ckpt_path, 'ModelCheckpoint-epoch=15-val_acc=0.8900-val_score=5.5179.ckpt')
+                      # ]
+    for ckpt in ckpt_path_list:
+        if _config['mode'] == 'pretrain':
+            model = Model_Pre(_config)
+        else:
+            model = Model(_config)
+        dm = MultiDataModule(_config, kfold=k)
+        rank_zero_info(f'Using k fold: now is {k}, now_ckpt_path: {ckpt}')
+        trainer.test(model, datamodule=dm, ckpt_path=ckpt)

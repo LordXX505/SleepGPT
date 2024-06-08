@@ -526,11 +526,13 @@ def compute_itc(pl_module, batch, stage, aggregate=True):
     return ret
 
 
-def compute_ce(pl_module, batch, stage):
+def compute_ce(pl_module, batch, stage, persub=False):
     res = {}
     for name in pl_module.multi_y:
         if name == 'tf':
             infer = pl_module.infer(batch, time_mask=False)
+            if pl_module.return_alpha is True:
+                return {'token': infer['token']}
             if pl_module.local_pooling:
                 res.update({'local': infer['local_feats']})
         else:
@@ -628,20 +630,22 @@ def compute_ce(pl_module, batch, stage):
     # print(f"celoss: {ret['ce_loss']}")
     # print('loss = getattr(pl_module, f"{phase}_CrossEntropy_loss")(ret["ce_loss"])')
     loss = getattr(pl_module, f"{phase}_CrossEntropy_loss")(ret["ce_loss"])
+
+
+    if stage == 'test' and persub is True:
+        rank_zero_info(f"batch name: {len(batch['name'])}, target: {target.shape}, tf: {res['tf'].shape}")
+        for index, (v, t) in enumerate(zip(res['tf'], target)):
+            real_index = int(index/(pl_module.time_size))
+            name = batch['name'][real_index]
+            persub_conf = getattr(pl_module, f"test_{name}_conf")(v.view(1, -1), t.view(-1))
     # print("pl_module.log")
     pl_module.log(f"ce/{phase}/loss", loss, on_step=True, sync_dist_group=True, prog_bar=True)
     for k, v in res.items():
         ce_acc = getattr(pl_module, f"{phase}_CrossEntropy_accuracy_{k}")(
             v, target
         )
-
-        pl_module.log(f"ce/{phase}/{k}/ce_acc", ce_acc, on_step=True, sync_dist_group=True, prog_bar=True)
         confmat = getattr(pl_module, f"{phase}_CrossEntropy_conf_{k}")(v, target)
-        precision, recall, kappa, sensitivity, specificity = confusion(confmat)
-        for i in range(len(precision)):
-            pl_module.log(f"ce/{phase}/ce_{i}_precision_{k}", precision[i])
-            pl_module.log(f"ce/{phase}/ce_{i}_recall_{k}", recall[i])
-
+        pl_module.log(f"ce/{phase}/{k}/ce_acc", ce_acc, on_step=True, sync_dist_group=True, prog_bar=True)
     return ret
 
 
@@ -669,8 +673,7 @@ def confusion(cm: torch.Tensor):
 
 # only ues in inference stage
 def compute_entire_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True,
-                        store=False, compute=False, aggregate=True, weight=None):
-    # rank_zero_info(f'compute_entire_fpfn weight: {weight}')
+                        store=False, compute=False, aggregate=True, weight=None, path=None):
     if compute:
         infer = pl_module.infer(batch, time_mask=False)
         cls_feats = infer['cls_feats']
@@ -680,7 +683,6 @@ def compute_entire_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True,
             pl_module.store_whole_eeg[name][index] = feats[500:1500].detach().clone().to('cuda')
             pl_module.store_whole_label[name][index] = label[500:1500].detach().clone().to('cuda')
             pl_module.max_index[name] = torch.max(pl_module.max_index[name], index.detach().clone().to('cuda'))
-        # print(f'pl_module.store_whole_eeg: {pl_module.store_whole_eeg}')
         return {}
     else:
         phase = stage
@@ -708,22 +710,26 @@ def compute_entire_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True,
             for batch_index in gathered_index:
                 for name in range(len(batch_index)):
                     res_index[name] = torch.max(res_index[name], batch_index[name])
-            for batch, batch_label, max_index, batch_real in zip(gathered_batch, gathered_label, res_index, gathered_real):
+            res_epoch = torch.zeros_like(res_epoch)
+            res_label = torch.zeros_like(res_label)
+            res_real = torch.zeros_like(res_real)
+            for batch, batch_label, batch_real in zip(gathered_batch, gathered_label, gathered_real):
                 for i in range(len(batch)):
                     for j in range(len(batch[i])):
-                        if j > max_index:
+                        if j > res_index[i]:
                             break
-                        if torch.sum(batch[i][j]) == 0:
-                            continue
-                        res_epoch[i][j] = batch[i][j]
-                        res_label[i][j] = batch_label[i][j]
+                        if torch.sum(batch_label[i][j]) != 0:
+                            res_label[i][j] = batch_label[i][j]
+                        if torch.sum(batch[i][j]) != 0:
+                            res_epoch[i][j] = batch[i][j]
                         # rank_zero_info(f'res_real: {res_real.shape}, batch_real: {batch_real.shape}')
                         res_real[i][j] = batch_real[i][j]
+        loss_all = 0
         for name in range(res_epoch.shape[0]):
             epoch = []
             label = []
             real_epoch = []
-            if torch.sum(res_epoch[name]) == 0:
+            if torch.sum(res_label[name]) == 0:
                 rank_zero_info(f'subject: {name} is not exist')
                 continue
             for i, (item, item_label, item_real) in enumerate(zip(res_epoch[name], res_label[name], res_real[name])):
@@ -737,36 +743,42 @@ def compute_entire_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True,
             real_epoch = torch.cat(real_epoch, dim=-1)
             fpfn = Fpfn(use_fpfn=use_fpfn)
             # rank_zero_info(f'loss weight: {weight}')
-            loss = fpfn(epoch.unsqueeze(0), label.unsqueeze(0), weight=weight, store=store)
-            by_e = By_Event(threshold=prob, IOU_threshold=IOU_th, device=epoch.device)
-            TP, FN, FP = by_e(epoch.detach().clone().unsqueeze(0), label.detach().clone().unsqueeze(0))
-            Recall = cal_Recall(TP, FN)
-            Precision = cal_Precision(TP, FP)
-            F1 = cal_F1_score(Precision, Recall)
-            pl_module.log(f"FpFn/{phase}/{name}/F1", F1, sync_dist_group=True, prog_bar=True)
-            pl_module.log(f"FpFn/{phase}/{name}/TP", TP, sync_dist_group=True, prog_bar=True)
-            pl_module.log(f"FpFn/{phase}/{name}/FN", FN, sync_dist_group=True, prog_bar=True)
-            pl_module.log(f"FpFn/{phase}/{name}/FP", FP, sync_dist_group=True, prog_bar=True)
-            pl_module.log(f"FpFn/{phase}/{name}/Precision", Precision, sync_dist_group=True, prog_bar=True)
-            pl_module.log(f"FpFn/{phase}/{name}/Recall", Recall, sync_dist_group=True, prog_bar=True)
-            pl_module.log(f"FpFn/{phase}/{name}/loss", loss, sync_dist_group=True, prog_bar=True)
-            rootdir = '/home/cuizaixu_lab/huangweixuan/data/ver_log'
-            if stage == 'test':
-                rank_zero_info(f'stage == test, saveing the results')
-                os.makedirs(f'{rootdir}/test_result', exist_ok=True)
-                torch.save({'epoch': epoch, 'label': label, 'real': real_epoch}, f'{rootdir}/test_result/{name}.ckpt')
+            loss, res_loss = fpfn(epoch.unsqueeze(0), label.unsqueeze(0), weight=weight, store=store, stage=stage, path_name=path)
+            res_prob_step = {}
+            for prob_step in torch.arange(start=0.4, end=1, step=0.1):
+                by_e = By_Event(threshold=prob_step, IOU_threshold=IOU_th, device=epoch.device)
+                TP, FN, FP = by_e(epoch.detach().clone().unsqueeze(0), label.detach().clone().unsqueeze(0))
+                Recall = cal_Recall(TP, FN)
+                Precision = cal_Precision(TP, FP)
+                F1 = cal_F1_score(Precision, Recall)
+                rank_zero_info(f'name: subject_{name}, prob_step: {prob_step} loss: {loss}, TP: {TP}, FN: {FN}, FP: {FP}, F1: {F1}')
+                rank_zero_info(f'res_loss: {res_loss}')
+                pl_module.log(f"FpFn/{phase}/{name}/{torch.round(torch.tensor(prob_step), decimals=3)}/F1", F1, sync_dist_group=True, prog_bar=True)
+                pl_module.log(f"FpFn/{phase}/{name}/{torch.round(torch.tensor(prob_step), decimals=3)}/TP", TP, sync_dist_group=True, prog_bar=True)
+                pl_module.log(f"FpFn/{phase}/{name}/{torch.round(torch.tensor(prob_step), decimals=3)}/FN", FN, sync_dist_group=True, prog_bar=True)
+                pl_module.log(f"FpFn/{phase}/{name}/{torch.round(torch.tensor(prob_step), decimals=3)}/FP", FP, sync_dist_group=True, prog_bar=True)
+                pl_module.log(f"FpFn/{phase}/{name}/{torch.round(torch.tensor(prob_step), decimals=3)}/Precision", Precision, sync_dist_group=True, prog_bar=True)
+                pl_module.log(f"FpFn/{phase}/{name}/{torch.round(torch.tensor(prob_step), decimals=3)}/Recall", Recall, sync_dist_group=True, prog_bar=True)
+                pl_module.log(f"FpFn/{phase}/{name}/loss", loss, sync_dist_group=True, prog_bar=True)
+                res_prob_step[prob_step] = {'F1': F1, 'TP': TP, 'FN': FN, 'FP': FP,
+                                            'Precision': Precision, 'Recall': Recall, 'loss': loss}
             # accumulate and the average of the loss
-            loss = getattr(pl_module, f"{phase}_FpFn_loss")(loss)
-            TP = getattr(pl_module, f"{phase}_FpFn_TP")(TP)
-            FN = getattr(pl_module, f"{phase}_FpFn_FN")(FN)
-            FP = getattr(pl_module, f"{phase}_FpFn_FP")(FP)
-            rank_zero_info(f'name: subject_{name}, loss: {loss}, TP: {TP}, FN: {FN}, FP: {FP}')
-
+            res_prob_step = sorted(res_prob_step.items(), key=lambda x: x[1]['F1'])
+            loss = getattr(pl_module, f"{phase}_FpFn_loss")(res_prob_step[-1][1]['loss'])
+            TP = getattr(pl_module, f"{phase}_FpFn_TP")(res_prob_step[-1][1]['TP'])
+            FN = getattr(pl_module, f"{phase}_FpFn_FN")(res_prob_step[-1][1]['FN'])
+            FP = getattr(pl_module, f"{phase}_FpFn_FP")(res_prob_step[-1][1]['FP'])
+            loss_all += res_prob_step[-1][1]['loss']
+            F1 = getattr(pl_module, f"{phase}_FpFn_F1")(res_prob_step[-1][1]['F1'])
+            Precision = getattr(pl_module, f"{phase}_FpFn_Precision")(res_prob_step[-1][1]['Precision'])
+            Recall = getattr(pl_module, f"{phase}_FpFn_Recall")(res_prob_step[-1][1]['Recall'])
+            if stage == 'test':
+                rootdir = f'/home/cuizaixu_lab/huangweixuan/data/ver_log'
+                rank_zero_info(f'stage == test, saving the results')
+                os.makedirs(f'{rootdir}/test/{path}', exist_ok=True)
+                torch.save({'epoch': epoch, 'label': label, 'real': real_epoch}, f'{rootdir}/test/{path}/{name}.ckpt')
         ret = {
-            'loss': loss,
-            'TP': TP,
-            'FN': FN,
-            'FP': FP,
+            'loss': loss_all,
         }
         return ret
 
@@ -775,8 +787,11 @@ def compute_entire_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True,
 def compute_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True, store=False, weight=None):
     infer = pl_module.infer(batch, time_mask=False)
     cls_feats = infer['cls_feats']
-    fpfn = Fpfn(use_fpfn=use_fpfn)
-    loss = fpfn(cls_feats, batch['Spindle_label'], data_idx=batch['index'], store=store, weight=weight)
+    if pl_module.hparams.config['Use_FPN'] != 'Cross':
+        fpfn = Fpfn(use_fpfn=use_fpfn)
+        loss, res_loss = fpfn(cls_feats, batch['Spindle_label'], data_idx=batch['index'], store=store, weight=weight, stage=stage)
+    else:
+        loss, res_loss = pl_module.spindle_pred_proj.decoder.forward_loss(cls_feats, batch['Spindle_label'])
     by_e = By_Event(threshold=prob, IOU_threshold=IOU_th, device=cls_feats.device)
     TP, FN, FP = by_e(cls_feats.detach().clone(), batch['Spindle_label'].detach().clone())
     ret = {

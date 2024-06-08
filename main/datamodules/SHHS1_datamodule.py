@@ -13,14 +13,14 @@ class SHHS1DataModule(BaseDataModule):
 
     @property
     def column_names(self):
-        if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['physio_settings']:
+        if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['data_setting']:
             return ['x', 'Stage_label']
         else:
             return ['x']
 
     @property
     def stage(self):
-        if self.config['mode'] == 'pretrain' or 'visualization' in self.config['physio_settings']:
+        if self.config['mode'] == 'pretrain' or 'visualization' in self.config['data_setting']:
             return False
         else:
             return True
@@ -117,21 +117,21 @@ class SHHS1DataModule(BaseDataModule):
             pool_all=self.config['use_all_label'] == 'all',
             split_len=None
         )
-    def setup(self, stage):
+    def setup(self, stage, **kwargs):
         if stage == 'test':
             if self.setup_flag == 0:
-                self.set_test_dataset(settings=self.config['shhs_settings'])
+                self.set_test_dataset(settings=self.config['data_setting'], **kwargs)
                 print('predict SHHS1 s')
                 self.setup_flag += 1
         elif stage == 'validate':
             if self.setup_flag == 0:
-                self.set_val_dataset(settings=self.config['shhs_settings'])
+                self.set_val_dataset(settings=self.config['data_setting'], **kwargs)
                 print('predict SHHS1 s')
                 self.setup_flag += 1
         else:
             if self.setup_flag == 0:
-                self.set_train_dataset(settings=self.config['shhs_settings'])
-                self.set_test_dataset(settings=self.config['shhs_settings'])
-                self.set_val_dataset(settings=self.config['shhs_settings'])
+                self.set_train_dataset(settings=self.config['data_setting'], **kwargs)
+                self.set_test_dataset(settings=self.config['data_setting'], **kwargs)
+                self.set_val_dataset(settings=self.config['data_setting'], **kwargs)
                 self.setup_flag += 1
                 print('SHHS1 s')

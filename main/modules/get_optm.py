@@ -1,8 +1,7 @@
 from functools import partial
 
 import torch
-from torch.optim import lr_scheduler
-from transformers.optimization import AdamW
+from torch.optim import lr_scheduler, AdamW
 from transformers import (
     get_polynomial_decay_schedule_with_warmup,
     get_cosine_schedule_with_warmup,

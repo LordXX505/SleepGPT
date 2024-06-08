@@ -10,7 +10,6 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelSummary
 from lightning.pytorch.strategies import DDPStrategy
 import os
-from main.modules import Test
 from main.datamodules import TestData
 from main.datamodules.Multi_datamodule import MultiDataModule
 from main.modules import Model, Model_Pre
@@ -26,6 +25,7 @@ def main(_config):
     _config = copy.deepcopy(_config)
     pl.seed_everything(_config['seed'])
     print(_config)
+    torch.multiprocessing.set_sharing_strategy('file_system')
     # np.random.seed(SEED)
     # torch.manual_seed(SEED)
     # torch.cuda.manual_seed_all(SEED)
@@ -60,7 +60,7 @@ def main(_config):
     monitor = 'validation/the_metric' if _config['mode'] == 'pretrain' else "CrossEntropy/validation/max_accuracy_epoch"
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        dirpath=f'/data/checkpoint/{name}/version_{logger.version}',
+        dirpath=f'/home/cuizaixu_lab/huangweixuan/data/checkpoint/{name}/version_{logger.version}',
         filename='ModelCheckpoint-epoch={epoch:02d}-val_acc={CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}',
         save_top_k=-1,
         verbose=True,

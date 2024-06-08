@@ -9,7 +9,7 @@ from ipywidgets import interact, IntSlider
 import ipywidgets as widgets
 import numpy as np
 from matplotlib.widgets import Slider
-root_dir = '../../data/ver_log/test_result'
+root_dir = '../../data/ver_log/test/2'
 import mne
 
 ckpt_path = glob.glob(f'{root_dir}/*')

@@ -40,9 +40,9 @@ class YoungDataModule(BaseDataModule):
     def dataset_name(self):
         return 'Young'
 
-    def setup(self, stage):
+    def setup(self, stage, **kwargs):
         if self.setup_flag == 0:
-            self.set_val_dataset()
-            self.set_test_dataset()
+            self.set_val_dataset(**kwargs)
+            self.set_test_dataset(**kwargs)
             self.setup_flag += 1
             print('Young s')

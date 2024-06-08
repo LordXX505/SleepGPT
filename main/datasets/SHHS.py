@@ -40,6 +40,7 @@ class SHHSDataset(BaseDatatset):
             except:
                 names = np.array(glob.glob(kwargs['data_dir'] + '/*/*'))
                 nums = None
+        kwargs.pop('kfold', None)
         # print(os.path.join(kwargs['data_dir'], 'train.npy'))
         super().__init__(names=names, nums=nums, split=split, *args, **kwargs)
 
@@ -50,3 +51,13 @@ class SHHSDataset(BaseDatatset):
     @property
     def channels(self):
         return np.array([4, 5, 15, 16, 18])
+
+    def get_name(self, index):
+        idx = np.where(self.idx_2_nums <= index)[0][-1]
+        start_idx = index - self.nums_2_idx[idx]
+        if self.pool_all:
+            start_idx *= self.split_len
+        try:
+            return self.idx_2_name[idx].split('/')[-1]
+        except:
+            return int(self.idx_2_name[idx].split('/')[-2].split('-')[-1])

@@ -36,6 +36,8 @@ class BaseDatatset(data.Dataset):
             time_size=100,
             pool_all=False,
             split_len=None,
+            patch_size=200,
+            show_transform_param=False
     ):
         """
         :param transform_keys: transform and augment
@@ -51,15 +53,17 @@ class BaseDatatset(data.Dataset):
         self.Spindle_label = None
         self.Stage_label = None
         self.stage = stage
+        self.patch_size = patch_size
+        self.num_patches = 3000//self.patch_size
         self.spindle = spindle
         self.split = split
         self.time_size = time_size
         self.pool_all = pool_all
         super().__init__()
         self.random_choose_channels = random_choose_channels
-        self.transforms = keys_to_transforms(transform_keys['keys'], transform_keys['mode'])
+        self.transforms = keys_to_transforms(transform_keys['keys'], transform_keys['mode'], show_param=show_transform_param)
         if "train" not in self.split:
-            self.transforms = keys_to_transforms([[]], ['full'])
+            self.transforms = keys_to_transforms([[]], ['full'], show_param=show_transform_param)
         rank_zero_info(f"transforms: {self.transforms}, split: {self.split}")
         self.data_dir = data_dir
         self.all_time = all_time
@@ -75,6 +79,7 @@ class BaseDatatset(data.Dataset):
         if self.all_time:
             assert nums is not None
             self.nums = nums
+            assert len(names) == len(nums), f'{len(names)}, {len(nums)}'
             if pool_all is False:
                 all_num = 0
                 for _, name in enumerate(names):
@@ -112,13 +117,18 @@ class BaseDatatset(data.Dataset):
         self.max_channels = 57
         assert 'x' in self.column_names
         # self.choose_channels = np.array([4, 5, 16, 18]) for shhs
-        self.choose_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52])  # for all pertrain
+        self.choose_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52])  # for all pertrain [C3, C4, EMG, EOG, F3, Fpz, O1, Pz]
         # self.choose_channels = np.array([4, 5, 16, 18, 22, 38]) # for physionet
         # self.choose_channels = np.array([4, 5, 15, 18, 22, 36, 38, 52])
         # self.choose_channels = np.array([4, 5, 15, 16, 18, 22, 23, 36, 38, 39, 52])
         # [C3, C4, ECG, EMG, EOG, F3, F4, Fpz, O1, O2, Pz]
         self.settings = settings
-        self.mask_ratio = mask_ratio
+        rank_zero_info(f'dataset settings: {self.settings}')
+        if isinstance(mask_ratio, list):
+            self.mask_ratio = mask_ratio[0]
+        else:
+            self.mask_ratio = mask_ratio
+
         if self.random_choose_channels >= self.choose_channels.shape[0]:
             # random_channels_num = self.random_choose_channels-self.choose_channels.shape[0]
             all_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52])
@@ -154,13 +164,13 @@ class BaseDatatset(data.Dataset):
         raise NotImplementedError
 
     def get_name(self, index):
-        print(f'idx_2_nums : {self.idx_2_nums}')
+        # print(f'idx_2_nums : {self.idx_2_nums}')
         idx = np.where(self.idx_2_nums <= index)[0][-1]
         start_idx = index - self.nums_2_idx[idx]
-        print(f'before start idx: {start_idx}')
+        # print(f'before start idx: {start_idx}')
         if self.pool_all:
             start_idx *= self.split_len
-        print(f'after start idx: {start_idx}')
+        # print(f'after start idx: {start_idx}')
         return os.path.join(self.idx_2_name[idx], str(start_idx).zfill(5) + '.arrow')
 
     def get_epochs(self, data):
@@ -169,16 +179,23 @@ class BaseDatatset(data.Dataset):
         except:
             x = np.array(data.to_pylist())
         channel = self.channels
+        # rank_zero_info(f'settings: {self.settings}')
         if self.settings is not None:
             if 'ECG' in self.settings:
                 idx = np.where(channel == 15)[0][0]
                 # print(idx)
                 x[idx] = x[idx] * 1000
                 # print(x[idx])
-            if 'SHHS' in self.settings:
+            elif 'SHHS' in self.settings:
                 x = x * 1e6
-            if 'MASS' in self.settings:
+            elif 'MASS' in self.settings:
                 x = x * 1e6
+            elif 'EDF' in self.settings:
+                x = x * 1e6
+            # elif 'ISRUC' in self.settings:
+            #     x = x * 10
+                # rank_zero_info('******************EDF settings******************')
+                # rank_zero_info(f'max: {np.max(x)}, min: {np.min(x)}')
         x = torch.from_numpy(x).float()
         channel = torch.from_numpy(channel)
         assert x.shape[0] == channel.shape[0], f"x shape: {x.shape[0]}, c shape: {channel.shape[0]}"
@@ -245,6 +262,7 @@ class BaseDatatset(data.Dataset):
                 ).read_all()
                 try:
                     x = self.get_epochs(tables['x'][0])
+                    assert x['x'][0].shape[1] == 3000, f"{idx_2_name}, {x['x'][0].shape[1]}"
                     epochs.append(x['x'][0])
                     channel.append(x['x'][1])
 
@@ -268,6 +286,7 @@ class BaseDatatset(data.Dataset):
             if type(idx_2_name) == int:
                 ret.update({'name': torch.tensor(idx_2_name)})  # idx_2_name is int
             else:
+
                 ret.update({'name': idx_2_name})
             # rank_zero_info(f'ret["index"]: {ret["index"]}, name:{idx_2_name}')
             return ret
@@ -277,9 +296,13 @@ class BaseDatatset(data.Dataset):
                 name = os.path.join(self.data_dir, '/'.join(name.split('/')[-2:]))
                 if not os.path.isfile(name):
                     raise RuntimeError(f"Error while read file idx {name}")
-            tables = pa.ipc.RecordBatchFileReader(
-                pa.memory_map(name, "r")
-            ).read_all()
+            try:
+                tables = pa.ipc.RecordBatchFileReader(
+                    pa.memory_map(name, "r")
+                ).read_all()
+            except Exception as e:
+                print(f'reading name: {name} has an error, Exception is {e}')
+                sys.exit(0)
             while result is None:
                 try:
                     ret = dict()
@@ -317,19 +340,22 @@ class BaseDatatset(data.Dataset):
                 if self.random_choose_channels >= self.choose_channels.shape[0]:
                     res_epochs = torch.zeros((self.random_choose_channels, 3000))
                     attention_mask = torch.zeros(self.random_choose_channels)
-                    random_mask_w_temp = torch.zeros(len(self.choose_channels) * 15)
+                    random_mask_w_temp = torch.zeros(len(self.choose_channels) * self.num_patches)
                     colletc_idx = []
                     seq_len_3000 = True
                     for i, index in enumerate(self.select_channels):
                         idx = np.where(channel == index)[0]
                         if idx.shape[0] != 0:
                             if _x[idx].shape[1] != 3000:
-                                seq_len_3000 = False
-                                res_epochs[i, :_x[idx].shape[1]] = _x[idx]
+                                try:
+                                    seq_len_3000 = False
+                                    res_epochs[i, :_x[idx].shape[1]] = _x[idx]
+                                except:
+                                    raise RuntimeError
                             else:
                                 res_epochs[i] = _x[idx]
                             attention_mask[i] = 1
-                            colletc_idx.append(np.arange(i * 15, (i + 1) * 15))
+                            colletc_idx.append(np.arange(i * self.num_patches, (i + 1) * self.num_patches))
                     if self.mask_ratio is not None and len(random_mask_w) == 0:
                         # N = len(random_mask_w_temp)
                         # noise = torch.rand(N)
@@ -341,19 +367,20 @@ class BaseDatatset(data.Dataset):
                         if seq_len_3000:
                             N = colletc_idx.shape[0]
                         else:
-                            N = (colletc_idx.shape[0] // 15) * 10
+                            N = (colletc_idx.shape[0] // self.num_patches) * 10
                         noise = torch.rand(N)
                         ids_shuffle = torch.argsort(noise)
                         len_shuffle = int(N * self.mask_ratio)
                         if seq_len_3000:
                             final_choose_idx = colletc_idx[ids_shuffle[:len_shuffle]]
                         else:
-                            num_channels = (colletc_idx.shape[0] // 15)
+                            num_channels = (colletc_idx.shape[0] // self.num_patches)
                             mat_temp = []
                             for i in range(num_channels):
-                                mat_temp.append(torch.arange(i * 15, i * 15 + 10))
+                                mat_temp.append(torch.arange(i * self.num_patches, i * self.num_patches + 10))
                             mat_temp = torch.cat(mat_temp, dim=0)
                             final_choose_idx = colletc_idx[mat_temp[ids_shuffle[:len_shuffle]]]
+                            # final_choose_idx = colletc_idx[mat_temp[[2, 4, 5, 8, 9]]]
                         random_mask_w_temp[final_choose_idx] = 1
                         random_mask_w.append(random_mask_w_temp)
                     # print(f"res_epochs: {res_epochs}")

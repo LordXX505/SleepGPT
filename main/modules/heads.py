@@ -73,8 +73,7 @@ class Attn(nn.Module):
         self.double = double
         self.channel_wise = channel_wise
 
-        if return_alpha is False:
-            self.fc_norm = nn.LayerNorm(eps=1e-6, normalized_shape=out_size)
+        self.fc_norm = nn.LayerNorm(eps=1e-6, normalized_shape=out_size)
         self.return_alpha = return_alpha
         if self.reshape and self.double:
             self.hidden_size = hidden_size * 2
@@ -90,7 +89,7 @@ class Attn(nn.Module):
                 setattr(self, f"w_ha_{i}", nn.Linear(self.hidden_size, self.out_size, bias=True))
                 setattr(self, f"w_at_{i}", nn.Linear(self.out_size, 1, bias=False))
 
-    def forward(self, x, time_split=None):
+    def forward(self, x, time_split=None, attn_mask=None):
         if time_split == -1:
             b, c, p, d = x.shape
             assert c == self.channels
@@ -126,7 +125,10 @@ class Attn(nn.Module):
             alpha = alpha.reshape(b * self.channels, alpha.shape[2], alpha.shape[3])
         else:
             a_states = torch.tanh(self.w_ha(x))
-            alpha = torch.softmax(self.w_at(a_states), dim=softdim).view(x.size(0), 1, -1)
+            attn_matrix = self.w_at(a_states)
+            # print(f'head attn shape: {attn_matrix.shape}, {attn_mask.shape}')
+            attn_matrix = attn_matrix.masked_fill(~attn_mask.unsqueeze(-1).bool(), float("-inf"))
+            alpha = torch.softmax(attn_matrix, dim=softdim).view(x.size(0), 1, -1)
         if self.return_alpha:
             return alpha
         if self.reshape is True:
@@ -171,18 +173,20 @@ class ITCHead(nn.Module):
         x = self.fc(x)
         return x
 
-class MLP(nn.Module):
+class SPindle_MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
 
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act_layer=nn.GELU):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.norm = nn.LayerNorm(h[-1])
+        self.act = act_layer()
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = self.act(layer(x)) if i < self.num_layers - 1 else layer(self.norm(x))
         return F.sigmoid(x)
 
 class Spindle_Head(nn.Module):
@@ -206,8 +210,10 @@ class Spindle_Head(nn.Module):
                                                                 seq_len=seq_len, drop_path=dpr, decoder_depth=decoder_depth, num_queries=num_queries)
         elif Use_FPN == 'FPN':
             self.decoder = FPN.FPN(depth=decoder_depth, resnet=FPN_resnet)
+        elif Use_FPN == 'Swin':
+            self.decoder = FPN.FPN(depth=decoder_depth, resnet=FPN_resnet)
         else:
-            self.decoder = MLP(input_dim=hidden_size*2, hidden_dim=enc_dim, output_dim=patch_size, num_layers=decoder_depth)
+            self.decoder = SPindle_MLP(input_dim=hidden_size*2, hidden_dim=enc_dim, output_dim=patch_size, num_layers=decoder_depth)
 
     def forward(self, x):
         # print(f"x.shape:{x.shape}")
@@ -216,6 +222,9 @@ class Spindle_Head(nn.Module):
         if self.Use_FPN == 'FPN' or self.Use_FPN == 'MLP':
             x = torch.cat([time_c3, fft_c3], dim=-1)
             x = self.decoder(x)
+        elif self.Use_FPN == 'Cross':
+            x = self.decoder(x)
+            return x
         else:
             x = self.decoder(x)
         x = x.reshape(B, -1)
