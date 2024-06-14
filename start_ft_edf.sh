@@ -5,7 +5,7 @@
 #SBATCH --ntasks-per-node=4
 #SBATCH --time=5-00:00:00
 #SBATCH --signal=SIGUSR1@90
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=9
 
 #SBATCH --qos=high
 #SBATCH --job-name=ft_sleep_edf_2013

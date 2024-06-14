@@ -183,7 +183,7 @@ class Permutation:
         self.p = p
         self.patch_size = patch_size
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, *args, **kwargs):
         if torch.rand(1) < self.p:
             C, L = x.shape
             n = L//self.patch_size
@@ -219,7 +219,7 @@ class RandomAmplitudeScale:
         self.range = range
         self.p = p
 
-    def __call__(self, x, label=None, show_param=False):
+    def __call__(self, x, label=None, show_param=False, *args, **kwargs):
         if torch.rand(1) < self.p:
             scale = random.uniform(self.range[0], self.range[1])
             if show_param is True:
@@ -243,7 +243,7 @@ class RandomDCShift:
         self.range = range
         self.p = p
 
-    def __call__(self, x, label=None, show_param=False):
+    def __call__(self, x, label=None, show_param=False, *args, **kwargs):
         if torch.rand(1) < self.p:
             shift = random.uniform(self.range[0], self.range[1])
             if show_param is True:
@@ -269,7 +269,7 @@ class RandomTimeShift:
         self.cval = cval
         self.p = p
 
-    def __call__(self, x, label=None, show_param=False):
+    def __call__(self, x, label=None, show_param=False, *args, **kwargs):
         # if torch.rand(1) < 1:
         if torch.rand(1) < self.p:
             t_shift = random.randint(self.range[0], self.range[1])
@@ -298,7 +298,7 @@ class RandomZeroMasking:
         self.range = range
         self.p = p
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, *args, **kwargs):
         if torch.rand(1) < self.p:
             mask_len = random.randint(self.range[0], self.range[1])
             random_pos = random.randint(0, x.shape[1] - mask_len)
@@ -324,7 +324,7 @@ class RandomAdditiveGaussianNoise:
         self.range = range
         self.p = p
 
-    def __call__(self, x, label=None, show_param=False):
+    def __call__(self, x, label=None, show_param=False, *args, **kwargs):
         if torch.rand(1) < self.p:
             sigma = random.uniform(self.range[0], self.range[1])
             if show_param is True:
@@ -350,7 +350,7 @@ class RandomBandStopFilter:
         self.sampling_rate = sampling_rate
         self.p = p
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, *args, **kwargs):
         if torch.rand(1) < self.p:
             low_freq = random.uniform(self.range[0], self.range[1])
             center_freq = low_freq + self.band_width / 2.0
@@ -375,7 +375,7 @@ class RandomTimeInverted:
         self.range = range
         self.p = p
 
-    def __call__(self, x, label=None):
+    def __call__(self, x, label=None, *args, **kwargs):
         if torch.rand(1) < self.p:
             if label is not None:
                 L = label.shape[0]

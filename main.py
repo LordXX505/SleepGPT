@@ -18,7 +18,7 @@ import signal
 from lightning.pytorch.tuner import Tuner
 from main.modules.get_mu_std import Mu_Std
 from torch.distributed.elastic.multiprocessing.errors import record
-
+import glob
 @record
 @ex.automain
 def main(_config):
@@ -62,7 +62,7 @@ def main(_config):
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         dirpath=f'/home/cuizaixu_lab/huangweixuan/data/checkpoint/{name}/version_{logger.version}',
         filename='ModelCheckpoint-epoch={epoch:02d}-val_acc={CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}',
-        save_top_k=-1,
+        save_top_k=5,
         verbose=True,
         monitor=monitor,
         # monitor="CrossEntropy/validation/max_accuracy_epoch",
@@ -77,6 +77,10 @@ def main(_config):
     callbacks = [checkpoint_callback, lr_callback, summary]
     accum_iter = _config['accum_iter']
     max_steps = _config["max_steps"] if _config["max_steps"] is not None else None
+    version = f"version_{_config['kfold_test']}"
+    ckpt_path = os.path.join(_config['kfold_load_path'], f'{name}/{version}')
+    rank_zero_info(f'ckpt_path: {ckpt_path}')
+    ckpt_path_list = glob.glob(ckpt_path + '/*')
     if _config['dist_on_itp']:
         distributed_strategy = 'ddp'
     elif _config['deepspeed']:
@@ -181,7 +185,9 @@ def main(_config):
         torch.backends.cudnn.benchmark = False
         # trainer.validate(model, datamodule=dm)
         # test_dm = dm.dms[0].test_dataset
-        trainer.test(model, datamodule=dm)
+        for ckpt in ckpt_path_list:
+            rank_zero_info(f'now_ckpt_path: {ckpt}')
+            trainer.test(model, datamodule=dm, ckpt_path=ckpt)
         # res = {}
         # for _, index in enumerate(model.res_index):
         #     index = index[:, 0].view(-1)

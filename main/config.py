@@ -306,6 +306,53 @@ def finetune_phy_usleep():
     mode = "finetune_downstream"
     extra_name = "Finetune_downstream_usleep"
     kfold = 1
+@ex.named_config
+def finetune_shhs1():
+    mode = "finetune"
+    extra_name = "Finetune_shhs1"
+    mask_ratio = None
+
+    loss_names = _loss_names({"CrossEntropy": 1})
+    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3, 4, 6]], "mode": ["shuffle"]})
+
+    start_epoch = 0
+    num_workers = 0
+    drop_path_rate = 0.1
+    patch_size = 200
+    lr_mult = 1  # multiply lr for downstream heads
+    blr = 1.5e-5
+    end_lr = 0
+
+    warmup_steps = 5
+
+    # dir
+    output_dir = './checkpoint/2201210064/experiments'
+    log_dir = './checkpoint_log/2201210064/experiments'
+    load_path = ""
+
+    # sche and opt
+    lr_policy = "cosine"
+    optim = "adamw"
+    clip_grad = False
+    weight_decay = 0.05
+
+    # device
+    device = 'cuda'
+    deepspeed = False
+    dist_on_itp = True
+
+
+    # evaluation
+    dist_eval = False
+    eval = False
+
+    # other
+    fast_dev_run = 7
+    use_relative_pos_emb=True
+    local_pooling = True
+    # multi_y = ['tf', 'time', 'fft']
+    multi_y = ['tf']
+    actual_channels = 'shhs'
 
 @ex.named_config
 def finetune_phy():
