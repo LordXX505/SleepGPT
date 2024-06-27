@@ -655,7 +655,7 @@ class Model_Pre(LightningModule):
     def prepare_forward(self):
         pass
 
-    def forward(self, batch, stage) -> Any:
+    def forward(self, batch, stage, aug_fft=False) -> Any:
         ret = dict()
         if 1:
             # get the FFT
@@ -681,7 +681,9 @@ class Model_Pre(LightningModule):
                         batch['mask'] = attention_mask
                         batch['epochs'] = (epochs_fft)
                     else:
-                        epochs_fft, attn_mask_fft = self.transformer.get_fft(batch['epochs'][0], batch['mask'][0])
+                        epochs_fft, attn_mask_fft = self.transformer.get_fft(batch['epochs'][0], batch['mask'][0],
+                                                                             aug=aug_fft)
+
                         batch['epochs'] = (batch['epochs'][0], epochs_fft)
                         if not self.first_log_gpu:
                             print(batch['mask'][0].shape)

@@ -106,7 +106,8 @@ def main(_config):
         else:
             filename = None
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            dirpath=f'/home/cuizaixu_lab/huangweixuan/data/checkpoint/{name}/{k}_fold/version_{logger.version}',
+            # dirpath=f'/home/cuizaixu_lab/huangweixuan/data/checkpoint/{name}/{k}_fold/version_{logger.version}',
+            dirpath=f"{os.path.join(_config['output_dir'])}/{name}/fold_{k}/version_{logger.version}",
             filename=filename,
             save_top_k=int(_config['save_top_k']),
             verbose=True,

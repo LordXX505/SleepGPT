@@ -13,6 +13,8 @@ from torch.utils import data
 from typing import Optional, Union
 from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
+# ['ABD' 'C3' 'C4' 'CHEST' 'ECG' 'EMG1' 'EOG1' 'F3' 'F4' 'O1' 'O2']
+
 
 class BaseDatatset(data.Dataset):
 
@@ -37,7 +39,9 @@ class BaseDatatset(data.Dataset):
             pool_all=False,
             split_len=None,
             patch_size=200,
-            show_transform_param=False
+            show_transform_param=False,
+            need_normalize=True,
+            mode='base'
     ):
         """
         :param transform_keys: transform and augment
@@ -115,13 +119,19 @@ class BaseDatatset(data.Dataset):
         self.column_names = column_names
         self.normalize = normalize()
         self.max_channels = 57
+        self.need_normalize = need_normalize
+        rank_zero_info(f'==============need_normalize: {need_normalize}==============')
         assert 'x' in self.column_names
-        # self.choose_channels = np.array([4, 5, 16, 18]) for shhs
-        self.choose_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52])  # for all pertrain [C3, C4, EMG, EOG, F3, Fpz, O1, Pz]
-        # self.choose_channels = np.array([4, 5, 16, 18, 22, 38]) # for physionet
-        # self.choose_channels = np.array([4, 5, 15, 18, 22, 36, 38, 52])
-        # self.choose_channels = np.array([4, 5, 15, 16, 18, 22, 23, 36, 38, 39, 52])
-        # [C3, C4, ECG, EMG, EOG, F3, F4, Fpz, O1, O2, Pz]
+        self.mode = mode
+        if mode == 'base':
+            assert self.random_choose_channels == 8
+            self.choose_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52])  # for all pertrain [C3, C4, EMG, EOG, F3, Fpz, O1, Pz]
+            # self.choose_channels = np.array([4, 5, 15, 18, 22, 36, 38, 52])
+        else:
+            assert self.random_choose_channels == 11
+            self.choose_channels = np.array([0, 3, 6, 7, 17, 18, 20, 24, 38, 40, 54])  # Large vision
+            # ['ABD', 'AIRFLOW', 'C3', 'C4', 'ECG', 'EMG1', 'EOG1', 'F3', 'F4', 'O1', 'O2']
+
         self.settings = settings
         rank_zero_info(f'dataset settings: {self.settings}')
         if isinstance(mask_ratio, list):
@@ -131,7 +141,11 @@ class BaseDatatset(data.Dataset):
 
         if self.random_choose_channels >= self.choose_channels.shape[0]:
             # random_channels_num = self.random_choose_channels-self.choose_channels.shape[0]
-            all_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52])
+            if self.random_choose_channels == 8:
+                all_channels = np.array([4, 5, 16, 18, 22, 36, 38, 52])
+            else:
+                all_channels = np.array([0, 3, 6, 7, 17, 18, 20, 24, 38, 40, 54])
+
             # select_channels = np.setdiff1d(all_channels, self.choose_channels)
             # # np.random.shuffle(select_channels)
             # # select_channels = select_channels[:random_channels_num]
@@ -180,22 +194,10 @@ class BaseDatatset(data.Dataset):
             x = np.array(data.to_pylist())
         channel = self.channels
         # rank_zero_info(f'settings: {self.settings}')
-        if self.settings is not None:
+        if self.settings is not None and self.need_normalize is True:
             if 'ECG' in self.settings:
                 idx = np.where(channel == 15)[0][0]
-                # print(idx)
                 x[idx] = x[idx] * 1000
-                # print(x[idx])
-            elif 'SHHS' in self.settings:
-                x = x * 1e6
-            elif 'MASS' in self.settings:
-                x = x * 1e6
-            elif 'EDF' in self.settings:
-                x = x * 1e6
-            # elif 'ISRUC' in self.settings:
-            #     x = x * 10
-                # rank_zero_info('******************EDF settings******************')
-                # rank_zero_info(f'max: {np.max(x)}, min: {np.min(x)}')
         x = torch.from_numpy(x).float()
         channel = torch.from_numpy(channel)
         assert x.shape[0] == channel.shape[0], f"x shape: {x.shape[0]}, c shape: {channel.shape[0]}"
@@ -249,7 +251,7 @@ class BaseDatatset(data.Dataset):
                     # print(f'self.data_dir: {self.data_dir}, name:{name}, self.idx_2_name[idx]: {self.idx_2_name[idx]}')
                     epoch_mask.append(torch.ones(1))
                 if not os.path.isfile(name):
-                    name2 = os.path.join(self.data_dir, '/'.join(name.split('/')[-3:]))
+                    name2 = os.path.join(self.data_dir, '/'.join(name.split('/')[-1:]))
                     name = os.path.join(self.data_dir, '/'.join(name.split('/')[-2:]))
                     if not os.path.isfile(name):
                         if not os.path.isfile(name2):
@@ -384,7 +386,9 @@ class BaseDatatset(data.Dataset):
                         random_mask_w_temp[final_choose_idx] = 1
                         random_mask_w.append(random_mask_w_temp)
                     # print(f"res_epochs: {res_epochs}")
-                    res_epochs = self.normalize(res_epochs, attention_mask)
+                    if self.need_normalize is True:
+                        res_epochs = self.normalize(res_epochs, attention_mask)
+
                     if label is not None:
                         res_epochs, label[x_idx][_idx] = self.transforms(res_epochs, label[x_idx][_idx])
                     else:
@@ -398,7 +402,9 @@ class BaseDatatset(data.Dataset):
                     attention_mask[channel] = 1
                     res_epochs = torch.zeros((self.max_channels, _x.shape[1]))
                     res_epochs[channel] = _x
-                    res_epochs = self.transforms(self.normalize(res_epochs, attention_mask))
+                    if self.need_normalize is True:
+                        res_epochs = self.normalize(res_epochs, attention_mask)
+                    res_epochs = self.transforms(res_epochs)
                 res_multi_epochs.append(res_epochs)
                 attention_multi_mask.append(attention_mask)
             res_multi_epochs = torch.cat(res_multi_epochs, dim=0)

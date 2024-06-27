@@ -7,7 +7,7 @@ from .SHHS_datamodule import SHHSDataModule
 from .SHHS1_datamodule import SHHS1DataModule
 from .SHHS2_datamodule import SHHS2DataModule
 from .MASS_datamodule import MASSDataModule
-from .EDF_datamodule import EDFDataModule
+from .EDF_datamodule import EDFDataModule, EDFAugDataModule
 from .ISRUC_datamodule import ISRUCDataModule
 _datamodules = {
     'physio_train': physioDataModule,
@@ -24,6 +24,7 @@ _datamodules = {
     'MASS4': MASSDataModule,
     'MASS5': MASSDataModule,
     'EDF': EDFDataModule,
+    'EDF_AUG': EDFAugDataModule,
     'ISRUC_S3': ISRUCDataModule,
     'ISRUC_S1': ISRUCDataModule
 }

@@ -70,14 +70,14 @@ class MASSDataModule(BaseDataModule):
         if stage == 'predict' or stage == 'test':
             if self.setup_flag == 0:
                 self.set_test_dataset(kfold=kfold, expert=expert,
-                                      settings=self.config['data_setting'], **kwargs)
+                                      settings=self.config['data_setting']['MASS'], **kwargs)
                 print('MASS S')
                 self.setup_flag += 1
         else:
             if self.setup_flag == 0:
                 self.set_train_dataset(kfold=kfold, expert=expert,
-                                       settings=self.config['data_setting'], **kwargs)
+                                       settings=self.config['data_setting']['MASS'], **kwargs)
                 self.set_val_dataset(kfold=kfold, expert=expert,
-                                     settings=self.config['data_setting'], **kwargs)
+                                     settings=self.config['data_setting']['MASS'], **kwargs)
                 self.setup_flag += 1
                 print('MASS s')

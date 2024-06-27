@@ -71,10 +71,6 @@ class Model(LightningModule):
         else:
             self.persub = False
 
-        if 'kfold' in kwargs:
-            self.kfold = kwargs['kfold']
-            rank_zero_info(f'model kfold: {self.kfold}')
-
         self.prob = config['sp_prob']
         self.IOU_th = config['IOU_th']
         self.mode = config['mode']
@@ -93,6 +89,7 @@ class Model(LightningModule):
         else:
             dpr = config["drop_path_rate"]
         rank_zero_info(f"dpr_backbone: {dpr}")
+        self.use_triton = config['use_triton']
         self.transformer = multiway_transformer.__dict__[config["model_arch"]](
             patch_size=self.patch_size,
             pretrained=False,
@@ -102,7 +99,8 @@ class Model(LightningModule):
             config=self.hparams.config,
             use_mean_pooling=(self.use_pooling == 'mean'),
             use_relative_pos_emb=self.use_relative_pos_emb,
-            all_num_relative_distance=self.all_num_relative_distance
+            all_num_relative_distance=self.all_num_relative_distance,
+            use_triton=self.use_triton
         )
         self.tfffn_start_layer_index = self.transformer.tfffn_start_layer_index  # 12
         self.num_layers = len(self.transformer.blocks)
@@ -122,6 +120,7 @@ class Model(LightningModule):
                 self.mask_same = False
             if 'mode' in config['visual_setting'].keys():
                 self.visual_mode = config['visual_setting']['mode']
+
             rank_zero_info(f'visual_setting: {self.mask_same}')
 
         self.token_type_embeddings = nn.Embedding(2, self.num_features)
@@ -407,7 +406,9 @@ class Model(LightningModule):
 
         rank_zero_info(self.time_fft_relative_position_index)
 
-    def get_attention_mask(self, attention_mask: torch.Tensor = None, attention_mask_fft: torch.Tensor = None):
+    def get_attention_mask(self, attention_mask: torch.Tensor = None, attention_mask_fft: torch.Tensor = None, manual=False):
+        if manual is True:
+            return attention_mask
         num_patches = self.transformer.num_patches
         c = attention_mask.shape[1]
         if self.transformer.actual_channels is not None:
@@ -924,7 +925,7 @@ class Model(LightningModule):
     def prepare_forward(self):
         pass
 
-    def forward(self, batch, stage) -> Any:
+    def forward(self, batch, stage, manual=False, aug_fft=False) -> Any:
         ret = dict()
         if 1:
             # get the FFT
@@ -944,10 +945,10 @@ class Model(LightningModule):
                     batch['Spindle_label'] = torch.stack(batch['Spindle_label'], dim=0).squeeze(1).squeeze(-1)
                 if self.training and self.mixup_fn is not None:
                     batch['epochs'][0], batch['Stage_label'] = self.mixup_fn(batch['epochs'][0], batch['Stage_label'])
-                epochs_fft, attn_mask_fft = self.transformer.get_fft(batch['epochs'][0], batch['mask'][0])
+                epochs_fft, attn_mask_fft = self.transformer.get_fft(batch['epochs'][0], batch['mask'][0], aug=aug_fft)
                 batch['epochs'] = (batch['epochs'][0], epochs_fft)
                 attention_mask = self.get_attention_mask(batch['mask'][0],
-                                                         attn_mask_fft)  # List[[b, 1], [b, num_patch*c], [b, 1], [b, num_patch*c]]
+                                                         attn_mask_fft, manual=manual)  # List[[b, 1], [b, num_patch*c], [b, 1], [b, num_patch*c]]
                 batch['mask'] = attention_mask
                 # for i in attention_mask:
                 # rank_zero_info(f"{i}.shape: {i.shape}")

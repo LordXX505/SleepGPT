@@ -49,13 +49,13 @@ class ISRUCDataModule(BaseDataModule):
     def setup(self, stage, kfold=None, **kwargs):
         if stage == 'predict' or stage == 'test':
             if self.setup_flag == 0:
-                self.set_test_dataset(kfold=kfold, settings=self.config['data_setting'], **kwargs)
+                self.set_test_dataset(kfold=kfold, settings=self.config['data_setting']['ISRUC'], **kwargs)
                 print('ISRUC_settings s')
                 self.setup_flag += 1
         else:
             if self.setup_flag < 1:
                 print(f"ISRUC data_settings: {self.config['data_setting']}")
-                self.set_train_dataset(kfold=kfold, settings=self.config['data_setting'], **kwargs)
-                self.set_val_dataset(kfold=kfold, settings=self.config['data_setting'], **kwargs)
+                self.set_train_dataset(kfold=kfold, settings=self.config['data_setting']['ISRUC'], **kwargs)
+                self.set_val_dataset(kfold=kfold, settings=self.config['data_setting']['ISRUC'], **kwargs)
                 print('ISRUC_settings s')
                 self.setup_flag += 1

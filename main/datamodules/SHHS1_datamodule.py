@@ -9,6 +9,7 @@ class SHHS1DataModule(BaseDataModule):
 
     @property
     def channels(self):
+
         return [4, 5, 15, 16, 18]
 
     @property
@@ -120,18 +121,18 @@ class SHHS1DataModule(BaseDataModule):
     def setup(self, stage, **kwargs):
         if stage == 'test':
             if self.setup_flag == 0:
-                self.set_test_dataset(settings=self.config['data_setting'], **kwargs)
+                self.set_test_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
                 print('predict SHHS1 s')
                 self.setup_flag += 1
         elif stage == 'validate':
             if self.setup_flag == 0:
-                self.set_val_dataset(settings=self.config['data_setting'], **kwargs)
+                self.set_val_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
                 print('predict SHHS1 s')
                 self.setup_flag += 1
         else:
             if self.setup_flag == 0:
-                self.set_train_dataset(settings=self.config['data_setting'], **kwargs)
-                self.set_test_dataset(settings=self.config['data_setting'], **kwargs)
-                self.set_val_dataset(settings=self.config['data_setting'], **kwargs)
+                self.set_train_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
+                self.set_test_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
+                self.set_val_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
                 self.setup_flag += 1
                 print('SHHS1 s')

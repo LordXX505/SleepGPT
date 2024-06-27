@@ -79,16 +79,14 @@ def main(_config):
             name += '_' + _config['use_fpfn']
         if _config['expert'] is not None:
             name += '_' + _config['expert']
-        # if _config['EDF_Mode'] is not None:
-        #     name += '_' + _config['EDF_Mode']
-        # if _config['EDF_Mode'] is not None:
-        #     name += '_' + _config['EDF_Mode']
+        if _config['EDF_Mode'] is not None:
+            name += '_' + _config['EDF_Mode']
         if version is not None:
             rank_zero_info(f'version: {version}')
             if isinstance(version, int):
-                ckpt_path = os.path.join(_config['kfold_load_path'], f'{name}/{k}_fold/version_{version}')
+                ckpt_path = os.path.join(_config['output_dir'], f'{name}/{k}_fold/version_{version}')
             else:
-                ckpt_path = os.path.join(_config['kfold_load_path'], f'{name}/{k}_fold/version_{version[k]}')
+                ckpt_path = os.path.join(_config['output_dir'], f'{name}/{k}_fold/version_{version[k]}')
             ckpt_path = os.path.join(ckpt_path, 'last.ckpt')
             rank_zero_info(f'ckpt_path: {ckpt_path}')
 

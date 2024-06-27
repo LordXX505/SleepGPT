@@ -9,7 +9,7 @@ import glob
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str,
-                        default="/Volumes/T7 Shield/data/sleep-edf-database-expanded-1.0.0/sleep-cassette",
+                        default="/Volumes/T7/data/sleep-edf-database-expanded-1.0.0/sleep-cassette",
                         help="File path to the Sleep-EDF dataset.")
     parser.add_argument("--output_dir", type=str, default="processed",
                         help="Directory where to save outputs.")

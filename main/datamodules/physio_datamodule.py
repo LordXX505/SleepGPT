@@ -47,12 +47,12 @@ class physioDataModule(BaseDataModule):
     def setup(self, stage, kfold=None, **kwargs):
         if stage == 'predict' or stage=='test':
             if self.setup_flag == 0:
-                self.set_test_dataset(settings=self.config['data_setting'], kfold=kfold, **kwargs)
+                self.set_test_dataset(settings=self.config['data_setting']['Physio'], kfold=kfold, **kwargs)
                 print('physio s')
                 self.setup_flag += 1
         else:
             if self.setup_flag < 1:
-                self.set_train_dataset(settings=self.config['data_setting'], kfold=kfold, **kwargs)
-                self.set_val_dataset(settings=self.config['data_setting'], kfold=kfold, **kwargs)
+                self.set_train_dataset(settings=self.config['data_setting']['Physio'], kfold=kfold, **kwargs)
+                self.set_val_dataset(settings=self.config['data_setting']['Physio'], kfold=kfold, **kwargs)
                 print('physio s')
                 self.setup_flag += 1

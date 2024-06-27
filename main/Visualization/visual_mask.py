@@ -33,6 +33,7 @@ def get_names():
 def main(_config):
     # pre_train = Model_Pre(_config)
     pre_train = Model(_config)
+    pre_train.mask_same = True
     print(_config)
     pl.seed_everything(512)
     dm = MultiDataModule(_config, kfold=_config['kfold'])
@@ -59,10 +60,10 @@ def main(_config):
             # test_list = ['shhs1-202110']
             # if batch['name'] not in test_list:
             #     continue
-            # batch['random_mask'][0][1] = torch.zeros(120)
-            # batch['random_mask'][0][1][:15] = torch.ones(15)
-            # batch['random_mask'][0][1][60:75] = torch.ones(15)
-            # batch['random_mask'][0][1][105:120] = torch.ones(15)
+            batch['random_mask'][0][0] = torch.ones(120)
+            batch['random_mask'][0][0][45:60] = torch.zeros(15)
+            batch['random_mask'][0][0][75:90] = torch.zeros(15)
+            batch['random_mask'][0][0][105:120] = torch.zeros(15)
             # for i in range(8):
             #     batch['random_mask'][0][1][(i*15+10):(i*15+15)] = torch.ones(5)
             fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(30, 32))
@@ -132,6 +133,8 @@ def main(_config):
                 # axes.set_yticks(np.arange(0, 2, 0.1))
                 # axes.set_xticks(np.arange(0, 3000, 200))
                 # axes.grid(True)
+
+            plt.show()
             path = '/'.join(_config['load_path'].split('/')[-4:-2])
             print(f"/home/cuizaixu_lab/huangweixuan/Sleep/result/{path}/{_config['datasets'][_]}")
 

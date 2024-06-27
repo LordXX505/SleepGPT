@@ -119,7 +119,8 @@ def config():
     loss_function = 'l1'
 
     # data settings
-    data_setting = ['SHHS', 'ECG']
+    data_setting = {'SHHS': None, 'Young': None, 'SD': 'AMP', 'Physio': None,
+                    'MASS': None, 'ISRUC': None, 'EDF': None}
 
     resume_during_training = None
 
@@ -148,7 +149,7 @@ def config():
     Lambda = 1.0
     use_cb = False
     gradient_clip_val = None
-    save_top_k = 25
+    save_top_k = 10
     # kfold
     actual_channels = None
     kfold_test = None
@@ -171,11 +172,14 @@ def config():
     EDF_Mode = None
     subset = None
     visual = False
-    visual_setting = {'mask_same': True, 'mode': None}
+    visual_setting = {'mask_same': False, 'mode': None}
     persub = None
     return_alpha = False
     kfold_test = None
     show_transform_param = False
+
+    #triton
+    use_triton = False
 @ex.named_config
 def test():
     data_dir = './data'
@@ -1133,6 +1137,7 @@ def visualization_mask_same():
 def visualization_using_all_fft():
     mask_ratio = [0.5, 0.0]
     visual_setting = {'mask_same': False, 'mode': 'all_fft'}
+
 @ex.named_config
 def visualization_sp():
     mode = "Stagedetection"
@@ -1253,8 +1258,53 @@ def MASS5_datasets():
 def SD_datasets():
     datasets = ['SD']
     data_dir = ["/DATA/data/SD"]
+
+@ex.named_config
+def edf_aug_f3_datasets():
+    datasets = ['EDF']
+    # data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_F3"]
+    data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_F3']
+    data_setting = 'EDF'
+    actual_channels = 'EDF_F3'
+@ex.named_config
+def edf_aug_consecutive_datasets():
+    datasets = ['EDF', 'EDF_AUG']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_consecutive"]
+    # data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_F3_C4']
+    data_setting = 'EDF'
+    actual_channels = 'EDF'
+@ex.named_config
+def edf_aug_file_datasets():
+    datasets = ['EDF']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_file"]
+    # data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_F3_C4']
+    data_setting = 'EDF'
+    actual_channels = 'EDF'
+@ex.named_config
+def edf_aug_f3_c4_datasets():
+    datasets = ['EDF']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_F3_C4"]
+    # data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_F3_C4']
+    data_setting = 'EDF'
+    actual_channels = 'EDF_F3_C4'
+
+@ex.named_config
+def edf_aug_c4_datasets():
+    datasets = ['EDF']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_C4"]
+    # data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_C4']
+    data_setting = 'EDF'
+    actual_channels = 'EDF_C4'
+
 @ex.named_config
 def edf_datasets():
+    datasets = ['EDF']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed"]
+    data_setting = 'EDF'
+
+@ex.named_config
+def local_edf_datasets():
     datasets = ['EDF']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed"]
     data_setting = 'EDF'
@@ -1274,6 +1324,12 @@ def physio_test_datasets():
 def SHHS1_datasets():
     datasets = ['SHHS1']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/shhs_new/shhs_new"]
+    kfold = None
+    data_setting = ['SHHS']
+@ex.named_config
+def SHHS1_WM_datasets():
+    datasets = ['SHHS1']
+    data_dir = ["/lustre/home/2201210064/DATA/data/shhs_new/shhs"]
     kfold = None
     data_setting = ['SHHS']
 @ex.named_config

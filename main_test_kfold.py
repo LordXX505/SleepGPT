@@ -67,7 +67,7 @@ def main(_config):
         name += '_' + _config['EDF_Mode']
     if _config['subset'] is not None:
         name += '_data_' + str(_config['subset'])
-    ckpt_path = os.path.join(_config['kfold_load_path'], f'{name}/{k}_fold/{version}')
+    ckpt_path = os.path.join(_config['output_dir'], f'{name}/fold_{k}/{version}')
     rank_zero_info(f'ckpt_path: {ckpt_path}')
     ckpt_path_list = glob.glob(ckpt_path + '/*')
     ckpt_path_list = sorted(ckpt_path_list, reverse=True)[:10]

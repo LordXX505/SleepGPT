@@ -9,7 +9,7 @@ import glob
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str,
-                        default="/Volumes/T7 Shield/data/sleep-edf-database-expanded-1.0.0/sleep-cassette",
+                        default="/Volumes/T7/data/sleep-edf-database-expanded-1.0.0/sleep-cassette",
                         help="File path to the Sleep-EDF dataset.")
     parser.add_argument("--output_dir", type=str, default="processed",
                         help="Directory where to save outputs.")
@@ -68,14 +68,14 @@ def main():
         res[f'train_{i}'] = {}
         res[f'train_{i}']['names'] = []
         res[f'train_{i}']['nums'] = []
-        for ds_idx in idx_train:
+        for ds_idx in idx_train[7:]:
             for tn_idx in files_dict[ds_idx]:
                 res[f'train_{i}']['names'].append(names[tn_idx])
                 res[f'train_{i}']['nums'].append(nums[tn_idx])
         res[f'val_{i}'] = {}
         res[f'val_{i}']['names'] = []
         res[f'val_{i}']['nums'] = []
-        for ds_idx in idx_split:
+        for ds_idx in idx_train[:7]:
             for tn_idx in files_dict[ds_idx]:
                 res[f'val_{i}']['names'].append(names[tn_idx])
                 res[f'val_{i}']['nums'].append(nums[tn_idx])
@@ -90,7 +90,7 @@ def main():
         print(f'train name : {res[f"train_{i}"]["names"]}')
         print(f'test name : {res[f"test_{i}"]["names"]}')
         print(f'val name : {res[f"val_{i}"]["names"]}')
-    np.save(os.path.join(args.output_dir, f'm_new_split_k_10_no_val'), arr=res, allow_pickle=True)
+    np.save(os.path.join(args.output_dir, f'm_new_split_k_10'), arr=res, allow_pickle=True)
     print(f'len: names: {len(names)}')
 
 if __name__ == '__main__':

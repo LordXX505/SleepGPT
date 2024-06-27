@@ -50,7 +50,11 @@ class SHHSDataset(BaseDatatset):
 
     @property
     def channels(self):
-        return np.array([4, 5, 15, 16, 18])
+        if self.mode == 'large':
+            return np.array([4, 5, 15, 16, 18])
+        else:
+            return np.array([0, 3, 6, 7, 17, 18, 20])
+
 
     def get_name(self, index):
         idx = np.where(self.idx_2_nums <= index)[0][-1]

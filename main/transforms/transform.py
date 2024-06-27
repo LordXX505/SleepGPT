@@ -16,12 +16,20 @@ class FFT_Transform:
         return aug_F
 
     def remove_frequency(self, x, pertub_ratio=0.0):
-        mask = torch.cuda.FloatTensor(x.shape).uniform_() > pertub_ratio  # maskout_ratio are False
+        if torch.cuda.is_available():
+            mask = torch.cuda.FloatTensor(x.shape).uniform_() > pertub_ratio  # maskout_ratio are False
+        else:
+            mask = torch.empty(x.shape, dtype=torch.float32).uniform_() > pertub_ratio  # maskout_ratio are False
         mask = mask.to(x.device)
         return x*mask
 
     def add_frequency(self, x, pertub_ratio=0.0):
-        mask = torch.cuda.FloatTensor(x.shape).uniform_() > (1-pertub_ratio) # only pertub_ratio of all values are True
+        if torch.cuda.is_available():
+            mask = torch.cuda.FloatTensor(x.shape).uniform_() > (
+                        1 - pertub_ratio)  # only pertub_ratio of all values are True
+        else:
+            mask = torch.empty(x.shape, dtype=torch.float32).uniform_() > (
+                        1 - pertub_ratio)
         mask = mask.to(x.device)
         max_amplitude = x.max()
         random_am = torch.rand(mask.shape, device=mask.device)*(max_amplitude*0.1)

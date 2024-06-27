@@ -83,6 +83,7 @@ class DecoderBlock(nn.Module):
         act_layer=nn.GELU,
         norm_layer=nn.LayerNorm,
         use_cls_token=True,
+        use_triton=False
     ):
         super().__init__()
         self.norm1 = norm_layer(dim)
@@ -92,7 +93,8 @@ class DecoderBlock(nn.Module):
             qkv_bias=qkv_bias,
             attn_drop=attn_drop,
             proj_drop=drop,
-            use_relative_pos_emb=False
+            use_relative_pos_emb=False,
+            use_triton=use_triton
         )
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()

@@ -2,7 +2,7 @@ from .SD import SDDataset
 from .physio import physioDataset
 from .Young import YoungDataset
 from .SHHS import SHHSDataset
-from .EDF_dataset import EDfDataset
+from .EDF_dataset import EDFDataset, EDF_Aug_Dataset
 from .MASS_ss_dataset import MASSDataset_SS1
 from .MASS_ss_dataset import MASSDataset_SS2
 from .MASS_ss_dataset import MASSDataset_SS3

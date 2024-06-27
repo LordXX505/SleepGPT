@@ -1,3 +1,4 @@
+import sys
 import time
 
 import torch
@@ -26,11 +27,7 @@ def main(_config):
     pl.seed_everything(_config['seed'])
     print(_config)
     torch.multiprocessing.set_sharing_strategy('file_system')
-    # np.random.seed(SEED)
-    # torch.manual_seed(SEED)
-    # torch.cuda.manual_seed_all(SEED)
     exp_name = f'{_config["exp_name"]}'
-    # model = Mu_Std(_config)
     if _config['mode'] == 'pretrain':
         model = Model_Pre(_config)
     else:
@@ -50,9 +47,8 @@ def main(_config):
         name += '_' + _config['mode']
     if _config['all_time']:
         name += '_all_time_' + _config['use_pooling']
-    if _config["eval"]:
-        name += 'eval'
 
+    rank_zero_info(f'name: {name}')
     logger = pl.loggers.TensorBoardLogger(
         _config["log_dir"],
         name=name,
@@ -77,10 +73,15 @@ def main(_config):
     callbacks = [checkpoint_callback, lr_callback, summary]
     accum_iter = _config['accum_iter']
     max_steps = _config["max_steps"] if _config["max_steps"] is not None else None
-    version = f"version_{_config['kfold_test']}"
-    ckpt_path = os.path.join(_config['kfold_load_path'], f'{name}/{version}')
-    rank_zero_info(f'ckpt_path: {ckpt_path}')
-    ckpt_path_list = glob.glob(ckpt_path + '/*')
+    if _config['kfold_load_path'] is not None:
+        version = f"version_{_config['kfold_test']}"
+
+        ckpt_path = os.path.join(_config['kfold_load_path'], f'{name}/{version}')
+        rank_zero_info(f'ckpt_path: {ckpt_path}')
+        ckpt_path_list = glob.glob(ckpt_path + '/*')
+        rank_zero_info(f'using ckpt_path_list: {ckpt_path_list}')
+    else:
+        ckpt_path_list = [_config['ckpt']]
     if _config['dist_on_itp']:
         distributed_strategy = 'ddp'
     elif _config['deepspeed']:
@@ -126,17 +127,26 @@ def main(_config):
             limit_val_batches=_config['limit_val_batches']
         )
 
-    if _config["fft_only"] is True:
-        for param in model.parameters():
-            param.requires_grad = False
-        for name, param in model.named_parameters():
-            for key in ["fft_proj", "fft_cls_token", "norm2_fft", "mlp_fft", "gamma_2", "token_type_embeddings",
-                        "itc_freq_weak_proj", "itc_freq_strong_proj", "logit_scale", "transformer.norm"]:
-                if key in name:
-                    param.requires_grad = True
+    if _config["all_time"] is True and _config['grad_name'].startswith('partial'):
+        if _config['get_param_method'] == 'layer_decay' or _config['get_param_method'] == 'no_layer_decay':
+            for param in model.parameters():
+                param.requires_grad = False
 
+            grad_name = ["fc_norm", "transformer.norm", "pooler",
+                         "decoder_transformer_block", "stage_pred", "spindle_pred_proj"]
+            if _config['grad_name'].startswith('partial'):
+                for _ in range(int(_config['grad_name'].split('_')[-1]), 12):
+                    grad_name.append(f"transformer.blocks.{_}")
+            if _config['use_pooling'] == 'cls':
+                grad_name.append("cls_token")
+            if _config['use_relative_pos_emb']:
+                grad_name.append("relative_position_bias_table")
+            for name, param in model.named_parameters():
+                for key in grad_name:
+                    if key in name and "pe" not in name:
+                        param.requires_grad = True
         for name, param in model.named_parameters():
-            rank_zero_info("{}\t{}".format(name, param.requires_grad))
+            rank_zero_info("{}\t{}\t{}".format(name, param.requires_grad, param.shape))
     if _config["all_time"] is True:
         # if _config['get_param_method'] == 'layer_decay':
         #     for param in model.parameters():

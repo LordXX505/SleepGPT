@@ -33,6 +33,7 @@ class MultiDataModule(LightningDataModule):
         self.patch_size = _config['patch_size']
         self.subest = _config['subset']
         self.show_transform_param = _config['show_transform_param']
+        self.mode = _config['model_arch'].split('_')[1]
 
     def prepare_data(self) -> None:
         for dm in self.dms:
@@ -45,6 +46,7 @@ class MultiDataModule(LightningDataModule):
                 config_dict['kfold'] = self.kfold
             if self.expert is not None:
                 config_dict['expert'] = self.expert
+            config_dict['mode'] = self.mode
             dm.setup(stage, **config_dict)
         if stage == 'fit':
             for i in range(len(self.dms)):

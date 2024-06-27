@@ -52,7 +52,10 @@ class physioDataset(BaseDatatset):
 
     @property
     def channels(self):
-        return np.array([4, 5, 15, 16, 18, 22, 23, 38, 39])
+        if self.mode == 'large':
+            return np.array([4, 5, 15, 16, 18, 22, 23, 38, 39])
+        else:
+            return np.array([0, 3, 6, 7, 17, 18, 20, 24, 25, 40, 41])
 
     def get_name(self, index):
         # print(f'idx_2_nums : {self.idx_2_nums}')

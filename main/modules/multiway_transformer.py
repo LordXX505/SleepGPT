@@ -5,7 +5,7 @@ from functools import partial
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from visualizer import get_local
+# from visualizer import get_local
 
 from functools import partial
 
@@ -14,6 +14,7 @@ from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from timm.models import register_model
 from pytorch_lightning.utilities.rank_zero import rank_zero_info
 from main.transforms import FFT_Transform
+from .triton_transformer import layernorm, softmax
 import pynvml
 
 
@@ -63,6 +64,7 @@ class Attention(nn.Module):
             seq_len=15,
             use_relative_pos_emb=True,
             all_num_relative_distance=-1,
+            use_triton=False
     ):
         super().__init__()
         self.num_heads = num_heads
@@ -77,7 +79,7 @@ class Attention(nn.Module):
         else:
             self.q_bias = None
             self.v_bias = None
-
+        self.use_triton = use_triton
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -98,7 +100,7 @@ class Attention(nn.Module):
         all_relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, x, y
         return all_relative_position_bias
 
-    @get_local('attn')
+    # @get_local('attn')
     def forward(self, x, mask=None, relative_position_bias=None, relative_position_index=None):
         B, N, C = x.shape
         # print(x.shape)
@@ -160,7 +162,8 @@ class Attention(nn.Module):
         # print("Memory Total: ", meminfo.total/unit)
         # print("Memory Free: ", meminfo.free/unit)
         # print("Memory Used: ", meminfo.used/unit)
-        attn = attn.softmax(dim=-1).type_as(x)
+        attn = softmax(attn, causal=False, use_triton=self.use_triton).type_as(x)
+        # attn = attn.softmax(dim=-1).type_as(x)
         # print('softmaxattn:', attn)
         attn = self.attn_drop(attn)
 
@@ -200,6 +203,7 @@ class Block(nn.Module):
             use_relative_pos_emb=True,
             all_num_relative_distance=-1,
             use_cb=False,
+            use_triton=False
     ):
         super().__init__()
         self.norm1 = norm_layer(dim)
@@ -213,6 +217,7 @@ class Block(nn.Module):
             seq_len=max_time_len,
             use_relative_pos_emb=use_relative_pos_emb,
             all_num_relative_distance=all_num_relative_distance,
+            use_triton=use_triton
         )
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -445,7 +450,8 @@ class MultiWayTransformer(nn.Module):
             use_mean_pooling=False,
             config=None,
             use_relative_pos_emb=False,
-            all_num_relative_distance=-1
+            all_num_relative_distance=-1,
+            use_triton=False,
     ):
         """
         Args:
@@ -541,7 +547,6 @@ class MultiWayTransformer(nn.Module):
         max_time_len = len(self.actual_channels) if self.actual_channels is not None else self.max_channels
         self.max_time_len = self.num_patches * max_time_len
         rank_zero_info(f'choose max_time_len: {max_time_len}, self.max_time_len: {self.max_time_len}')
-
         self.blocks = nn.ModuleList(
             [
                 Block(
@@ -563,7 +568,8 @@ class MultiWayTransformer(nn.Module):
                     itm=config['loss_names']['itm'] > 0,
                     use_cb=config['use_cb'],
                     use_relative_pos_emb=self.use_relative_pos_emb,
-                    all_num_relative_distance=all_num_relative_distance
+                    all_num_relative_distance=all_num_relative_distance,
+                    use_triton=use_triton
                 )
                 for i in range(depth)
             ]
@@ -600,14 +606,25 @@ class MultiWayTransformer(nn.Module):
 
     def get_actual_channels(self, actual_channels):
         all_c = np.array(["C3", "C4", "EMG", "EOG", "F3", "Fpz", "O1", "Pz"])
-        if actual_channels == 'shhs':
+        if actual_channels is None:
+            self.actual_channels = None
+        elif actual_channels == 'shhs':
             self.actual_channels = torch.tensor(torch.arange(4))
         elif actual_channels == 'physio':
             self.actual_channels = torch.tensor([0, 1, 2, 3, 4, 6])
         elif actual_channels == 'MASS_SP':
             self.actual_channels = torch.tensor([0])
-        elif actual_channels == 'EDF':
+        elif 'EDF' in actual_channels:
             self.actual_channels = torch.tensor([3, 5, 7])
+            edf_aug = actual_channels.split('_')
+            # print(f"edf_aug: {edf_aug}")
+            if len(edf_aug) > 1:
+                for aug_channel in edf_aug[1:]:
+                    if aug_channel in all_c:
+                        idx = torch.from_numpy(np.where(aug_channel == all_c)[0])
+                        self.actual_channels = torch.cat([self.actual_channels, idx])
+                sorted_tensor, sorted_indices = torch.sort(self.actual_channels)
+                self.actual_channels = torch.unique(sorted_tensor)
         elif actual_channels == 'MASS_All':
             self.actual_channels = torch.tensor([0, 1, 2, 3, 6])
         elif actual_channels == 'ISRUC_S3' or actual_channels == 'ISRUC_S1':
@@ -615,8 +632,7 @@ class MultiWayTransformer(nn.Module):
         elif actual_channels in all_c:
             self.actual_channels = torch.from_numpy(np.where(actual_channels == all_c)[0])
         else:
-            self.actual_channels = None
-
+            raise NotImplementedError
         rank_zero_info(f'************actual_channels : {self.actual_channels}')
 
     def random_masking2(self, x, mask_ratio, attn_mask, mask_w):
@@ -903,3 +919,4 @@ def backbone_base_plus_patch200(pretrained=False, **kwargs):
 backbone_base_patch200 = backbone_base_patch200
 backbone_large_patch200 = backbone_large_patch200
 backbone_base_plus_patch200 = backbone_base_plus_patch200
+

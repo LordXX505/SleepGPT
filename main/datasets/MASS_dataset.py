@@ -54,8 +54,10 @@ class MASSDataset(BaseDatatset):
 
     @property
     def channels(self):
-        return np.array([4, 5, 16, 18, 22, 36, 38, 52])
-    # np.array([4, 5, 16, 18, 22, 36, 38, 52]) for all pertrain [C3, C4, EMG, EOG, F3, Fpz, O1, Pz]
+        if self.mode == 'large':
+            return np.array([4, 5, 16, 18, 22, 36, 38, 52])
+        else:
+            return np.array([0, 3, 6, 7, 17, 18, 20, 24, 38, 40, 54])
 
     def get_name(self, index):
         # print(f'idx_2_nums : {self.idx_2_nums}')

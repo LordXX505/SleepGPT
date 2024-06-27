@@ -37,14 +37,14 @@ class SDDataModule(BaseDataModule):
     def dataset_name(self):
         return 'SD'
 
-    def setup(self, stage, **kwargs):
+    def setup(self, stage, kfold=None, **kwargs):
         if stage == 'test':
             if self.setup_flag == 0:
-                self.set_test_dataset(**kwargs)
+                self.set_test_dataset(settings=self.config['data_setting']['SD'], kfold=kfold, **kwargs)
                 print('SD S')
                 self.setup_flag += 1
         else:
             if self.setup_flag == 0:
-                self.set_train_dataset(**kwargs)
+                self.set_train_dataset(settings=self.config['data_setting']['SD'], kfold=kfold, **kwargs)
                 self.setup_flag += 1
                 print('SD s')
