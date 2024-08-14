@@ -126,7 +126,7 @@ class PostProcess(nn.Module):
         # return results
 
 
-class Cross_Attn_Spindle_Model(nn.Module):
+class Cross_Attn_Event_Model(nn.Module):
     def __init__(self,
                  qdim,
                  kvdim,

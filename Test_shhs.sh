@@ -2,13 +2,13 @@
 
 # SLURM SUBMIT SCRIPT
 #SBATCH --nodes=1             # This needs to match Trainer(num_nodes=...)
-#SBATCH --gpus-per-node=1     # This needs to match Trainer(devices=...)
-#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=2    # This needs to match Trainer(devices=...)
+#SBATCH --ntasks-per-node=2
 #SBATCH --time=5-00:00:00
 #SBATCH --signal=SIGUSR1@90
 #SBATCH --cpus-per-task=9
 #SBATCH --qos=high
-#SBATCH --job-name=Test_mass_stage
+#SBATCH --job-name=Test_shhs
 #SBATCH --partition=q_ai4
 #SBATCH --output=/home/cuizaixu_lab/huangweixuan/DATA/temp_log/%j.out
 
@@ -25,9 +25,8 @@ ulimit -n 4096
 #load_path=/ibmgpfs/cuizaixu_lab/huangweixuan/data/checkpoint/Finetune_mass_all_cosine_backbone_large_patch200_adamw_Finetune_mass_all_all_timeswin/0_fold/version_1/last.ckpt
 kfold_load_path=/home/cuizaixu_lab/huangweixuan/data/checkpoint
 
-
 srun python3 main.py with finetune_shhs1  SHHS1_datasets   \
-  num_gpus=1 num_nodes=1 num_workers=9 batch_size=64 model_arch=backbone_large_patch200  lr_mult=20 \
+  num_gpus=2 num_nodes=1 num_workers=18 batch_size=64 model_arch=backbone_large_patch200  lr_mult=20 \
   warmup_lr=0 val_check_interval=0.5 check_val_every_n_epoch=1 limit_train_batches=1.0 max_steps=-1 all_time=True time_size=20 decoder_features=768 pool=None \
   lr=1e-3 min_lr=0 random_choose_channels=8 max_epoch=50 lr_policy=cosine loss_function='l1' drop_path_rate=0.5 warmup_steps=0.1 split_len=20 \
   kfold_load_path=$kfold_load_path \

@@ -14,10 +14,9 @@ class SDDataModule(BaseDataModule):
     @property
     def column_names(self):
         if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['data_setting']:
-            return ['x', 'Stage_label']
+            return ['signal', 'stage', 'good_channels']
         else:
-            return ['x']
-
+            return ['signal', 'good_channels']
     @property
     def stage(self):
         if self.config['mode'] == 'pretrain' or 'visualization' in self.config['data_setting']:

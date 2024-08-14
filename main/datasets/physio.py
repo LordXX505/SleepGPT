@@ -9,8 +9,9 @@ import pandas as pd
 from PIL import Image
 from .base_dataset import BaseDatatset
 
+from .new_base_dataset import Aug_BaseDataset
 
-class physioDataset(BaseDatatset):
+class physioDataset(Aug_BaseDataset):
 
     """This is a dataset for physio 2018"""
     split = 'train'
@@ -27,8 +28,9 @@ class physioDataset(BaseDatatset):
         assert split in ['train', 'val', 'test']
         k = kwargs['kfold']
         if k is None:
-            names = np.load(os.path.join(kwargs['data_dir'], 'Physio.npy'), allow_pickle=True)
-            nums = None
+            items = np.load(os.path.join(kwargs['data_dir'], 'train.npy'), allow_pickle=True).item()
+            names =items['names']
+            nums = items['nums']
         else:
             if 'file_name' in kwargs:
                 file_name = kwargs['file_name']

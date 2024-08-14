@@ -38,7 +38,7 @@ def main(_config):
     pre_train = Model(_config)
     # pre_train.mask_same = True
     print(_config)
-    pl.seed_everything(512)
+    pl.seed_everything(519)
     dm = MultiDataModule(_config, kfold=0)
     dm.setup(stage='test')
     # pre_train.eval()
@@ -49,10 +49,11 @@ def main(_config):
     for _, _dm in enumerate(dm.dms):
         n = len(_dm.test_dataset)
         idx = np.arange(n)
-        np.random.seed(2024)
+        np.random.seed(505)
         np.random.shuffle(idx)
         for id in idx:
             batch = _dm.test_dataset[id]
+
             if cnt > 20:
                 sys.exit(0)
             else:
@@ -62,7 +63,12 @@ def main(_config):
             # if batch['name'] not in test_list:
             #     continue
             batch = dm.collate([batch])
-            fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(30, 32))
+            batch['random_mask'][0][0] = torch.zeros(120)
+            batch['random_mask'][0][0][60:75] = torch.ones(15)
+            batch['random_mask'][0][0][75:90] = torch.ones(15)
+
+            batch['random_mask'][0][0][105:120] = torch.ones(15)
+            fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(32, 20))
             fig.suptitle('Masked RandomPlot')
             color = get_param(c)
             pre_train.set_task()
@@ -73,11 +79,11 @@ def main(_config):
             loss2 = pre_train.forward_masked_loss_2D_channel(res['cls_feats_fft'], epochs_fft, res['fft_mask_patch'])
             idx = torch.where(loss > 100)
             print(f'loss: {loss} loss2: {loss2}')
+            loss = torch.where(torch.isnan(loss), 0, loss)
             patch_epochs = pre_train.patchify(epochs)
             patch_epochs_fft = pre_train.patchify_2D(epochs_fft)
             mask = res['time_mask_patch'].bool()
             mask_fft = res['fft_mask_patch'].bool()
-
             patch_epochs_mask = patch_epochs.masked_fill(mask[:, :, None], np.nan)
             patch_epochs_mask2 = patch_epochs_fft.masked_fill(mask_fft[:, :, None], np.nan)
             patch_epochs_mask = pre_train.unpatchify(patch_epochs_mask)[0]
@@ -91,7 +97,7 @@ def main(_config):
             names = get_names()
             for i, channels in enumerate(range(len(patch_epochs_mask))):
                 axes = Axes[i][0]
-                print(patch_epochs_mask[i])
+                # print(patch_epochs_mask[i])
                 axes.plot(range(3000), patch_epochs_mask[i][:3000].detach().numpy(), color[-2])
                 # axes.grid(True)
                 axes.set_title(names[i] + ' ' + format(loss[0][i].item(), '.3f'))
@@ -106,21 +112,26 @@ def main(_config):
                 # axes.set_yticks(np.arange(0, 2, 0.1))
                 # axes.set_xticks(np.arange(0, 3000, 200))
                 # axes.grid(True)
+            # print(f'batch: {batch}')
+            batch_names = _dm.test_dataset.names[id].split('/')[-2:]
+            batch_names[1] = batch_names[1].split('.')[0]
+            mask_ratio = _config['mask_ratio'][0]
             path = '/'.join(_config['load_path'].split('/')[-4:-2])
-            print(f"./result/{path}/{_config['datasets'][_]}")
-            os.makedirs(f"./result/{path}/{_config['datasets'][_]}", exist_ok=True)
-            plt.savefig(f"./result/{path}/{_config['datasets'][_]}/predict_{id}.svg", format='svg')
-
+            os.makedirs(f"./result/{path}/{_config['datasets'][_]}/{_config['mask_strategies']}/{mask_ratio}/{batch_names[0]}", exist_ok=True)
+            print(f"./result/{path}/{_config['datasets'][_]}/{_config['mask_strategies']}/{mask_ratio}/{batch_names[0]}")
+            plt.savefig(f"./result/{path}/{_config['datasets'][_]}/{_config['mask_strategies']}/{mask_ratio}/{batch_names[0]}/predict_{batch_names[1]}_{loss.mean()}.svg", format='svg')
             plt.figure()
-            fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(30, 32))
-            for i, channels in enumerate(range(len(patch_epochs_mask))):
-                axes = Axes[i][0]
-                axes.imshow(masked_fft[i].detach().numpy(), aspect='auto', origin='lower')
-                axes.set_title(names[i] + '_' + str(loss2.item()))
-                axes = Axes[i][1]
-                axes.set_title(names[i])
-                axes.imshow(patch_epochs_fft[i].detach().numpy(), aspect='auto', origin='lower')
-            print('save fft png')
-            os.makedirs(f"./result/{path}/{_config['datasets'][_]}", exist_ok=True)
-            plt.savefig(f"./result/{path}/{_config['datasets'][_]}/predict_fft_nu_{id}.svg", format='svg')
-            plt.close()
+            # fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(30, 32))
+            # for i, channels in enumerate(range(len(patch_epochs_mask))):
+            #     axes = Axes[i][0]
+            #     axes.imshow(masked_fft[i].detach().numpy(), aspect='auto', origin='lower')
+            #     axes.set_title(names[i] + '_' + str(loss2.item()))
+            #     axes = Axes[i][1]
+            #     axes.set_title(names[i])
+            #     axes.imshow(patch_epochs_fft[i].detach().numpy(), aspect='auto', origin='lower')
+            # print('save fft png')
+            # batch_names = _dm.test_dataset.names[id].split('/')[-2:]
+            # batch_names[1] = batch_names[1].split('.')[0]
+            # os.makedirs(f"./result/{path}/{_config['datasets'][_]}/{batch_names[0]}", exist_ok=True)
+            # plt.savefig(f"./result/{path}/{_config['datasets'][_]}/{batch['names']}/predict_fft_nu_{id}.svg", format='svg')
+            plt.close('all')

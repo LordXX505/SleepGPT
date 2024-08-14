@@ -8,7 +8,8 @@ import os
 import pandas as pd
 from PIL import Image
 from .base_dataset import BaseDatatset
-
+import glob
+from .new_base_dataset import Aug_BaseDataset
 
 class YoungDataset(BaseDatatset):
     def __init__(self, split="", *args, **kwargs):
@@ -28,12 +29,24 @@ class YoungDataset(BaseDatatset):
         assert split in ['val', 'test']
         self.split = split
         if split == 'val':
-            names = np.load(os.path.join(kwargs['data_dir'], 'val.npy'), allow_pickle=True)
+            items = np.load(os.path.join(kwargs['data_dir'], 'val.npy'), allow_pickle=True)
         elif split == 'test':
-            names = np.load(os.path.join(kwargs['data_dir'], 'test.npy'), allow_pickle=True)
+            items = np.load(os.path.join(kwargs['data_dir'], 'test.npy'), allow_pickle=True)
         kwargs.pop('kfold', None)
+        if isinstance(items, np.ndarray):
+            names = items
+            nums = None
+        else:
+            if items.dtype == np.dtype('O'):
+                names = items.item()['names']
+                nums = items.item()['nums']
+            else:
+                names = items['names']
+                nums = items['nums']
 
-        super().__init__(names=names, split=split, concatenate=True, nums=None, *args, **kwargs)
+        kwargs.pop('kfold', None)
+        kwargs.pop('expert', None)
+        super().__init__(names=names, split=split, nums=nums, concatenate=True, *args, **kwargs)
 
     def __getitem__(self, index):
         suite = self.get_suite(index)

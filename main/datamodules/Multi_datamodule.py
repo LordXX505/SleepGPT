@@ -4,7 +4,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import ConcatDataset
 from . import _datamodules
 import numpy as np
-
+from .sampler import BalancedDistributedSampler
 class MultiDataModule(LightningDataModule):
 
     def __init__(self, _config, kfold=None):
@@ -21,11 +21,12 @@ class MultiDataModule(LightningDataModule):
         super().__init__()
         self.dm_keys = datamodule_keys
         self.dm_dicts = {key: _datamodules[key](_config, idx) for idx, key in enumerate(datamodule_keys)}
-        # print('dm_dicts: ', len(self.dm_dicts))
+        # print('dm_dicts: ', self.dm_dicts)
         self.dms = [v for k, v in self.dm_dicts.items()]
         self.batch_size = self.dms[0].batch_size
         self.num_workers = self.dms[0].num_workers
-
+        self.need_BDS = 'Apneadetection' in _config['mode']
+        print(f'need_BDS: {self.need_BDS}')
         self.dist = _config['dist_on_itp'] is True and (_config['device'] == 'cuda')
         self.pretrain = _config['mode'] == 'pretrain'
         self.kfold = kfold
@@ -34,6 +35,9 @@ class MultiDataModule(LightningDataModule):
         self.subest = _config['subset']
         self.show_transform_param = _config['show_transform_param']
         self.mode = _config['model_arch'].split('_')[1]
+        self.mask_strategies = _config['mask_strategies']
+        self.negtive_index = None
+        self.positive_index = None
 
     def prepare_data(self) -> None:
         for dm in self.dms:
@@ -41,18 +45,27 @@ class MultiDataModule(LightningDataModule):
 
     def setup(self, stage: str) -> None:
         for dm in self.dms:
-            config_dict = {'patch_size': self.patch_size, 'show_transform_param': self.show_transform_param}
+            config_dict = {'show_transform_param': self.show_transform_param}
             if self.kfold is not None:
                 config_dict['kfold'] = self.kfold
             if self.expert is not None:
                 config_dict['expert'] = self.expert
             config_dict['mode'] = self.mode
+            if self.mask_strategies is not None:
+                config_dict['mask_strategies'] = self.mask_strategies
+
+            print(f'datamodule config_dict: {config_dict}')
             dm.setup(stage, **config_dict)
+            if self.need_BDS:
+                self.positive_index = dm.positive_index
+                self.negtive_index = dm.negtive_index
+                self.collate = dm.collate
         if stage == 'fit':
-            for i in range(len(self.dms)):
-                if hasattr(self.dms[i], 'train_dataset') and self.dms[i].train_dataset is not None:
-                    self.collate = self.dms[i].train_dataset.collate
-                    break
+            if self.collate is None:
+                for i in range(len(self.dms)):
+                    if hasattr(self.dms[i], 'train_dataset') and self.dms[i].train_dataset is not None:
+                        self.collate = self.dms[i].train_dataset.collate
+                        break
             for i in range(len(self.dms)):
                 if hasattr(self.dms[i], 'val_dataset') and self.dms[i].val_dataset is not None:
                     self.collate_val = self.dms[i].val_dataset.collate
@@ -116,7 +129,14 @@ class MultiDataModule(LightningDataModule):
             elif stage == 'validate':
                 self.val_sampler = DistributedSampler(self.val_dataset, shuffle=False, )
             else:
-                self.train_sampler = DistributedSampler(self.train_dataset, shuffle=True)
+                if self.need_BDS:
+                    positive_indices = np.arange(self.positive_index)
+                    negative_indices = np.arange(self.positive_index, self.positive_index+self.negtive_index)
+                    self.train_sampler = BalancedDistributedSampler(self.train_dataset, positive_indices=positive_indices,
+                                                                    negative_indices=negative_indices, batch_size=self.batch_size,
+                                                                    shuffle=True)
+                else:
+                    self.train_sampler = DistributedSampler(self.train_dataset, shuffle=True)
                 # self.train_sampler = None
                 if not self.pretrain:
                     self.val_sampler = DistributedSampler(self.val_dataset, shuffle=False,)

@@ -19,10 +19,10 @@ class physioDataModule(BaseDataModule):
 
     @property
     def column_names(self):
-        if self.config['mode'] != 'pretrain':
-            return ['x', 'Stage_label']
+        if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['data_setting']:
+            return ['signal', 'stage']
         else:
-            return ['x']
+            return ['signal']
 
     @property
     def stage(self):

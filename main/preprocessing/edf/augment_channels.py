@@ -119,6 +119,9 @@ def main(_config):
     resume_flag = False
     for edf_items_index, sub in enumerate(edf_items[(partition_idx*partition):((partition_idx+1)*partition)]):
         if os.path.isdir(sub):
+            # if torch.rand(1)<0.5:
+            #     print(f'edf_items skipping: {sub}')
+            #     continue
             base_name = os.path.basename(sub)
             # if base_name == 'SC4191E0':
             #     resume_flag = True
@@ -147,67 +150,72 @@ def main(_config):
                 batch_cuda = move_to_device(batch_cpu, device)
 
                 batch = clone_batch(batch_cuda)
-                print('augment F3 channel')
-                # F3, index=4, patch_position = 4*15:5*15
+                print('augment channels')
+
                 pre_train.first_log_gpu = True
+                # batch['mask'][0][:, 2] = 0
+                batch['mask'][0][:, :2] = 1
                 batch['mask'][0][:, 2] = 0
                 batch['mask'][0][:, 4] = 1
+                batch['mask'][0][:, 6] = 1
                 batch['random_mask'][0][:] = torch.zeros(120)
+                batch['random_mask'][0][:, 0:30] = torch.ones(30)
                 batch['random_mask'][0][:, 60:75] = torch.ones(15)
-                    # batch['random_mask'][0][0][75:90] = torch.ones(15)
+                batch['random_mask'][0][:, 90:105] = torch.ones(15)
+
                 with torch.no_grad():
                     res = pre_train(batch, stage='test')
                 generate_epoch_f3 = res['cls_feats'] * res['time_mask_patch'].unsqueeze(-1)
                 generate_epoch_f3 = pre_train.unpatchify(generate_epoch_f3).detach().clone()
                 origin_f3 = batch['epochs'][0].detach().clone()
 
+                # # c4, index=1, patch_position = 1*15:2*15
+                # print('augment c4 channel')
+                # batch = clone_batch(batch_cuda)
 
-                # c4, index=1, patch_position = 1*15:2*15
-                print('augment c4 channel')
-                batch = clone_batch(batch_cuda)
-
-                batch['mask'][0][:, 2] = 0
-                batch['mask'][0][:, 1] = 1
-                batch['random_mask'][0][:] = torch.zeros(120)
-                batch['random_mask'][0][:, 15:30] = torch.ones(15)
-                # batch['random_mask'][0][0][75:90] = torch.ones(15)
-                with torch.no_grad():
-                    res = pre_train(batch, stage='test')
-                generate_epoch_c4 = res['cls_feats'] * res['time_mask_patch'].unsqueeze(-1)
-                generate_epoch_c4 = pre_train.unpatchify(generate_epoch_c4).detach().clone()
-                origin_c4 = batch['epochs'][0].detach().clone()
-
-                # c4 and f3
-                print('augment c4 and f3 channel')
-                batch = clone_batch(batch_cuda)
-
-                batch['mask'][0][:, 2] = 0
-                batch['mask'][0][:, 1] = 1
-                batch['mask'][0][:, 4] = 1
-                batch['random_mask'][0][:] = torch.zeros(120)
-                batch['random_mask'][0][:, 15:30] = torch.ones(15)
-                batch['random_mask'][0][:, 60:75] = torch.ones(15)
-                with torch.no_grad():
-                    res = pre_train(batch, stage='test')
-                generate_epoch_f3_c4 = res['cls_feats'] * res['time_mask_patch'].unsqueeze(-1)
-                generate_epoch_f3_c4 = pre_train.unpatchify(generate_epoch_f3_c4).detach().clone()
-                origin_f3_c4 = batch['epochs'][0].detach().clone()
+                # batch['mask'][0][:, 2] = 0
+                # batch['mask'][0][:, 1] = 1
+                # batch['random_mask'][0][:] = torch.zeros(120)
+                # batch['random_mask'][0][:, 15:30] = torch.ones(15)
+                # # batch['random_mask'][0][0][75:90] = torch.ones(15)
+                # with torch.no_grad():
+                #     res = pre_train(batch, stage='test')
+                # generate_epoch_c4 = res['cls_feats'] * res['time_mask_patch'].unsqueeze(-1)
+                # generate_epoch_c4 = pre_train.unpatchify(generate_epoch_c4).detach().clone()
+                # origin_c4 = batch['epochs'][0].detach().clone()
+                #
+                # # c4 and f3
+                # print('augment c4 and f3 channel')
+                # batch = clone_batch(batch_cuda)
+                #
+                # batch['mask'][0][:, 2] = 0
+                # batch['mask'][0][:, 1] = 1
+                # batch['mask'][0][:, 4] = 1
+                # batch['random_mask'][0][:] = torch.zeros(120)
+                # batch['random_mask'][0][:, 15:30] = torch.ones(15)
+                # batch['random_mask'][0][:, 60:75] = torch.ones(15)
+                # with torch.no_grad():
+                #     res = pre_train(batch, stage='test')
+                # generate_epoch_f3_c4 = res['cls_feats'] * res['time_mask_patch'].unsqueeze(-1)
+                # generate_epoch_f3_c4 = pre_train.unpatchify(generate_epoch_f3_c4).detach().clone()
+                # origin_f3_c4 = batch['epochs'][0].detach().clone()
 
                 for sub_arr_index, sub_arr in enumerate(sub_arr_items[start_index:start_index + batch_size]):
-                    random_plot_regenerate(origin_f3[sub_arr_index].detach().cpu().numpy(), generate_epoch_f3[sub_arr_index].detach().cpu().numpy(), sub=base_name, cnt=sub_arr_index, mode='f3')
+                    random_plot_regenerate(origin_f3[sub_arr_index].detach().cpu().numpy(), generate_epoch_f3[sub_arr_index].detach().cpu().numpy(), sub=base_name, cnt=sub_arr_index, mode='Aug_All')
                     save_epoch(generate_epoch_f3[sub_arr_index].detach().cpu().numpy()+origin_f3[sub_arr_index].detach().cpu().numpy(), label_list[sub_arr_index].detach().cpu().numpy()[0],
-                               filename=os.path.join('/', *path.split('/')[:-1], 'Aug_F3'), name=base_name
+                               filename=os.path.join('/', *path.split('/')[:-1], 'Aug_All'), name=base_name
                                , cnt=sub_arr_index+start_index)
 
-                    random_plot_regenerate(origin_c4[sub_arr_index].detach().cpu().numpy(), generate_epoch_c4[sub_arr_index].detach().cpu().numpy(), sub=base_name, cnt=sub_arr_index,
-                                           mode='C4')
-                    save_epoch(generate_epoch_c4[sub_arr_index].detach().cpu().numpy()+origin_c4[sub_arr_index].detach().cpu().numpy(), label_list[sub_arr_index].detach().numpy()[0],
-                               filename=os.path.join('/', *path.split('/')[:-1], 'Aug_C4'), name=base_name
-                               , cnt=sub_arr_index + start_index)
+                    # random_plot_regenerate(origin_c4[sub_arr_index].detach().cpu().numpy(), generate_epoch_c4[sub_arr_index].detach().cpu().numpy(), sub=base_name, cnt=sub_arr_index,
+                    #                        mode='C4')
+                    # save_epoch(generate_epoch_c4[sub_arr_index].detach().cpu().numpy()+origin_c4[sub_arr_index].detach().cpu().numpy(), label_list[sub_arr_index].detach().numpy()[0],
+                    #            filename=os.path.join('/', *path.split('/')[:-1], 'Aug_C4'), name=base_name
+                    #            , cnt=sub_arr_index + start_index)
+                    #
+                    # random_plot_regenerate(origin_f3_c4[sub_arr_index].detach().cpu().numpy(), generate_epoch_f3_c4[sub_arr_index].detach().cpu().numpy(), sub=base_name, cnt=sub_arr_index,
+                    #                        mode='C4andF3')
+                    # save_epoch(generate_epoch_f3_c4[sub_arr_index].detach().cpu().numpy()+origin_f3_c4[sub_arr_index].cpu().detach().numpy(), label_list[sub_arr_index].detach().numpy()[0],
+                    #            filename=os.path.join('/', *path.split('/')[:-1], 'Aug_F3_C4'), name=base_name
+                    #            , cnt=sub_arr_index + start_index)
 
-                    random_plot_regenerate(origin_f3_c4[sub_arr_index].detach().cpu().numpy(), generate_epoch_f3_c4[sub_arr_index].detach().cpu().numpy(), sub=base_name, cnt=sub_arr_index,
-                                           mode='C4andF3')
-                    save_epoch(generate_epoch_f3_c4[sub_arr_index].detach().cpu().numpy()+origin_f3_c4[sub_arr_index].cpu().detach().numpy(), label_list[sub_arr_index].detach().numpy()[0],
-                               filename=os.path.join('/', *path.split('/')[:-1], 'Aug_F3_C4'), name=base_name
-                               , cnt=sub_arr_index + start_index)
     print('------------------all finished------------------')

@@ -17,11 +17,13 @@ from . import objectives
 from . import multiway_transformer
 from lightning import LightningModule
 import pynvml
+from main.transforms import keys_to_transforms, normalize
 
 
 class Model_Pre(LightningModule):
     def __init__(self, config):
         super().__init__()
+        self.visual = config['visual']
         self.first_loss_step = False
 
         self.save_hyperparameters()
@@ -34,6 +36,8 @@ class Model_Pre(LightningModule):
         # mask_ex[:, :50] = 0
         # self.example_input_array = {"batch": {"epochs": torch.Tensor(32, 57, 3000), 'mask': mask_ex}}
         self.mode = config['mode']
+        self.keys_to_transforms = keys_to_transforms([[0, 2, 3]],
+                                                     ['full'], show_param=False)
         self.patch_size = config['patch_size']
         self.transformer = multiway_transformer.__dict__[config["model_arch"]](
             patch_size=self.patch_size,
@@ -513,6 +517,19 @@ class Model_Pre(LightningModule):
         }
         return ret
 
+    def normalzied_local(self, epochs, stage):
+
+        assert torch.isnan(epochs).sum() == 0
+        max_val, _ = torch.max(epochs, keepdim=True, dim=-1)
+        min_val, _ = torch.min(epochs, keepdim=True, dim=-1)
+        denominator = 1e-6 + max_val - min_val
+        denominator = torch.where(denominator == 0, torch.tensor(1e-6), denominator)  # 防止分母为零
+        result = (epochs - min_val + 1e-6) / denominator
+        if stage!='test':
+            result = self.keys_to_transforms(result)
+        return result
+        # return (epochs-torch.mean(epochs, dim=-1, keepdim=True))/torch.std(epochs, dim=-1, keepdim=True)
+
     def patchify_2D(self, labels):
         """
         Args:
@@ -684,6 +701,8 @@ class Model_Pre(LightningModule):
                         epochs_fft, attn_mask_fft = self.transformer.get_fft(batch['epochs'][0], batch['mask'][0],
                                                                              aug=aug_fft)
 
+                        epochs = batch['epochs'][0]
+                        batch['epochs'][0] = self.normalzied_local(epochs, stage=stage)
                         batch['epochs'] = (batch['epochs'][0], epochs_fft)
                         if not self.first_log_gpu:
                             print(batch['mask'][0].shape)

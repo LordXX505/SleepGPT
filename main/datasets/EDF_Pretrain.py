@@ -10,7 +10,8 @@ from PIL import Image
 from .base_dataset import BaseDatatset
 
 
-class EDf_Pre_Dataset(BaseDatatset):
+from .new_base_dataset import Aug_BaseDataset
+class EDf_Pre_Dataset(Aug_BaseDataset):
 
     split = 'train'
     transform_keys = ['full']

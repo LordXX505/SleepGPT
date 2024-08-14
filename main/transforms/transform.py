@@ -84,16 +84,14 @@ class Multi_Transform:
 
 class normalize:
     def __init__(self):
-        # self.mu = torch.tensor([-6.8460e-02,  1.9104e-01,  4.1165e+01,  3.8937e-01, -2.0938e+00,
-        #  1.6496e-03, -2.6778e-03, -4.8439e-05,  8.1125e-04, -8.7787e-04,
-        #  7.1748e-05])
-        # self.std = torch.tensor([34.6887,  34.9556, 216.6215,  23.2826,  35.4035,  26.8738,  26.9540,
-        #   4.9272,  25.1366,  24.5395,   3.6142])
-        # self.mu = torch.tensor([-6.8460e-02,  1.9104e-01,  4.1165e+01, -2.0938e+00,
-        #  1.6496e-03, -4.8439e-05,  8.1125e-04,
-        #  7.1748e-05])
-        # self.std4 = torch.tensor([34.6887,  34.9556, 216.6215,  35.4035,  26.8738,
-        #  4.9272,  25.1366,   3.6142])
+        #[-5.77058569 -5.893796   -5.29914995 -5.2774984  -5.58912249 -6.17521508, -3.43324822 -4.57360642 -4.63527194]
+        #['abd', 'airflow', 'c3', 'c4', 'ecg', 'emg', 'eog', 'f3', 'o1']
+        self.mu_11 = torch.tensor([-5.77058569, -5.893796, -5.29914995,
+                                   -5.2774984, -5.58912249, -6.17521508,
+                                   -3.43324822, -4.57360642,  8.1125e-04, -4.63527194, 7.1748e-05])
+        #[791.409925   811.93428768 845.27496042 773.86625409 803.77746945 870.667796   741.95722232 755.83128998 785.98923913]
+        self.std_11 =torch.tensor([791.409925, 811.93428768,  845.27496042, 773.86625409, 803.77746945,
+                                   870.667796, 741.95722232, 755.83128998, 4.9272,  785.98923913, 3.6142])
         self.mu4 = torch.tensor([-6.8460e-02,  1.9104e-01,  3.8937e-01, -2.0938e+00,
          ])
         self.std4 = torch.tensor([34.6887,  34.9556, 23.2826,  35.4035])
@@ -104,8 +102,11 @@ class normalize:
           4.9272,  25.1366,   3.6142])
 
     def __call__(self, x, attention_mask=None):
-        if x.shape[0] == 4:
-            return (x - self.mu4.unsqueeze(-1)) / self.std4.unsqueeze(-1)
+        if x.shape[0] == 11:
+            # max_val, indices = torch.max(x, keepdim=True, dim=-1)
+            # min_val, indices = torch.min(x, keepdim=True,dim=-1)
+            # return (x - min_val + 1e-6) / (1e-6 + max_val - min_val)
+            return x
         else:
             return (x - self.mu.unsqueeze(-1)) / self.std.unsqueeze(-1)
 
@@ -230,12 +231,13 @@ class RandomAmplitudeScale:
     def __call__(self, x, label=None, show_param=False, *args, **kwargs):
         if torch.rand(1) < self.p:
             scale = random.uniform(self.range[0], self.range[1])
+            scale_tensor = torch.tensor(scale, device=x.device)
             if show_param is True:
-                print(f'RandomAmplitudeScale: {scale}')
+                print(f'RandomAmplitudeScale: {scale_tensor}')
             if label is not None:
-                return x * scale, label
+                return x * scale_tensor, label
             else:
-                return x * scale, None
+                return x * scale_tensor, None
         if label is not None:
             return x, label
         else:
@@ -254,12 +256,13 @@ class RandomDCShift:
     def __call__(self, x, label=None, show_param=False, *args, **kwargs):
         if torch.rand(1) < self.p:
             shift = random.uniform(self.range[0], self.range[1])
+            shift_tensor = torch.tensor(shift, device=x.device)
             if show_param is True:
                 print(f'RandomDCShift: {shift}')
             if label is not None:
-                return x + shift, label
+                return x + shift_tensor, label
             else:
-                return x + shift, None
+                return x + shift_tensor, None
         if label is not None:
             return x, label
         else:
@@ -338,9 +341,9 @@ class RandomAdditiveGaussianNoise:
             if show_param is True:
                 print(f'RandomAdditiveGaussianNoise, sigma: {sigma}')
             if label is not None:
-                return x + torch.normal(0, sigma, x.shape), label
+                return x + torch.normal(0, sigma, x.shape, device=x.device), label
             else:
-                return x + torch.normal(0, sigma, x.shape), None
+                return x + torch.normal(0, sigma, x.shape, device=x.device), None
         if label is not None:
             return x, label
         else:

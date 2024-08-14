@@ -71,14 +71,14 @@ def get_fft(x, choose_channels=[0], hop_length=100, patch_size=200):
     return res
 
 def plot_spindle_box(filtdata, dist_down, dist_up):
-    plt.plot(filtdata[1350:1950])
+    plt.plot(filtdata)
 
     ax = plt.gca()
-    for down, up in zip(dist_down, dist_up):
-        rect = patches.Rectangle((down, -100), up - down, 50,
-                                 linewidth=1, edgecolor='r', facecolor='none')
-        ax.add_patch(rect)
-    plt.savefig(f'/Users/hwx_admin/Sleep/result/sc/sub1001.svg')
+    # for down, up in zip(dist_down, dist_up):
+    #     rect = patches.Rectangle((down, -100), up - down, 50,
+    #                              linewidth=1, edgecolor='r', facecolor='none')
+    #     ax.add_patch(rect)
+    # plt.savefig(f'/Users/hwx_admin/Sleep/result/sc/sub1001.svg')
     plt.show()
     plt.close('all')
 
@@ -103,12 +103,12 @@ def plot_fft_eeg(index=2):
         ranges.append((start, end))
         return ranges
     # items = glob.glob(os.path.join("/Volumes/T7/MASS_Processed/SS2/01-02-0001", '*'))
-    items = glob.glob(os.path.join("/Users/hwx_admin/Sleep/data/MASS_aug_new_2/SS2/E2/01-02-0001/test/", '*'))
+    items = glob.glob(os.path.join("/Users/hwx_admin/Sleep/data/MASS_aug_new_1/SS2/E2/01-02-0001/train", '*'))
     # items = ["/Users/hwx_admin/Sleep/data/MASS_aug_new_2/SS2/E2/01-02-0001/test/00341.arrow"]
     np.random.seed(2020)
     np.random.shuffle(items)
     # 6-1
-    for _, item in enumerate(items[11:]):
+    for _, item in enumerate(items):
         print(f'index of items: {_}')
         tables = pa.ipc.RecordBatchFileReader(
             pa.memory_map(item, "r")

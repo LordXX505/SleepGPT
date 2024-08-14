@@ -4,7 +4,8 @@ import pandas as pd
 import os
 import datetime
 import mne
-
+import cupy as cp
+from scipy.signal import butter, filtfilt
 def get_path_from_bdsp(sid, dov, base_folder=None, data_folders=None, raise_error=True):
     """
     Parameters:
@@ -83,31 +84,119 @@ def eog_name_standardize(signal_channel_names):
 
     return signal_channel_names
 
-def load_bdsp_signal(path_signal):
-    
+import re
+def normalize_channel_name(channel_name):
+    channel_name = channel_name.lower()
+    if channel_name in ['e2-m1', 'e1-m2', 'e2-m2', 'e1-m1', 'chin1', 'chin2', 'chin1-chin2',
+                        'chin3', 'chin1-chin3'
+                        'ecg-v1', 'ecg-la', 'ecg']:
+        return channel_name
+    if channel_name in ['resp_airflow', 'airflow', 'air_flow']:
+        return 'airflow'
+    else:
+        match = re.match(r'(.*?)-?(m[12]|avg)?$', channel_name, re.IGNORECASE)
+        if match is not None:
+            core_name = match.group(1).lower()
+            if core_name == '':
+                return match.group(0).lower()
+            return core_name
+    return channel_name
+
+
+def map_channels_to_combinations(channel_names_to_load):
+    channel_combinations = {
+        'eog': ['eog', 'e2-m1', 'e1-m2', 'e2-m2', 'e1-m1'],
+        'emg': ['emg', 'chin1-chin2',  'chin1-chin3', 'chin1', 'chin2', 'chin3'],
+        'ecg': ['ecg', 'ecg-v1', 'ecg-la']
+    }
+    selected_channels = {
+        'eog_e1': None,
+        'eog_e2': None,
+        'emg': None,
+        'ecg': None
+    }
+
+    for combo in channel_combinations['eog']:
+        if combo in channel_names_to_load:
+            if 'e2' in combo:
+                selected_channels['eog_e2'] = combo
+            if 'e1' in combo:
+                selected_channels['eog_e1'] = combo
+
+    for combo in channel_combinations['emg']:
+        if combo in channel_names_to_load:
+            if selected_channels['emg'] is None:
+                selected_channels['emg'] = combo
+
+    for combo in channel_combinations['ecg']:
+        if combo in channel_names_to_load:
+            if selected_channels['ecg'] is None:
+                selected_channels['ecg'] = combo
+
+    res_channels = {}
+    for k, v in selected_channels.items():
+        if v is not None:
+            res_channels[v] = k
+
+    return res_channels
+
+
+def load_bdsp_signal(path_signal, n_jobs):
+    res_channels = ['abd', 'airflow', 'c3', 'c4', 'ecg', 'emg', 'eog', 'f3', 'o1']
     raw = mne.io.read_raw_edf(path_signal, preload=False, verbose=False)
-    params = {'Fs': raw.info['sfreq']}
     ch_available = raw.ch_names
+    # ch_available = chin_name_standardize(eog_name_standardize(ch_available))
     # select only a subset of ch_available that are present in the code below:
     channel_names_to_load = [
-        'ekg', 'ecg', 'ecg-la', 'ecg-v1', 'rleg+', 'rleg-', 'rat', 'lleg+', 'lleg-', 'lat', 
-        'sao2', 'spo2', 'chin1', 'chin2', 'chin3', 'chin1-chin3', 'chin', 'chin1-chin2', 'ptaf', 'cflow', 'resp_airflow', 
-        'e2-m1', 'e2-m2', 'e1-m2', 'e1-m1', 'c3-m2', 'c4-m1', 'f3-m2', 'f4-m1', 'o1-m2', 'o2-m1', 
+        'ekg', 'ecg', 'ecg-la', 'ecg-v1', 'rleg+', 'rleg-', 'rat', 'lleg+', 'lleg-', 'lat',
+        'sao2', 'spo2', 'chin1', 'chin2', 'chin3', 'chin1-chin3', 'chin', 'chin1-chin2', 'ptaf', 'cflow',
+        'resp_airflow', 'airflow',
+        'e2-m1', 'e2-m2', 'e1-m2', 'e1-m1', 'c3-m2', 'c4-m1', 'f3-m2', 'f4-m1', 'o1-m2', 'o2-m1',
         'c3-m1', 'c4-m2', 'f3-m1', 'f4-m2', 'o1-m1', 'o2-m2',
         'abd', 'chest', 'abdomen', 'thorax', 'r leg', 'l leg',
         'f3', 'f4', 'c3', 'c4', 'o1', 'o2', 'e1', 'e2', 'm1', 'm2',
         'f3-avg', 'f4-avg', 'c3-avg', 'c4-avg', 'o1-avg', 'o2-avg', 'e1-avg', 'e2-avg',
     ]
-
     # select only a subset of ch_available that are present in the code below:
     channel_names_to_load = [x for x in ch_available if x.lower() in channel_names_to_load]
     raw.pick_channels(channel_names_to_load)
+
+    normalized_channels = {name: normalize_channel_name(name) for name in channel_names_to_load}
+    raw.rename_channels(normalized_channels)
+    selected_channels = map_channels_to_combinations(normalized_channels.values())
+    raw.rename_channels(selected_channels)
+
+    def func(array, EOG):
+        array -= EOG[0]
+        return array
     raw.load_data(verbose=False)
-    signal = raw.get_data().T
-    signal = signal * 1e6 # to correct units (uV in EEG, but "normal/correct" for others, seems to be saved as V unit.)
-    signal = pd.DataFrame(signal, columns=[x.lower() for x in channel_names_to_load])
-    
-    return signal, params
+
+    if 'eog_e2' in raw.ch_names and 'eog_e1' in raw.ch_names:
+        data, times = raw['eog_e2']
+        raw.apply_function(func, picks=['eog_e1'], EOG=data)
+        raw.drop_channels(['eog_e2'])
+        raw.rename_channels({'eog_e1': 'eog'})
+    elif 'eog_e2' in raw.ch_names:
+        raw.rename_channels({'eog_e2': 'eog'})
+    elif 'eog_e1' in raw.ch_names:
+        raw.rename_channels({'eog_e1': 'eog'})
+
+    good_channels = np.ones(len(res_channels))
+    for c_index, _c in enumerate(res_channels):
+        if (_c not in raw.ch_names) or (np.all(raw.get_data(picks=[_c]) == 0)):
+            good_channels[c_index] = 0
+            raw.add_channels(
+                [mne.io.RawArray(np.zeros((1, len(raw.times))), mne.create_info([_c], raw.info['sfreq']))])
+
+    raw.pick_channels(res_channels, ordered=True)
+    raw.resample(100)
+    signal = raw.get_data()
+    signal = signal * 1e6
+
+
+    # to correct units (uV in EEG, but "normal/correct" for others, seems to be saved as V unit.)
+    params = {'Fs': 100}
+    return signal, params, good_channels
 
 
 
@@ -183,15 +272,17 @@ def annotations_preprocess(annotations, fs, t0=None, impute_duration_column=True
     return annotations
 
 
-def vectorization(events_annotations_selection, mapping, signal_len):
+def vectorization(events_annotations_selection, mapping, signal_len, stage=False):
     """
     Inputs: 
     events_annotations_selection: dataframe (annotations.csv), only rows selected that shall be vectorized.
     mapping: dataframe defining the vectorization mapping.
     Output: 1D numpy array, vectorized annotations
     """
-    
-    events_vectorized = np.zeros(signal_len, )
+    if stage is True:
+        events_vectorized = np.ones(signal_len, ) * -1
+    else:
+        events_vectorized = np.zeros(signal_len, )
     for jloc, row in events_annotations_selection.iterrows():
         for event_type in mapping.index:
             keyword = mapping.loc[event_type, 'keyword']
@@ -229,23 +320,23 @@ def vectorize_respiratory_events(annotations, signal_len):
 def vectorize_sleep_stages(annotations, signal_len, noscore_fill=np.nan):
     """
     Input: annotations.csv as dataframe
-    Output: vectorized sleepstage array (W: 5, R: 4, N1: 3, N2: 2, N3: 1)
+    Output: vectorized sleepstage array (W: 0, R: 5, N1: 1, N2: 2, N3: 3)
     """
     
     # definition of the following categories of respiratory event, their keyword and the vectorization-mapping:
-    keyword_value_pairs = np.array([['3', 1],
+    keyword_value_pairs = np.array([['3', 3],
                                    ['2', 2],
-                                   ['1', 3],
-                                   ['r', 4],
-                                   ['w', 5],
+                                   ['1', 1],
+                                   ['r', 5],
+                                   ['w', 0],
                                    ])
 
     mapping = pd.DataFrame(index = ['N3', 'N2', 'N1', 'R', 'W'], columns=['keyword', 'value'], data=np.array(keyword_value_pairs))
     
     sleep_stages = annotations.loc[annotations.event.apply(lambda x: 'sleep_stage' in str(x).lower()), :].copy()
 
-    sleep_stages_vectorized = vectorization(sleep_stages, mapping, signal_len)
-    sleep_stages_vectorized[sleep_stages_vectorized == 0] = noscore_fill # set no-scored sleep stage to NaN instead of 0.
+    sleep_stages_vectorized = vectorization(sleep_stages, mapping, signal_len, stage=True)
+    sleep_stages_vectorized[sleep_stages_vectorized == -1] = noscore_fill # set no-scored sleep stage to NaN instead of 0.
 
     return sleep_stages_vectorized
 

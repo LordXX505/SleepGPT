@@ -28,6 +28,7 @@ def get_idx2name(_config, k):
     dm.setup(stage='test')
     for dst in dm.dms:
         idx_2_name = dst.test_dataset.idx_2_name
+        break
     print(f'idx_2_name: {idx_2_name}')
     return idx_2_name
 
@@ -72,7 +73,6 @@ def main(_config):
         name += '_' + _config['use_fpfn']
     if _config['expert'] is not None:
         name += '_' + _config['expert']
-
     if _config['EDF_Mode'] is not None:
         name += '_' + _config['EDF_Mode']
     if _config['subset'] is not None:
@@ -81,7 +81,7 @@ def main(_config):
     if _config['kfold_load_path'] is not None:
         if os.path.isdir(_config['kfold_load_path']):
             version = f"version_{_config['kfold_test']}"
-            ckpt_path = os.path.join(_config['kfold_load_path'], f'{name}/{k}_fold/{version}')
+            ckpt_path = os.path.join(_config['output_dir'], f'{name}/fold_{k}/{version}')
             print(f'base path: {ckpt_path}')
             ckpt_path_list = glob.glob(ckpt_path + '/*')
             ckpt_path = ckpt_path_list

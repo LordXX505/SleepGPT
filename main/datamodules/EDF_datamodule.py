@@ -9,12 +9,27 @@ class EDFDataModule(BaseDataModule):
     def __init__(self, _config, idx):
         super().__init__(_config, idx=idx)
         if 'Other' not in self.config['mode']:
+            aug_dir = self.config['aug_dir']
+            aug_prob = self.config['aug_prob']
             if '2013' in self.config['EDF_Mode']:
-                self.dataset = partial(EDFDataset, file_name=f'm_new_split_k_20.npy')
+                edf_mode = self.config['EDF_Mode'].split('_')
+                if len(edf_mode) > 1:
+                    edf_mode_aug = '_'.join(mode_name for mode_name in edf_mode[1:])
+                    self.dataset = partial(EDFDataset, file_name=f'm_new_split_Aug_{edf_mode_aug}_k_10.npy',
+                                           aug_dir=aug_dir,
+                                           aug_prob=aug_prob, )
+                else:
+                    self.dataset = partial(EDFDataset, file_name=f'm_new_split_k_20.npy')
             elif '2018' in self.config['EDF_Mode']:
-                self.dataset = partial(EDFDataset, file_name=f'm_new_split_k_10.npy')
-            else:
-                raise NotImplementedError
+                edf_mode = self.config['EDF_Mode'].split('_')
+                if len(edf_mode) > 1:
+                    edf_mode_aug = '_'.join(mode_name for mode_name in edf_mode[1:])
+
+                    self.dataset = partial(EDFDataset, file_name=f'm_new_split_Aug_{edf_mode_aug}_k_10.npy',aug_dir=aug_dir,
+                                       aug_prob=aug_prob,)
+                                           # need_normalize=True)
+                else:
+                    self.dataset = partial(EDFDataset, file_name=f'm_new_split_k_10.npy')
         else:
             if self.config['mode'] == 'Other_EDF_Pretrain':
                 if self.config['EDF_Mode'] == '9_5_5':
@@ -32,7 +47,9 @@ class EDFDataModule(BaseDataModule):
                     self.dataset = partial(EDf_Pre_Dataset, file_name='edf_downstream_TCC.npy')
                 elif self.config['EDF_Mode'] == 'usleep':
                     self.dataset = partial(EDf_Pre_Dataset, file_name='edf_downstream_usleep.npy')
-
+                elif 'Portion' in self.config['EDF_Mode']:
+                    Portion = '_'.join(self.config['EDF_Mode'].split('_')[1:])
+                    self.dataset = partial(EDFDataset, file_name=f'Aug_{Portion}.npy')
     @property
     def channels(self):
         return ['EMG1' 'EOG1' 'FPz', 'Pz']
@@ -86,7 +103,8 @@ class EDFAugDataModule(BaseDataModule):
         if '2013' in self.config['EDF_Mode']:
             edf_mode = self.config['EDF_Mode'].split('_')
             if len(edf_mode) > 1:
-                edf_mode_aug = '_'.join(edf_mode[1:])
+                # 'orig' key word only appearing in Sleep EDF - Original datasets, not for Aug.
+                edf_mode_aug = '_'.join(mode_name for mode_name in edf_mode[1:] if mode_name != 'Orig')
                 self.dataset = partial(EDF_Aug_Dataset, file_name=f'm_new_split_Aug_{edf_mode_aug}_k_20.npy',
                                        need_normalize=False)
             else:
@@ -94,15 +112,18 @@ class EDFAugDataModule(BaseDataModule):
         elif '2018' in self.config['EDF_Mode']:
             edf_mode = self.config['EDF_Mode'].split('_')
             if len(edf_mode) > 1:
-                edf_mode_aug = '_'.join(edf_mode[1:])
+                edf_mode_aug = '_'.join(mode_name for mode_name in edf_mode[1:] if mode_name != 'Orig')
                 self.dataset = partial(EDF_Aug_Dataset, file_name=f'm_new_split_Aug_{edf_mode_aug}_k_10.npy',
                                        need_normalize=False)
             else:
                 self.dataset = partial(EDF_Aug_Dataset, file_name=f'm_new_split_Aug_k_10.npy')
 
         else:
-            raise NotImplementedError
-    @property
+            if 'Portion' in self.config['EDF_Mode']:
+                Portion = '_'.join(self.config['EDF_Mode'].split('_')[1:])
+                self.dataset = partial(EDF_Aug_Dataset, file_name=f'Aug_{Portion}.npy', need_normalize=False)
+            else:
+                raise NotImplementedError
     def channels(self):
         return ['EMG1' 'EOG1' 'FPz', 'Pz']
 

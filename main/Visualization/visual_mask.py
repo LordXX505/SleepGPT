@@ -25,14 +25,14 @@ def get_param(nums) -> List[str]:
 def get_names():
     # return ['C3', 'C4', 'ECG', 'EMG1', 'EOG1', 'F3', 'F4', 'Fpz', 'O1', 'O2',
     #    'Pz']
-    return ['C3', 'C4', 'EMG', 'EOG1', 'F3',  'Fpz', 'O1',
+    return ['abd', 'ari', 'C3', 'C4', 'ecg', 'EMG', 'EOG1', 'F3',  'Fpz', 'O1',
            'Pz']
 
 
 @ex.automain
 def main(_config):
     # pre_train = Model_Pre(_config)
-    pre_train = Model(_config)
+    pre_train = Model_Pre(_config)
     pre_train.mask_same = True
     print(_config)
     pl.seed_everything(512)
@@ -45,7 +45,10 @@ def main(_config):
     cnt = 0
     load_path = os.path.basename(_config['load_path'])
     pattern = r"epoch=\d+"
-    match = re.search(pattern, load_path).group()
+    try:
+        match = re.search(pattern, load_path).group()
+    except:
+        match = 'last'
     for _, _dm in enumerate(dm.dms):
         n = len(_dm.test_dataset)
         idx = np.arange(n)
@@ -60,10 +63,10 @@ def main(_config):
             # test_list = ['shhs1-202110']
             # if batch['name'] not in test_list:
             #     continue
-            batch['random_mask'][0][0] = torch.ones(120)
-            batch['random_mask'][0][0][45:60] = torch.zeros(15)
-            batch['random_mask'][0][0][75:90] = torch.zeros(15)
-            batch['random_mask'][0][0][105:120] = torch.zeros(15)
+            # batch['random_mask'][0][0] = torch.ones(120)
+            # batch['random_mask'][0][0][45:60] = torch.zeros(15)
+            # batch['random_mask'][0][0][75:90] = torch.zeros(15)
+            # batch['random_mask'][0][0][105:120] = torch.zeros(15)
             # for i in range(8):
             #     batch['random_mask'][0][1][(i*15+10):(i*15+15)] = torch.ones(5)
             fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(30, 32))
@@ -73,13 +76,13 @@ def main(_config):
             res = pre_train(batch, stage='test')
             epochs = res['batch']['epochs'][0]
             epochs_fft = res['batch']['epochs'][1]
-            loss = pre_train.forward_masked_loss_channel(res['cls_feats'], epochs, res['time_mask_patch'])
+            loss = pre_train.forward_masked_loss_channel(res['mtm_logits'], epochs, res['time_mask_patch'])
             print('loss:', loss)
-            if _config['visual_setting']['mode'] != 'all_fft':
-                loss2 = pre_train.forward_masked_loss_2D_channel(res['cls_feats_fft'], epochs_fft, res['fft_mask_patch'])
-            else:
-                loss2 = torch.zeros(loss.shape[0])
-            print('loss2', loss2)
+            # if _config['visual_setting']['mode'] != 'all_fft':
+            #     loss2 = pre_train.forward_masked_loss_2D_channel(res['mtm_logits_fft'], epochs_fft, res['fft_mask_patch'])
+            # else:
+            #     loss2 = torch.zeros(loss.shape[0])
+            # print('loss2', loss2)
 
             # mix_batch, target, box = Mixup(epochs, [0, 1], return_box=True)
             # print(target, box)
@@ -105,14 +108,12 @@ def main(_config):
             # idx = torch.where(loss > 100)
             # if len(idx[0]) == 0:
             #     continue
-
             patch_epochs_mask = patch_epochs.masked_fill(mask[:, :, None], np.nan)
             patch_epochs_mask2 = patch_epochs_fft.masked_fill(mask_fft[:, :, None], np.nan)
             patch_epochs_mask = pre_train.unpatchify(patch_epochs_mask)[0]
             patch_epochs_mask2 = pre_train.unpatchify_2D(patch_epochs_mask2)[0]
-
-            masked_time = pre_train.unpatchify(res['cls_feats'].masked_fill(~mask[:, :, None], np.nan))[0]
-            masked_fft = pre_train.unpatchify_2D(res['cls_feats_fft'].masked_fill(~mask_fft[:, :, None], np.nan))[0]
+            masked_time = pre_train.unpatchify(res['mtm_logits'].masked_fill(~mask[:, :, None], np.nan))[0]
+            masked_fft = pre_train.unpatchify_2D(res['mtm_logits_fft'].masked_fill(~mask_fft[:, :, None], np.nan))[0]
             # masked_fft = pre_train.unpatchify_2D(res['mtm_logits_fft'])[1]
             patch_epochs = pre_train.unpatchify(patch_epochs)[0]
             patch_epochs_fft = pre_train.unpatchify_2D(patch_epochs_fft)[0]
@@ -136,22 +137,22 @@ def main(_config):
 
             plt.show()
             path = '/'.join(_config['load_path'].split('/')[-4:-2])
-            print(f"/home/cuizaixu_lab/huangweixuan/Sleep/result/{path}/{_config['datasets'][_]}")
+            print(f"/root/Sleep/result/{path}/{_config['datasets'][_]}")
 
-            os.makedirs(f"/home/cuizaixu_lab/huangweixuan/Sleep/result/{path}/{_config['datasets'][_]}/epoch_{match}", exist_ok=True)
-            plt.savefig(f"/home/cuizaixu_lab/huangweixuan/Sleep/result/{path}/{_config['datasets'][_]}/epoch_{match}/predict_{id}.svg", format='svg')
+            os.makedirs(f"/root/Sleep/result/{path}/{_config['datasets'][_]}/epoch_{match}", exist_ok=True)
+            plt.savefig(f"/root/Sleep/result/{path}/{_config['datasets'][_]}/epoch_{match}/predict_{id}_{loss.mean()}.svg", format='svg')
             plt.figure()
             fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(30, 32))
             for i, channels in enumerate(pre_train.transformer.choose_channels):
                 axes = Axes[i][0]
                 axes.imshow(masked_fft[i].detach().numpy(), aspect='auto', origin='lower')
-                axes.set_title(names[i] + '_' + str(loss2.item()))
+                axes.set_title(names[i] + '_' + str(0))
                 axes = Axes[i][1]
                 axes.set_title(names[i])
                 axes.imshow(patch_epochs_fft[i].detach().numpy(), aspect='auto', origin='lower')
             print('save fft png')
-            os.makedirs(f"/home/cuizaixu_lab/huangweixuan/Sleep/result/{path}/{_config['datasets'][_]}/epoch_{match}", exist_ok=True)
-            plt.savefig(f"/home/cuizaixu_lab/huangweixuan/Sleep/result/{path}/{_config['datasets'][_]}/epoch_{match}/predict_fft_nu_{id}.svg",  format='svg')
+            os.makedirs(f"/root/Sleep/result/{path}/{_config['datasets'][_]}/epoch_{match}", exist_ok=True)
+            plt.savefig(f"/root/Sleep/result/{path}/{_config['datasets'][_]}/epoch_{match}/predict_fft_nu_{id}.svg",  format='svg')
             plt.close("all")
 
 

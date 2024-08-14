@@ -391,6 +391,7 @@ class PatchEmbed(nn.Module):
         assert S == self.epoch_size, f"Input image size ({S}) doesn't match model {self.epoch_size}."
         if time and fft:
             assert len(x) == 2
+            # print(torch.isnan(x[0]).sum(), torch.isnan(x[1]).sum())
             assert C == self.max_channels
             time_proj = rearrange(self.proj(x[0]), 'B (C D) P -> B (C P) D', C=self.in_chans)
             fft_proj = rearrange(self.fft_proj(x[1]).squeeze(-1), 'B (C D) P -> B (C P) D', C=self.in_chans)
@@ -614,6 +615,8 @@ class MultiWayTransformer(nn.Module):
             self.actual_channels = torch.tensor([0, 1, 2, 3, 4, 6])
         elif actual_channels == 'MASS_SP':
             self.actual_channels = torch.tensor([0])
+        elif actual_channels == 'MASS_Apnea':
+            self.actual_channels = torch.tensor([0, 1, 2, 3, 4, 6, 7])
         elif 'EDF' in actual_channels:
             self.actual_channels = torch.tensor([3, 5, 7])
             edf_aug = actual_channels.split('_')
@@ -841,8 +844,9 @@ class MultiWayTransformer(nn.Module):
             # print(torch.isnan(mean).sum())
             # print(torch.isnan(std).sum())
             # print(std[torch.where(std<0.01)], torch.where(std<0.01))
-
-            res.append((log_magnitude - mean.unsqueeze(-1)) / std.unsqueeze(-1))
+            std = std.unsqueeze(-1)
+            log_magnitude = torch.where(std!=0, (log_magnitude - mean.unsqueeze(-1)) / std, 0)
+            res.append(log_magnitude)
             # print(torch.isnan((log_magnitude - mean.unsqueeze(-1)) / std.unsqueeze(-1)).sum())
 
         res = torch.stack(res, dim=1)
@@ -906,11 +910,12 @@ def backbone_large_patch200(pretrained=False, **kwargs):
     return model
 
 
-def backbone_base_plus_patch200(pretrained=False, **kwargs):
+def backbone_huge_patch200(pretrained=False, **kwargs):
     patch_size = kwargs.pop("patch_size", 200)
+
     model = MultiWayTransformer(
-        patch_size=patch_size, embed_dim=1024, depth=12, num_heads=16,
-        mlp_ratio=4, qkv_bias=True, tfffn_start_layer_index=10,
+        patch_size=100, embed_dim=1024, depth=16, num_heads=16,
+        mlp_ratio=4, qkv_bias=True, tfffn_start_layer_index=12,
         use_abs_pos_emb=True, need_relative_position_embed=False,
         layer_scale_init_values=None, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
@@ -918,5 +923,5 @@ def backbone_base_plus_patch200(pretrained=False, **kwargs):
 
 backbone_base_patch200 = backbone_base_patch200
 backbone_large_patch200 = backbone_large_patch200
-backbone_base_plus_patch200 = backbone_base_plus_patch200
+backbone_huge_patch200 = backbone_huge_patch200
 

@@ -33,7 +33,10 @@ def visual(batch, pl_module, persub):
     loss = loss.detach()
     loss2 = loss2.detach()
     idx = torch.where(loss > 100)
-    assert len(idx[0]) == 0, f"{batch['name'][idx[0][0]]}"
+    loss = torch.where((loss > 100) | torch.isnan(loss), 0, loss)
+    rank_zero_info(f'loss: {loss.mean(0)}')
+
+    # rank_zero_info(f'loss2: {loss2}')
     if persub is True:
         rank_zero_info(f"batch name: {len(batch['name'])}")
         for index, (v, v2) in enumerate(zip(loss, loss2)):
@@ -50,8 +53,6 @@ def visual(batch, pl_module, persub):
     min_idx = torch.argmin(all_loss)
     if pl_module.min_loss > all_loss[min_idx]:
         pl_module.min_loss = all_loss[min_idx]
-    rank_zero_info(f'loss: {loss}')
-    rank_zero_info(f'loss2: {loss2}')
     loss_update = getattr(pl_module, f"test_loss")(loss)
     loss2_update = getattr(pl_module, f"test_loss2")(loss2)
     # rank_zero_info(f'update loss: {loss_update}, loss2: {loss2_update}')

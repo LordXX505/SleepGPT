@@ -46,7 +46,10 @@ def main(_config):
     else:
         name += '_' + _config['mode']
     if _config['all_time']:
-        name += '_all_time_' + _config['use_pooling']
+        if _config['use_pooling'] is not None:
+            name += '_all_time_' + _config['use_pooling']
+        else:
+            name += '_all_time'
 
     rank_zero_info(f'name: {name}')
     logger = pl.loggers.TensorBoardLogger(
@@ -56,7 +59,7 @@ def main(_config):
     monitor = 'validation/the_metric' if _config['mode'] == 'pretrain' else "CrossEntropy/validation/max_accuracy_epoch"
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        dirpath=f'/home/cuizaixu_lab/huangweixuan/data/checkpoint/{name}/version_{logger.version}',
+        dirpath=f'/mnt/data/checkpoint/{name}/version_{logger.version}',
         filename='ModelCheckpoint-epoch={epoch:02d}-val_acc={CrossEntropy/validation/max_accuracy_epoch:.4f}-val_score={validation/the_metric:.4f}',
         save_top_k=5,
         verbose=True,

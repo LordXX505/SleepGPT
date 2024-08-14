@@ -9,8 +9,8 @@ import pandas as pd
 from PIL import Image
 from .base_dataset import BaseDatatset
 
-
-class EDFDataset(BaseDatatset):
+from .new_base_dataset import Aug_BaseDataset
+class EDFDataset(Aug_BaseDataset):
 
     split = 'train'
     transform_keys = ['full']
@@ -51,7 +51,7 @@ class EDFDataset(BaseDatatset):
     @property
     def channels(self):
         if self.mode == 'large':
-            return np.array([17, 19, 37, 53])
+            return np.array([16, 18, 36, 52])
         else:
             return np.array([3, 20, 38, 54])
     # edf: [EMG, EOG,  Fpz, Pz]
@@ -66,7 +66,7 @@ class EDFDataset(BaseDatatset):
         except:
             return int(self.idx_2_name[idx].split('/')[-2].split('-')[-1])
 
-class EDF_Aug_Dataset(EDFDataset):
+class EDF_Aug_Dataset(Aug_BaseDataset):
 
     split = 'train'
     transform_keys = ['full']
@@ -78,7 +78,26 @@ class EDF_Aug_Dataset(EDFDataset):
     spindle = False
 
     def __init__(self, split="", *args, **kwargs):
-        super().__init__(split=split, *args, **kwargs)
+        assert split in ['train', 'val', 'test']
+        k = kwargs['kfold']
+        if k is None:
+            names = np.load(os.path.join(kwargs['data_dir'], 'EDF.npy'), allow_pickle=True)
+            nums = None
+        else:
+            file_name = kwargs['file_name']
+
+            print(f'edf datasets items file name: {file_name}')
+            items = np.load(os.path.join(kwargs['data_dir'], f'{file_name}'), allow_pickle=True)
+            if items.dtype == np.dtype('O'):
+                names = items.item()[f'{split}_{k}']['names']
+                nums = items.item()[f'{split}_{k}']['nums']
+            else:
+                names = items['names']
+                nums = items['nums']
+            kwargs.pop('file_name')
+        kwargs.pop('kfold')
+        super().__init__(split=split, names=names, concatenate=False,
+                         nums=nums, *args, **kwargs)
 
     def __getitem__(self, index):
         suite = self.get_suite(index)

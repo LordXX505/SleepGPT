@@ -8,10 +8,11 @@ import pyarrow as pa
 import os
 import pandas as pd
 from PIL import Image
+from .new_base_dataset import Aug_BaseDataset
 from .base_dataset import BaseDatatset
 
 
-class SDDataset(BaseDatatset):
+class SDDataset(Aug_BaseDataset):
     def __init__(self, split="", *args, **kwargs):
         """
         SD dataset.
@@ -29,15 +30,19 @@ class SDDataset(BaseDatatset):
        """
         assert split in ['train', 'test']
         try:
-            names = np.load(os.path.join(kwargs['data_dir'], 'train.npy'), allow_pickle=True)
+            items = np.load(os.path.join(kwargs['data_dir'], 'new_train.npy'), allow_pickle=True)
+            if items.dtype == np.dtype('O'):
+                names = items.item()['names']
+                nums = items.item()['nums']
+            else:
+                names = items['names']
+                nums = items['nums']
         except:
             names = np.array(glob.glob(kwargs['data_dir'] + '/*/*'))
-        nums = None
+            nums = None
         kwargs.pop('kfold', None)
         kwargs.pop('expert', None)
-
-        # print(os.path.join(kwargs['data_dir'], 'train.npy'))
-        super().__init__(names=names, split=split, nums=None, *args, **kwargs)
+        super().__init__(names=names, split=split, nums=nums, *args, **kwargs)
 
     def __getitem__(self, index):
         suite = self.get_suite(index)

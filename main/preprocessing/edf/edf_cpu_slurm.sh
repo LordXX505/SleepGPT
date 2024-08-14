@@ -8,4 +8,4 @@
 source activate pytorch
 
 #srun python3 aug_compare.py
-srun python3 edf_aug_gen_list.py
+srun python3 edf_2013_gen_list_1p5p10p.py

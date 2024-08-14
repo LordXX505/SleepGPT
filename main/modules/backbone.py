@@ -113,6 +113,7 @@ class Model(LightningModule):
         self.time_mask_last = False
         if self.patch_time != 30:
             self.time_mask_last = True
+            print(f'backbone patch_time: {self.patch_time, self.time_mask_last}')
         if len(config['visual_setting']) != 0:
             if 'mask_same' in config['visual_setting'].keys():
                 self.mask_same = config['visual_setting']['mask_same']
@@ -216,7 +217,7 @@ class Model(LightningModule):
                                          channel_wise=False, )
                 self.pooler.apply(init_weights)
         self.weight = None
-        if config['loss_names']['FpFn'] > 0:
+        if config['loss_names']['Spindle'] > 0:
             self.store_real_data = torch.zeros((20, 3000, 8, 1000), device=self.device)
             self.store_whole_eeg = torch.zeros((20, 3000, 1000), device=self.device)
             self.store_whole_label = torch.zeros((20, 3000, 1000), device=self.device)
@@ -224,10 +225,23 @@ class Model(LightningModule):
             self.weight = config['CE_Weight']
             self.spindle_pred_proj = heads.Spindle_Head(self.num_features, self.transformer.patch_size,
                                                         Use_FPN=config['Use_FPN'],
-                                                        decoder_depth=config['Spindle_decoder_depth'],
-                                                        enc_dim=config['Spindle_enc_dim'],
+                                                        decoder_depth=config['Even_decoder_depth'],
+                                                        enc_dim=config['Event_enc_dim'],
                                                         dpr=config["drop_path_rate"], num_queries=config['num_queries'],
                                                         seq_len=self.patch_time * 100, FPN_resnet=config['FPN_resnet'])
+        if config['loss_names']['Apnea'] > 0:
+            self.store_real_data = torch.zeros((20, 3000, 8, 1000), device=self.device)
+            self.store_whole_eeg = torch.zeros((20, 3000, 1000), device=self.device)
+            self.store_whole_label = torch.zeros((20, 3000, 1000), device=self.device)
+            self.max_index = torch.zeros(20, device=self.device)
+            self.weight = config['CE_Weight']
+            self.apnea_pred_proj = heads.Apnea_Head(self.num_features, self.transformer.patch_size,
+                                                    Use_FPN=config['Use_FPN'],
+                                                    decoder_depth=config['Event_decoder_depth'],
+                                                    enc_dim=config['Event_enc_dim'],
+                                                    dpr=config["drop_path_rate"],
+                                                    seq_len=self.patch_time * 100, )
+
         if config['loss_names']['CrossEntropy'] > 0 and self.use_pooling != 'swin' and self.use_pooling != 'Trans':
             # self.stage_pred_proj = heads.Stage_Head(self.num_features)
             if self.all_time:
@@ -300,8 +314,11 @@ class Model(LightningModule):
 
     def init_weights(self):
         self.token_type_embeddings.apply(init_weights)
-        if self.hparams.config['loss_names']['FpFn'] > 0:
+        if self.hparams.config['loss_names']['Spindle'] > 0:
             self.spindle_pred_proj.apply(init_weights)
+
+        if self.hparams.config['loss_names']['Apnea'] > 0:
+            self.apnea_pred_proj.apply(init_weights)
 
     def build_relative_position_embed(self, config, modality=2):
         if not self.use_relative_pos_emb:
@@ -406,7 +423,8 @@ class Model(LightningModule):
 
         rank_zero_info(self.time_fft_relative_position_index)
 
-    def get_attention_mask(self, attention_mask: torch.Tensor = None, attention_mask_fft: torch.Tensor = None, manual=False):
+    def get_attention_mask(self, attention_mask: torch.Tensor = None, attention_mask_fft: torch.Tensor = None,
+                           manual=False):
         if manual is True:
             return attention_mask
         num_patches = self.transformer.num_patches
@@ -595,7 +613,7 @@ class Model(LightningModule):
                     return {'token': token}
                 cls_feats = self.decoder_transformer_block(rearrange(token, '(B T) P D ->B (T P) D', T=self.time_size))
 
-        elif self.current_tasks[0] == 'FpFn':
+        elif self.current_tasks[0] == 'Spindle':
             time_feats, fft_feats = (
                 x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
                 x[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
@@ -606,6 +624,17 @@ class Model(LightningModule):
             # cls = torch.cat([time_c3, fft_c3], dim=-1)
             # cls = torch.transpose(torch.cat([time_c3, fft_c3], dim=-1), dim0=1, dim1=2)
             cls_feats = self.spindle_pred_proj((time_c3, fft_c3))
+        elif self.current_tasks[0] == 'Apnea':
+            time_feats, fft_feats = (
+                x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
+                x[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
+            )
+            max_len = self.patch_time // 2
+            time_c3 = time_feats[:, 1:1 + max_len]
+            fft_c3 = fft_feats[:, 1:1 + max_len]
+            # cls = torch.cat([time_c3, fft_c3], dim=-1)
+            # cls = torch.transpose(torch.cat([time_c3, fft_c3], dim=-1), dim0=1, dim1=2)
+            cls_feats = self.apnea_pred_proj((time_c3, fft_c3))
         else:
             # print(time_max_len)
             time_feats, fft_feats = (
@@ -898,7 +927,7 @@ class Model(LightningModule):
 
         """
         patch_label = self.patchify_2D(labels)  # N, 15*C, 2*100
-        if isinstance(self.transformer.mask_ratio, list) and self.transformer.mask_ratio[1] == 0.0:
+        if isinstance(self.transformer.mask_ratio, list) and np.all(np.array(self.transformer.mask_ratio) == 0.0):
             return torch.tensor(torch.nan)
         assert predict.shape == patch_label.shape
         assert predict.shape[1] == self.transformer.num_patches * self.transformer.max_channels
@@ -943,12 +972,15 @@ class Model(LightningModule):
                     batch['Stage_label'] = torch.stack(batch['Stage_label'], dim=0).squeeze(-1)
                 if 'Spindle_label' in batch.keys():
                     batch['Spindle_label'] = torch.stack(batch['Spindle_label'], dim=0).squeeze(1).squeeze(-1)
+                if 'Apnea_label' in batch.keys():
+                    batch['Apnea_label'] = torch.stack(batch['Apnea_label'], dim=0).squeeze(1).squeeze(-1)
                 if self.training and self.mixup_fn is not None:
                     batch['epochs'][0], batch['Stage_label'] = self.mixup_fn(batch['epochs'][0], batch['Stage_label'])
                 epochs_fft, attn_mask_fft = self.transformer.get_fft(batch['epochs'][0], batch['mask'][0], aug=aug_fft)
                 batch['epochs'] = (batch['epochs'][0], epochs_fft)
                 attention_mask = self.get_attention_mask(batch['mask'][0],
-                                                         attn_mask_fft, manual=manual)  # List[[b, 1], [b, num_patch*c], [b, 1], [b, num_patch*c]]
+                                                         attn_mask_fft,
+                                                         manual=manual)  # List[[b, 1], [b, num_patch*c], [b, 1], [b, num_patch*c]]
                 batch['mask'] = attention_mask
                 # for i in attention_mask:
                 # rank_zero_info(f"{i}.shape: {i.shape}")
@@ -961,6 +993,8 @@ class Model(LightningModule):
                             rank_zero_info(f'stage shape : {batch["Stage_label"].shape}')
                         if 'Spindle_label' in batch.keys():
                             rank_zero_info(f'spindle shape : {batch["Spindle_label"].shape}')
+                        if 'Apnea_label' in batch.keys():
+                            rank_zero_info(f'apnea shape : {batch["Apnea_label"].shape}')
                         rank_zero_info(f'epochs 0  shape : {batch["epochs"][0].shape}')
                         rank_zero_info(f'epochs 1  shape : {batch["epochs"][1].shape}')
 
@@ -976,14 +1010,14 @@ class Model(LightningModule):
             ret.update(self.infer(batch, time_mask=True, stage=stage))
             return ret
 
-        assert len(self.current_tasks) == 1 and self.current_tasks[0] in ['CrossEntropy', 'FpFn', 'mtm']
+        assert len(self.current_tasks) == 1 and self.current_tasks[0] in ['CrossEntropy', 'Spindle', 'mtm', 'Apnea']
         if self.current_tasks[0] == 'mtm':
             ret.update(self.infer(batch, stage=stage, time_mask=True, mask_same=self.mask_same))
         if self.current_tasks[0] == 'CrossEntropy':
             ret.update(objectives.compute_ce(self, batch, stage=stage, persub=self.persub))
             if self.training:
                 self.gpu_monitor(batch['epochs'][0], phase='compute_ce last gpu', block_log=True)
-        if self.current_tasks[0] == 'FpFn':
+        if self.current_tasks[0] == 'Spindle':
             if stage == 'train':
                 if self.trainer.max_steps is None or self.trainer.max_steps == -1:
                     max_steps = (
@@ -1004,9 +1038,22 @@ class Model(LightningModule):
                     objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=batch, stage=stage,
                                                    use_fpfn=self.hparams.config['use_fpfn'],
                                                    store=False, compute=True, aggregate=True, weight=self.weight))
+            if self.current_tasks[0] == 'Apnea':
+                if stage == 'train':
+                    ret.update(
+                        objectives.compute_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=batch, stage=stage,
+                                                use_fpfn=self.hparams.config['use_fpfn'],
+                                                store=False, weight=self.weight))
+                else:
+                    rank_zero_info('==========Using compute_entire_fpfn==========')
+                    rank_zero_info(f'forward weight: {self.weight}')
+                    ret.update(
+                        objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=batch,
+                                                       stage=stage,
+                                                       use_fpfn=self.hparams.config['use_fpfn'],
+                                                       store=False, compute=True, aggregate=True, weight=self.weight))
 
-            # if self.global_step % 10 == 0:
-            #     rank_zero_info(f'self.global_step: {self.global_step}')
+
             if self.training:
                 self.gpu_monitor(batch['epochs'][0], phase='compute_fpfn last gpu', block_log=True)
 
@@ -1056,11 +1103,12 @@ class Model(LightningModule):
 
     def on_test_epoch_end(self) -> None:
         rank_zero_info("on_test_epoch_end")
-        if self.current_tasks[0] == 'FpFn':
+        if self.current_tasks[0] == 'Spindle' or self.current_tasks[0] == 'Apnea':
             output = objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=None, stage='test',
                                                     use_fpfn=self.hparams.config['use_fpfn'],
                                                     store=True, compute=False, aggregate=True, path=self.logger.version)
             rank_zero_info(f'test output: {output}')
+
         self.epoch_end(stage="test")
 
     def validation_step(self, batch, batch_idx):
@@ -1068,16 +1116,13 @@ class Model(LightningModule):
         if self.training:
             raise Exception(f"self.training is not False in validation")
         output = self(batch, stage="validation")
-        # torch.save({'cls': output['cls_feats'], 'Spindle_label': batch['Spindle_label']}, f='/home/cuizaixu_lab/huangweixuan/data/case.ckpt')
-        # if self.first_log_gpu:
-        #     sys.exit(0)
         if self.current_tasks[0] == 'CrossEntropy':
             self.res_index.append(output['index'].reshape(-1, self.time_size))
             self.res_label.append(output['label'].reshape(-1, self.time_size))
             self.res_feats.append(output['feats'].reshape(-1, self.time_size))
 
     def on_validation_epoch_end(self) -> None:
-        if self.current_tasks[0] == 'FpFn':
+        if self.current_tasks[0] == 'Spindle' or self.current_tasks[0] == 'Apnea':
             output = objectives.compute_entire_fpfn(self, prob=self.prob, IOU_th=self.IOU_th, batch=None,
                                                     stage='validation',
                                                     use_fpfn=self.hparams.config['use_fpfn'], path=self.logger.version,
@@ -1091,7 +1136,7 @@ class Model(LightningModule):
         # if self.hparams.config["lr_policy"] in ['cosine', 'polynomial_decay'] or isinstance(self.hparams.config["lr_policy"], int):
         #     scheduler.step(self.global_step)  # type: ignore[call-arg]
         # else:
-        if 'finetune' in self.hparams.config['mode'].lower() or self.hparams.config['mode'] == 'Spindledetection':
+        if 'finetune' in self.hparams.config['mode'].lower() or self.hparams.config['mode'] == 'Spindledetection' or 'Apneadetection' in self.hparams.config['mode']:
             mode = True
         else:
             mode = False
@@ -1121,8 +1166,10 @@ class Model(LightningModule):
             os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result/{self.hparams.config["datasets"][0]}',
                          f'{path}'),
             exist_ok=True)
-        torch.save(dict, os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result/{self.hparams.config["datasets"][0]}',
-                                      f'{path}', 'res.ckpt'))
+        torch.save(dict,
+                   os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result/{self.hparams.config["datasets"][0]}',
+                                f'{path}', 'res.ckpt'))
+
     def epoch_end(self, stage):
         phase = stage
         the_metric = 5
@@ -1133,23 +1180,25 @@ class Model(LightningModule):
         if self.visual is True:
             value = getattr(self, f"{phase}_loss").compute()
             value2 = getattr(self, f"{phase}_loss2").compute()
+            if hasattr(self, 'fold_now'):
+                kfold = self.fold_now
+            else:
+                kfold = self.hparams.config["kfold"] if self.hparams.config['kfold'] is not None else '0'
+            mode = self.visual_mode
             getattr(self, f"{phase}_loss").reset()
             getattr(self, f"{phase}_loss2").reset()
             for c in range(self.transformer.choose_channels.shape[0]):
                 self.log(f"{phase}_c{c}_loss", value[c], prog_bar=True, on_epoch=True, sync_dist=True)
                 self.log(f"{phase}_c{c}_loss2", value2[c], prog_bar=True, on_epoch=True, sync_dist=True)
             persubject_loss = {}
+            self.save(path=f'{mode}/{kfold}/overall_{self.transformer.mask_ratio}',
+                      dict={'loss': value, 'loss2': value2})
             if self.persub:
                 for tn in self.test_names.values():
                     _tn = tn.split('/')[-1]
                     sub_loss = getattr(self, f"test_{_tn}_loss").compute()
                     sub_loss2 = getattr(self, f"test_{_tn}_loss2").compute()
                     persubject_loss[_tn] = {'loss1': sub_loss, 'loss2': sub_loss2}
-                if hasattr(self, 'fold_now'):
-                    kfold = self.fold_now
-                else:
-                    kfold = self.hparams.config["kfold"] if self.hparams.config['kfold'] is not None else '0'
-                mode = self.visual_mode
                 self.save(path=f'{mode}/{kfold}', dict=persubject_loss)
         else:
             for loss_name, v in self.hparams.config["loss_names"].items():
@@ -1158,12 +1207,13 @@ class Model(LightningModule):
                 metric = 0
                 if loss_name == 'CrossEntropy':
                     if self.return_alpha is True:
-                        res_dict= {}
+                        res_dict = {}
                         for stage in [0, 1, 2, 3, 4]:
                             value = getattr(self, f'{stage}_mapping').compute()
                             res_dict[stage] = value
                             for i in range(value.shape[0]):
-                                self.log(f"{loss_name}/{stage}/value_{i}", value[i], prog_bar=True, on_epoch=True, sync_dist=True)
+                                self.log(f"{loss_name}/{stage}/value_{i}", value[i], prog_bar=True, on_epoch=True,
+                                         sync_dist=True)
                         self.save(res_dict, path=f'attn/{kfold}')
                         return
                     value = getattr(self, f"{phase}_{loss_name}_loss").compute()
@@ -1219,7 +1269,40 @@ class Model(LightningModule):
                     metric = max_acc + max_macro
                     self.log(f"{loss_name}/{phase}/max_accuracy_epoch", max_acc, prog_bar=True, on_epoch=True,
                              sync_dist=True, )
-                elif loss_name == 'FpFn':
+                elif loss_name == 'Spindle':
+                    value = getattr(self, f"{phase}_{loss_name}_loss").compute()
+                    self.log(f"{loss_name}/{phase}/score", value, prog_bar=True, on_epoch=True, sync_dist=True)
+                    getattr(self, f"{phase}_{loss_name}_loss").reset()
+                    TP = getattr(self, f"{phase}_FpFn_TP").compute()
+                    FN = getattr(self, f"{phase}_FpFn_FN").compute()
+                    FP = getattr(self, f"{phase}_FpFn_FP").compute()
+                    if stage == 'train':
+                        Recall = cal_Recall(TP, FN)
+                        Precision = cal_Precision(TP, FP)
+                        F1 = cal_F1_score(Precision, Recall)
+                    else:
+                        Recall = getattr(self, f"{phase}_FpFn_Recall").compute()
+                        # print(Recall)
+                        Precision = getattr(self, f"{phase}_FpFn_Precision").compute()
+                        F1 = getattr(self, f"{phase}_FpFn_F1").compute()
+                    rank_zero_info(f'end: stage: {stage}, TP:{TP}, FN: {FN}, FP: {FP}, value: {value}, '
+                                   f'recall: {Recall}, Precision:{Precision}, F1: {F1}')
+                    self.log(f"{loss_name}/{phase}/Recall", Recall, prog_bar=True, on_epoch=True, sync_dist=True)
+                    self.log(f"{loss_name}/{phase}/Precision", Precision, prog_bar=True, on_epoch=True, sync_dist=True)
+                    self.log(f"{loss_name}/{phase}/F1", F1, prog_bar=True, on_epoch=True, sync_dist=True)
+                    getattr(self, f"{phase}_FpFn_TP").reset()
+                    getattr(self, f"{phase}_FpFn_FN").reset()
+                    getattr(self, f"{phase}_FpFn_FP").reset()
+                    if stage != 'train':
+                        getattr(self, f"{phase}_FpFn_Recall").reset()
+                        getattr(self, f"{phase}_FpFn_Precision").reset()
+                        getattr(self, f"{phase}_FpFn_F1").reset()
+                    self.store_real_data = torch.zeros((20, 3000, 8, 1000), device=self.device)
+                    self.store_whole_eeg = torch.zeros((20, 3000, 1000), device=self.device)
+                    self.store_whole_label = torch.zeros((20, 3000, 1000), device=self.device)
+                    self.max_index = torch.zeros(20, device=self.device)
+                    metric = value
+                elif loss_name == 'Apnea':
                     value = getattr(self, f"{phase}_{loss_name}_loss").compute()
                     self.log(f"{loss_name}/{phase}/score", value, prog_bar=True, on_epoch=True, sync_dist=True)
                     getattr(self, f"{phase}_{loss_name}_loss").reset()
@@ -1260,6 +1343,9 @@ class Model(LightningModule):
         self.log_dict(norms)
         if hasattr(self, "spindle_pred_proj"):
             norms2 = grad_norm(self.spindle_pred_proj, norm_type=2)
+            self.log_dict(norms2)
+        if hasattr(self, "apnea_pred_proj"):
+            norms2 = grad_norm(self.apnea_pred_proj, norm_type=2)
             self.log_dict(norms2)
         if hasattr(self, "decoder_transformer_block"):
             norms2 = grad_norm(self.decoder_transformer_block, norm_type=2)

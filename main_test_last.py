@@ -81,12 +81,14 @@ def main(_config):
             name += '_' + _config['expert']
         if _config['EDF_Mode'] is not None:
             name += '_' + _config['EDF_Mode']
+        if _config['subset'] is not None:
+            name += '_data_' + str(_config['subset'])
         if version is not None:
             rank_zero_info(f'version: {version}')
             if isinstance(version, int):
-                ckpt_path = os.path.join(_config['output_dir'], f'{name}/{k}_fold/version_{version}')
+                ckpt_path = os.path.join(_config['output_dir'], f'{name}/fold_{k}/version_{version}')
             else:
-                ckpt_path = os.path.join(_config['output_dir'], f'{name}/{k}_fold/version_{version[k]}')
+                ckpt_path = os.path.join(_config['output_dir'], f'{name}/fold_{k}/version_{version[k]}')
             ckpt_path = os.path.join(ckpt_path, 'last.ckpt')
             rank_zero_info(f'ckpt_path: {ckpt_path}')
 

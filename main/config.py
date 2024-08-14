@@ -5,12 +5,12 @@ ex = Experiment("Sleep", save_git_info=False)
 
 def _loss_names(d):
     ret = {
-        "FpFn": 0,
+        "Spindle": 0,
         "CrossEntropy": 0,
         "mtm": 0,
         "itc": 0,
         "itm": 0,
-
+        'Apnea': 0,
     }
 
     ret.update(d)
@@ -48,7 +48,7 @@ def config():
 
     # train configs
     dropout = 0.1
-    loss_names = _loss_names({"FpFn": 0, "CrossEntropy": 0})
+    loss_names = _loss_names({"Spindle": 0, "CrossEntropy": 0})
     transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3, 4]], "mode": ["random"]})
     start_epoch = 0
     num_workers = 30
@@ -119,8 +119,8 @@ def config():
     loss_function = 'l1'
 
     # data settings
-    data_setting = {'SHHS': None, 'Young': None, 'SD': 'AMP', 'Physio': None,
-                    'MASS': None, 'ISRUC': None, 'EDF': None}
+    data_setting = {'SHHS': None, 'Young': "AMP", 'SD': 'AMP', 'Physio': None,
+                    'MASS': None, 'ISRUC': None, 'EDF': None, 'MGH': None,}
 
     resume_during_training = None
 
@@ -149,11 +149,11 @@ def config():
     Lambda = 1.0
     use_cb = False
     gradient_clip_val = None
-    save_top_k = 10
+    save_top_k = 2
     # kfold
     actual_channels = None
     kfold_test = None
-    grad_name = False
+    grad_name = 'all'
 
     #spindle
     mass_aug_times = 0
@@ -163,11 +163,12 @@ def config():
     patch_time = 30
     use_fpfn = None
     Use_FPN = None
-    Spindle_decoder_depth = 4
-    Spindle_enc_dim = 384
+    Event_decoder_depth = 4
+    Event_enc_dim = 384
     num_queries = 400
     FPN_resnet = False
     CE_Weight = 10
+    aug_test = None
 
     EDF_Mode = None
     subset = None
@@ -177,9 +178,12 @@ def config():
     return_alpha = False
     kfold_test = None
     show_transform_param = False
-
+    mask_strategies=None
     #triton
     use_triton = False
+    aug_dir = None
+    aug_prob = 0.
+
 @ex.named_config
 def test():
     data_dir = './data'
@@ -429,7 +433,6 @@ def finetune_edf():
     mixup = 0.8
 
     # data
-    data_setting = ['EDF']
     datasets = ['EDF']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed"]
 
@@ -537,7 +540,7 @@ def finetune_mass_stage():
     local_pooling = True
     # multi_y = ['tf', 'time', 'fft']
     multi_y = ['tf']
-    data_setting = ['MASS']
+    data_setting = {'MASS': 'AMP'}
 @ex.named_config
 def finetune_ISRUC_S1():
     mode = "finetune_ISRUC_S1"
@@ -588,6 +591,10 @@ def finetune_ISRUC_S3():
     data_setting = ['ISRUC']
 
 @ex.named_config
+def mass_mask_spindle_05():
+    datasets = ['MASS']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_aug_new_1_0.5/SS2"]
+@ex.named_config
 def finetune_MASS_Spindle():
     mode = "Spindledetection"
     extra_name = "finetune_MASS_Spindle"
@@ -600,10 +607,10 @@ def finetune_MASS_Spindle():
     # data
     datasets = ['MASS']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_aug_new_1/SS2"]
-    data_setting = ['MASS']
+    data_setting = {'MASS': 'AMP'}
     # train configs
     dropout = 0
-    loss_names = _loss_names({"FpFn": 1})
+    loss_names = _loss_names({"Spindle": 1})
     transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3]], "mode": ["shuffle"]})
 
     start_epoch = 0
@@ -617,7 +624,7 @@ def finetune_MASS_Spindle():
     warmup_steps = 5
 
     # dir
-    output_dir = './checkpoint_log/2201210064/experiments'
+    output_dir = './checkpoint/2201210064/experiments'
     log_dir = './checkpoint_log/2201210064/experiments'
     load_path = ""
 
@@ -640,7 +647,59 @@ def finetune_MASS_Spindle():
     # other
     gradient_clip_val = 1.0
     fast_dev_run = 7
+@ex.named_config
+def finetune_MASS_Apnea():
+    mode = "Apneadetection_SS1"
+    extra_name = "finetune_MASS_Apnea"
+    # batch
+    batch_size = 169
+    max_epoch = 50
+    accum_iter = 2
+    mask_ratio = None
 
+    # data
+    datasets = ['MASS_Apnea']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_1_Apnea"]
+    data_setting = {'MASS': None}
+    # train configs
+    dropout = 0
+    loss_names = _loss_names({"Apnea": 1})
+    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3]], "mode": ["shuffle"]})
+
+    start_epoch = 0
+    num_workers = 0
+    drop_path_rate = 0.1
+    patch_size = 200
+    lr_mult = 1  # multiply lr for downstream heads
+    blr = 1.5e-5
+    end_lr = 0
+
+    warmup_steps = 5
+
+    # dir
+    output_dir = './checkpoint/2201210064/experiments'
+    log_dir = './checkpoint_log/2201210064/experiments'
+    load_path = ""
+
+    # sche and opt
+    lr_policy = "cosine"
+    optim = "adamw"
+    clip_grad = False
+    weight_decay = 0.05
+
+    # device
+    device = 'cuda'
+    deepspeed = False
+    dist_on_itp = True
+
+
+    # evaluation
+    dist_eval = False
+    eval = False
+
+    # other
+    gradient_clip_val = 1.0
+    fast_dev_run = 7
 @ex.named_config
 def pretrain_datasets():
     datasets = ['SD', 'physio_train', 'physio_test', 'SHHS1', 'SHHS2', 'Young']
@@ -746,7 +805,26 @@ def edf_ft_955_linear():
     mode = "Other_EDF_Finetune"
     extra_name = "Finetune_edf_955_linear"
     EDF_Mode = '9_5_5'
-
+@ex.named_config
+def edf_portion_1_datasets():
+    mode = "Other_EDF_Finetune"
+    extra_name = "Finetune_edf_portion_1"
+    EDF_Mode = 'Portion_1_New'
+@ex.named_config
+def edf_portion_2_datasets():
+    mode = "Other_EDF_Finetune"
+    extra_name = "Finetune_edf_portion_2"
+    EDF_Mode = 'Portion_2_New'
+@ex.named_config
+def edf_portion_5_datasets():
+    mode = "Other_EDF_Finetune"
+    extra_name = "Finetune_edf_portion_5"
+    EDF_Mode = 'Portion_5_New'
+@ex.named_config
+def edf_portion_12_datasets():
+    mode = "Other_EDF_Finetune"
+    extra_name = "Finetune_edf_portion_12"
+    EDF_Mode = 'Portion_12_New'
 
 @ex.named_config
 def pretrain_time_fft_mtm():
@@ -756,21 +834,15 @@ def pretrain_time_fft_mtm():
     max_epoch = 200
     accum_iter = 2
     mask_ratio = [0.75]
-
-    # data
-    datasets = ['SD', 'physio_test', 'SHHS1', 'SHHS2', 'Young']
-    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/SD", "/home/cuizaixu_lab/huangweixuan/DATA/data/Physio/test",
-                "/home/cuizaixu_lab/huangweixuan/DATA/data/shhs_new/shhs_new",
-                "/home/cuizaixu_lab/huangweixuan/DATA/data/shhs_new/shhs_new",
-                "/home/cuizaixu_lab/huangweixuan/DATA/data/Young"]
-    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3, 4, 6]], "mode": ["random"]})
+    mask_strategies= 'all'
+    transform_keys = _train_transform_keys({"keys": [[1, 4, 6, 7]], "mode": ["full"]})
     # train configs
     dropout = 0
     loss_names = _loss_names({"mtm": 1, "itc": 0, "itm": 0})
     start_epoch = 0
     num_workers = 0
     drop_path_rate = 0.1
-    patch_size = 200
+    patch_size = 100
     lr_mult = 1  # multiply lr for downstream heads
     blr = 1.5e-5
     end_lr = 0
@@ -791,8 +863,9 @@ def pretrain_time_fft_mtm():
     device = 'cuda'
     deepspeed = False
     dist_on_itp = True
-
-
+    all_time = True
+    split_len = 1
+    time_size = 1
     # evaluation
     dist_eval = False
     eval = False
@@ -1053,10 +1126,11 @@ def pretrain_shhs_stage2():
 
     # other
     fast_dev_run = 7
+
 @ex.named_config
 def visualization():
-    mask_ratio = [0.75]
-    mode = 'ISRUC_S1'
+    mask_ratio = [0.33]
+    mode = 'visualization'
     kfold = 1
     model_arch = 'backbone_large_patch200'
     batch_size = 1
@@ -1072,14 +1146,16 @@ def visualization():
     loss_names = _loss_names({"mtm": 1})
     device = 'cpu'
     transform_keys = _train_transform_keys({"keys": [[]], "mode": ["random"]})
-    data_setting = ['visualization', 'ECG', 'SHHS', 'MASS']
     time_only = False
     # random choose channels
     random_choose_channels = 8
     patch_size = 200
+    mask_strategies=None
     # load_path='/data/checkpoint/Pshhs2_cosine_backbone_large_patch200_l1_pretrain/version_1/ModelCheckpoint-epoch=787-val_acc=0.0000-val_score=4.1723.ckpt'
-    load_path = '/Volumes/T7/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt'
-    visual = True
+    # load_path = '/mnt/data/checkpoint/sleep_cosine_backbone_huge_patch200_l1_pretrain_all_time/version_60/last.ckpt'
+
+    visual = False
+
 @ex.named_config
 def visualization_fft():
     mode = 'visualization'
@@ -1101,8 +1177,8 @@ def visualization_fft():
     # random choose channels
     random_choose_channels = 11
     patch_size = 200
-    load_path = '/home/hwx/Sleep/checkpoint/2201210064/experiments/sleep_1_backbone_base_patch200_l1/version_3/checkpoints/epoch=49-step=32936.ckpt'
-
+    # load_path = '/home/hwx/Sleep/checkpoint/2201210064/experiments/sleep_1_backbone_base_patch200_l1/version_3/checkpoints/epoch=49-step=32936.ckpt'
+    load_path = '/root/Sleep/cuizaixu/sleep_cosine_backbone_huge_patch200_l1_pretrain_all_time/version_57/ModelCheckpoint-epoch=00-val_acc=0.0000-val_score=4.5766.ckpt'
 @ex.named_config
 def visualization_block():
     mode = 'visualization'
@@ -1131,7 +1207,7 @@ def visualization_no_fft():
     visual_setting = {'mask_same': False, 'mode': 'no_fft'}
 @ex.named_config
 def visualization_mask_same():
-    mask_ratio = [0.75]
+    mask_ratio = [0.25]
     visual_setting = {'mask_same': True, 'mode': 'mask_same'}
 @ex.named_config
 def visualization_using_all_fft():
@@ -1163,7 +1239,7 @@ def visualization_sp():
     # EDF_setting = 'EDF'
     # datasets = ['MASS']
     # data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS/SS2"]
-    data_setting = ['MASS']
+    # data_setting = ['MASS']
     # train configs
     dropout = 0
     loss_names = _loss_names({"mtm": 1})
@@ -1209,7 +1285,7 @@ def MASS_datasets():
                 "/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS3",
                 "/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS4",
                 "/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS5", ]
-    data_setting = ['MASS']
+    data_setting = {'MASS': 'AMP'}
     kfold = 20
 
 @ex.named_config
@@ -1224,34 +1300,54 @@ def MASS_ckpt_version():
 def MASS1_datasets():
     datasets = ['MASS1']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS1"]
-    data_setting = ['MASS']
+    data_setting = {'MASS': 'AMP'}
     kfold = 20
 @ex.named_config
 def MASS2_datasets():
     datasets = ['MASS2']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS2"]
-    data_setting = ['MASS']
+    data_setting = {'MASS': 'AMP'}
     kfold = 20
 
+    actual_channels = None
+@ex.named_config
+def MASS2_aug_random_insert_datasets():
+    datasets = ['MASS2']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS2",
+                ]
+    aug_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/Aug_Random"]
+    aug_prob = 0.25
+    data_setting = {'MASS': 'AMP'}
+    actual_channels = None
+
+@ex.named_config
+def MASS2_aug_random_datasets():
+    datasets = ['MASS2', 'MASS2_AUG']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS2","/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/Aug_Random"]
+    data_setting = {'MASS': 'AMP'}
+    actual_channels = None
 @ex.named_config
 def MASS3_datasets():
     datasets = ['MASS3']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS3"]
-    data_setting = ['MASS']
+    data_setting = {'MASS': 'AMP'}
+
     kfold = 20
 
 @ex.named_config
 def MASS4_datasets():
     datasets = ['MASS4']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS4"]
-    data_setting = ['MASS']
+    data_setting = {'MASS': 'AMP'}
+
     kfold = 20
 
 @ex.named_config
 def MASS5_datasets():
     datasets = ['MASS5']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/MASS_Processed/SS5"]
-    data_setting = ['MASS']
+    data_setting = {'MASS': 'AMP'}
+
     kfold = 20
 
 @ex.named_config
@@ -1266,19 +1362,43 @@ def edf_aug_f3_datasets():
     data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_F3']
     data_setting = 'EDF'
     actual_channels = 'EDF_F3'
+
 @ex.named_config
 def edf_aug_consecutive_datasets():
     datasets = ['EDF', 'EDF_AUG']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed",
                 "/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_consecutive"]
     # data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_F3_C4']
-    data_setting = 'EDF'
+    data_setting = {'EDF': 'AMP'}
     actual_channels = 'EDF'
+@ex.named_config
+def edf_aug_all_datasets():
+    datasets = ['EDF_AUG']
+    data_dir = [
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_All"]
+    # data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_F3_C4']
+    data_setting = {'EDF': 'AMP'}
+    actual_channels = 'EDF_F3_O1'
+    #"F3", "Fpz", "O1", "Pz"
+@ex.named_config
+def edf_aug_half_datasets():
+    datasets = ['EDF', 'EDF_AUG']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_Half"]
+    data_setting = {'EDF': 'AMP'}
+    actual_channels = 'EDF'
+@ex.named_config
+def edf_half_datasets():
+    datasets = ['EDF']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed",
+               ]
+    data_setting = {'EDF': 'AMP'}
+    actual_channels = 'EDF'
+
 @ex.named_config
 def edf_aug_file_datasets():
     datasets = ['EDF']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_file"]
-    # data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_F3_C4']
     data_setting = 'EDF'
     actual_channels = 'EDF'
 @ex.named_config
@@ -1296,12 +1416,27 @@ def edf_aug_c4_datasets():
     # data_dir = ['/lustre/home/2201210064/DATA/data/sleep-cassette/Aug_C4']
     data_setting = 'EDF'
     actual_channels = 'EDF_C4'
+@ex.named_config
+def edf_portion_mix_datasets():
+    datasets = ['EDF']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed"]
+    data_setting = {'EDF': 'AMP'}
+    aug_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_All"]
+    actual_channels = 'EDF'
+@ex.named_config
+def edf_portion_datasets():
+    datasets = ['EDF', 'EDF_AUG']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/Aug_file"]
+    data_setting = {'EDF': 'AMP'}
+    actual_channels = 'EDF'
 
 @ex.named_config
 def edf_datasets():
     datasets = ['EDF']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/sleep-cassette/processed"]
-    data_setting = 'EDF'
+    data_setting = {'EDF': 'AMP'}
+
 
 @ex.named_config
 def local_edf_datasets():
@@ -1325,7 +1460,7 @@ def SHHS1_datasets():
     datasets = ['SHHS1']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/shhs_new/shhs_new"]
     kfold = None
-    data_setting = ['SHHS']
+    data_setting ={'SHHS': 'AMP'}
 @ex.named_config
 def SHHS1_WM_datasets():
     datasets = ['SHHS1']
@@ -1334,8 +1469,9 @@ def SHHS1_WM_datasets():
     data_setting = ['SHHS']
 @ex.named_config
 def SHHS1_load_path():
-    data_setting = ['SHHS']
-    load_path = ''
+    datasets = ['SHHS2']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/data/shhs_new/shhs_new"]
+    data_setting = {'SHHS': 'AMP'}
 @ex.named_config
 def SHHS2_datasets():
     datasets = ['SHHS2']
@@ -1346,6 +1482,7 @@ def SHHS2_datasets():
 def Young_datasets():
     datasets = ['Young']
     data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/Young"]
+    data_setting = {'Young': None}
 
 @ex.named_config
 def Local_Young_datasets():
@@ -1391,6 +1528,32 @@ def all_datasets():
                 ]
 
     data_setting = ['MASS', 'SHHS', 'EDF']
+@ex.named_config
+def all_A800_MGH():
+    datasets = ['MGH']
+    data_dir = [
+                "/root/Sleep/DATA/MGH_NEW"
+                ]
+
+@ex.named_config
+def all_A800_SHHS():
+    datasets = ['SHHS1', 'SHHS2',]
+    data_dir = [
+                 "/root/Sleep/DATA/shhs",
+                "/root/Sleep/DATA/shhs",
+                ]
+
+@ex.named_config
+def all_A800_datasets():
+    datasets = ['SD', 'physio_test', 'SHHS1', 'SHHS2', 'Young','MGH']
+    data_dir = ["/root/Sleep/DATA/SD",
+                "/root/Sleep/DATA/physio/test",
+                "/root/Sleep/DATA/shhs",
+                "/root/Sleep/DATA/shhs",
+                "/root/Sleep/DATA/Young",
+                "/root/Sleep/DATA/MGH_NEW"
+                ]
+
 @ex.named_config
 def visualization_test():
     mode = "Stagedetection"

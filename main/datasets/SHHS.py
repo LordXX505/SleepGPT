@@ -9,9 +9,10 @@ import os
 import pandas as pd
 from PIL import Image
 from .base_dataset import BaseDatatset
+from .new_base_dataset import Aug_BaseDataset
 
 
-class SHHSDataset(BaseDatatset):
+class SHHSDataset(Aug_BaseDataset):
     def __init__(self, split="", *args, **kwargs):
         """
         SD dataset.
@@ -29,18 +30,34 @@ class SHHSDataset(BaseDatatset):
        """
         print('split: ', split)
 
+        data_dir = kwargs['data_dir']
+        file_path_npy = os.path.join(data_dir, f'{split}.npy')
+        file_path_npz = os.path.join(data_dir, f'{split}.npz')
+        items = None
         try:
-            names = np.load(os.path.join(kwargs['data_dir'], f'{split}.npy'), allow_pickle=True)
-            nums = None
+            if os.path.exists(file_path_npy):
+                items = np.load(file_path_npy, allow_pickle=True)
+            elif os.path.exists(file_path_npz):
+                items = np.load(file_path_npz, allow_pickle=True)
+            else:
+                raise FileNotFoundError(f"Neither {file_path_npy} nor {file_path_npz} found.")
         except:
-            try:
-                data = np.load(os.path.join(kwargs['data_dir'], f'{split}.npz'), allow_pickle=True)
+            raise FileNotFoundError(f"Neither {file_path_npy} nor {file_path_npz} found.")
+        if items is not None:
+            if isinstance(items, np.lib.npyio.NpzFile):
+                names = items['names']
+                nums = items['nums']
+            elif items.dtype == np.dtype('O'):
+                data = items.item()
                 names = data['names']
                 nums = data['nums']
-            except:
-                names = np.array(glob.glob(kwargs['data_dir'] + '/*/*'))
-                nums = None
+            else:
+                names = items['names']
+                nums = items['nums']
+        else:
+            raise ValueError("Loaded data is None.")
         kwargs.pop('kfold', None)
+
         # print(os.path.join(kwargs['data_dir'], 'train.npy'))
         super().__init__(names=names, nums=nums, split=split, *args, **kwargs)
 

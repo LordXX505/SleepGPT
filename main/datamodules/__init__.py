@@ -9,6 +9,8 @@ from .SHHS2_datamodule import SHHS2DataModule
 from .MASS_datamodule import MASSDataModule
 from .EDF_datamodule import EDFDataModule, EDFAugDataModule
 from .ISRUC_datamodule import ISRUCDataModule
+from .MGH_datamodule import MGHDataModule
+from .Apnea_datamodule import ApneaDataModule
 _datamodules = {
     'physio_train': physioDataModule,
     'physio_test': physioDataModule,
@@ -23,8 +25,12 @@ _datamodules = {
     'MASS3': MASSDataModule,
     'MASS4': MASSDataModule,
     'MASS5': MASSDataModule,
+    'MASS2_AUG': MASSDataModule,
     'EDF': EDFDataModule,
     'EDF_AUG': EDFAugDataModule,
     'ISRUC_S3': ISRUCDataModule,
-    'ISRUC_S1': ISRUCDataModule
+    'ISRUC_S1': ISRUCDataModule,
+    'MGH': MGHDataModule,
+    'MASS_Apnea': ApneaDataModule,
+
 }

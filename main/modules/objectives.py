@@ -537,6 +537,7 @@ def compute_ce(pl_module, batch, stage, persub=False):
                 res.update({'local': infer['local_feats']})
         else:
             infer = getattr(pl_module, f"infer_{name}")(batch, time_mask=False)
+        # print(f"cls_feats; {infer['cls_feats']}")
         res.update(infer['cls_feats'])
     # d = res.shape[-1]
     index = batch['index']
@@ -762,7 +763,7 @@ def compute_entire_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True,
                 pl_module.log(f"FpFn/{phase}/{name}/loss", loss, sync_dist_group=True, prog_bar=True)
                 res_prob_step[prob_step] = {'F1': F1, 'TP': TP, 'FN': FN, 'FP': FP,
                                             'Precision': Precision, 'Recall': Recall, 'loss': loss}
-            # accumulate and the average of the loss
+            # accumulated and the average of the loss
             res_prob_step = sorted(res_prob_step.items(), key=lambda x: x[1]['F1'])
             loss = getattr(pl_module, f"{phase}_FpFn_loss")(res_prob_step[-1][1]['loss'])
             TP = getattr(pl_module, f"{phase}_FpFn_TP")(res_prob_step[-1][1]['TP'])
@@ -773,7 +774,7 @@ def compute_entire_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True,
             Precision = getattr(pl_module, f"{phase}_FpFn_Precision")(res_prob_step[-1][1]['Precision'])
             Recall = getattr(pl_module, f"{phase}_FpFn_Recall")(res_prob_step[-1][1]['Recall'])
             if stage == 'test':
-                rootdir = f'/home/cuizaixu_lab/huangweixuan/data/ver_log'
+                rootdir = f'/home/cuizaixu_lab/huangweixuan/DATA/temp_log/ver_log'
                 rank_zero_info(f'stage == test, saving the results')
                 os.makedirs(f'{rootdir}/test/{path}', exist_ok=True)
                 torch.save({'epoch': epoch, 'label': label, 'real': real_epoch}, f'{rootdir}/test/{path}/{name}.ckpt')

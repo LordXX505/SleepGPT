@@ -11,6 +11,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import ModelSummary
 from lightning.pytorch.strategies import DDPStrategy
 import os
+import numpy as np
 
 from main.datamodules.Multi_datamodule import MultiDataModule
 from main.modules import Model, Model_Pre
@@ -31,24 +32,25 @@ def main(_config):
         start_idx = int(_config['resume_during_training'])
     else:
         start_idx = 0
-    for k in range(start_idx, _config['kfold']):
-        version = None
-        # if k==0 or k==1: #resume
-        #     continue
-        # if k == 7:
-        #     sys.exit(0)
+    if _config['kfold'] == None:
+        end_idx = 1
+    else:
+        end_idx = _config['kfold']
+    for k in range(start_idx, end_idx):
         rank_zero_info(f'Using k fold: now is {k}')
         exp_name = f'{_config["exp_name"]}'
         # model = Mu_Std(_config)
         if _config['mode'] == 'pretrain':
             model = Model_Pre(_config)
         else:
-            model = Model(_config)
+            model = Model(_config, fold_now=k)
         if _config['mode'] == 'Spindledetection':
             data_dir_temp = _config['data_dir'][0]
             mass_aug_times = _config['mass_aug_times']
             data_dir_temp_list = data_dir_temp.split('/')
-            data_dir_temp_list[-2] = 'MASS_aug_new_' + str(mass_aug_times)
+            orig_names = data_dir_temp_list[-2].split('_')
+            orig_names[3] = str(mass_aug_times)
+            data_dir_temp_list[-2] = '_'.join(orig_names)
             _config['data_dir'] = ['/'.join(data_dir_temp_list)]
             rank_zero_info(f"Modified data dir: {_config['data_dir']}")
         dm = MultiDataModule(_config, kfold=k)
@@ -95,7 +97,7 @@ def main(_config):
         else:
             monitor = "CrossEntropy/validation/max_accuracy_epoch"
         rank_zero_info(f'monitor: {monitor}')
-        if _config['loss_names']['FpFn'] > 0:
+        if _config['loss_names']['Spindle'] > 0 or _config['loss_names']['Apnea'] > 0:
             filename = 'ModelCheckpoint-epoch={epoch:02d}-val_acc={FpFn/validation/F1:.4f}-val_score={' \
                        'validation/the_metric:.4f}'
         elif _config['loss_names']['CrossEntropy'] > 0:
@@ -212,5 +214,13 @@ def main(_config):
                 rank_zero_info(f'k == {k}, no resuming checkpoints')
                 trainer.fit(model, datamodule=dm,)
         else:
-            trainer.test(model, datamodule=dm)
+            if _config['mode'] == 'visualization_mask_ratio_dynamic':
+                for mask_ratio in [0.45, 0.6, 0.75, 0.9]:
+                    model.transformer.mask_ratio[0] = mask_ratio
+                    _config['mask_ratio'] = [mask_ratio]
+                    dm = MultiDataModule(_config, kfold=k)
+                    rank_zero_info(f'mask_ratio: {mask_ratio}')
+                    trainer.test(model, datamodule=dm)
+            else:
+                trainer.test(model, datamodule=dm)
 

@@ -144,7 +144,7 @@ def visual_radar_f1():
         ans[i] = macro_f1_sub
         overall_metric[i] = (kappa, acc, macro_f1)
     print(f'ans: {ans}')
-
+    print(f'overall_metric: {overall_metric}')
     max_per_class = np.max(np.stack([ans[0], ans[1]]), axis=0)
     ans[0] = np.where(max_per_class != 0, ans[0] / max_per_class, 1)
     ans[1] = np.where(max_per_class != 0, ans[1] / max_per_class, 1)

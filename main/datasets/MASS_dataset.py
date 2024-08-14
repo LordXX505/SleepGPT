@@ -10,7 +10,8 @@ from PIL import Image
 from .base_dataset import BaseDatatset
 
 
-class MASSDataset(BaseDatatset):
+from .new_base_dataset import Aug_BaseDataset
+class MASSDataset(Aug_BaseDataset):
 
     split = 'train'
     transform_keys = ['full']
@@ -25,7 +26,6 @@ class MASSDataset(BaseDatatset):
 
         assert split in ['train', 'val', 'test']
         k = kwargs['kfold']
-        expert = kwargs['expert']
         if k is None:
             raise NotImplementedError
         else:
@@ -37,14 +37,23 @@ class MASSDataset(BaseDatatset):
             print(f'mass datasets items file name: {file_name}')
             items = np.load(os.path.join(kwargs['data_dir'], f'{file_name}'), allow_pickle=True)
             if items.dtype == np.dtype('O'):
-                names = items.item()[f'{split}_{k}']['names']
-                nums = items.item()[f'{split}_{k}']['nums']
+                data = items.item()[f'{split}_{k}']
+                names = data['names']
+                if 'nums' in data.keys():
+                    nums = data['nums']
+                else:
+                    nums = None
             else:
                 names = items['names']
-                nums = items['nums']
+                if 'nums' in items.keys():
+                    nums = items['nums']
+                else:
+                    nums = None
         kwargs.pop('kfold')
-        kwargs.pop('expert')
-        # print(f'len names:{len(names)}, expert:{expert}')
+        expert = kwargs.pop('expert', None)
+        if expert is not None:
+            kwargs['data_dir'] = os.path.join(kwargs['data_dir'], expert)
+        print(f"data_dir: {kwargs['data_dir']}")
         # print(len(names), len(nums))
         super().__init__(names=names, concatenate=False, nums=nums, split=split, *args, **kwargs)
 
@@ -68,9 +77,9 @@ class MASSDataset(BaseDatatset):
             start_idx *= self.split_len
         # print(f'after start idx: {start_idx}')
         try:
-            return self.idx_2_name[idx].split('/')[-1]
-        except:
             return int(self.idx_2_name[idx].split('/')[-2].split('-')[-1])
+        except:
+            return self.idx_2_name[idx].split('/')[-1]
 
 
 

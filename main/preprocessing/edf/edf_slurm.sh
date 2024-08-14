@@ -19,5 +19,5 @@ source activate pytorch
 #srun python3 edf2013_gen_list_TCC.py
 load_path=/home/cuizaixu_lab/huangweixuan/DATA_C/data/checkpoint/Unify_cosine_backbone_large_patch200_l1_pretrain/version_3/ModelCheckpoint-epoch=79-val_acc=0.0000-val_score=4.2305.ckpt
 
-srun python3 augment_file.py with visualization_sp Young_datasets model_arch=backbone_large_patch200 mask_ratio=0.5 load_path=$load_path \
+srun python3 augment_channels.py with visualization_sp Young_datasets  visualization_mask_same model_arch=backbone_large_patch200 load_path=$load_path \
       num_gpus=1 num_nodes=1 num_workers=9

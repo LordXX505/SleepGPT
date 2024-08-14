@@ -21,8 +21,8 @@ import matplotlib.pyplot as plt
 from typing import List
 import torch
 #
-# path_root = "/home/cuizaixu_lab/huangweixuan/data/data/SS2"
-path_root = '/Volumes/T7/SS2'
+path_root = "/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/SS2"
+# path_root = '/Volumes/T7/SS2'
 ana_spindle = os.path.join(path_root, 'SS2_ana')
 spindle_path_E1 = glob.glob(ana_spindle + '/*Spindles_E1*')
 spindle_path_E2 = glob.glob(ana_spindle + '/*Spindles_E2*')
@@ -51,13 +51,16 @@ def plot_generate(generate_epoch, res, batch_epoch, aug_time, i, save_label, inv
 
         Axes[0].set_ylim([-100*1e-6, 100*1e-6])
         Axes[1].set_ylim([-100*1e-6, 100*1e-6])
-    # os.makedirs(f'/home/cuizaixu_lab/huangweixuan/Sleep/result/{aug_time}/{name}_{idx}/aug_{i}/', exist_ok=True)
-    # plt.savefig(f"/home/cuizaixu_lab/huangweixuan/Sleep/result/{aug_time}/{name}_{idx}/aug_{i}/predict_{inverse}.svg", format='svg')
-    os.makedirs(f'/Users/hwx_admin/Sleep/result/{aug_time}/{name}_{idx}/aug_{i}', exist_ok=True)
-    plt.savefig(f"/Users/hwx_admin/Sleep/result/{aug_time}/{name}_{idx}/aug_{i}/predict_{inverse}.svg", format='svg')
+    os.makedirs(f'/home/cuizaixu_lab/huangweixuan/Sleep/result/{aug_time}/{name}_{idx}/aug_{i}/', exist_ok=True)
+    plt.savefig(f"/home/cuizaixu_lab/huangweixuan/Sleep/result/{aug_time}/{name}_{idx}/aug_{i}/predict_{inverse}.svg", format='svg')
+    # os.makedirs(f'/Users/hwx_admin/Sleep/result/{aug_time}/{name}_{idx}/aug_{i}', exist_ok=True)
+    # plt.savefig(f"/Users/hwx_admin/Sleep/result/{aug_time}/{name}_{idx}/aug_{i}/predict_{inverse}.svg", format='svg')
     plt.show()
 
-
+def replace2orig(path):
+    path = path.split('/')
+    path[6] = 'MASS_aug_new_0'
+    return os.path.join(*path)
 @ex.automain
 def main(_config):
     pre_train = Model(_config)
@@ -71,9 +74,10 @@ def main(_config):
     count_label = 0
     count_stage2 = 0
     aug_time = 1
+    mask_ratio = _config['mask_ratio']
     MASS_aug_name = f"MASS_aug_new_{aug_time}"
     print(f'MASS_aug_name: {MASS_aug_name}')
-    for _, path in enumerate([spindle_path_E2]):
+    for _, path in enumerate([spindle_path_E1, spindle_path_E2]):
         plot_cnt = 0
         expert = 'E1'
         if _ == 1:
@@ -81,8 +85,7 @@ def main(_config):
         for items in path:
             name = os.path.split(items)[1].split(' ')[0]
             print(f"--------------{name}, items: {items}---------------")
-            if name != '01-02-0001':
-                continue
+
             epochs = mne.io.read_raw_edf(glob.glob(epoch + f"/{name}*PSG*")[0])
             Base = mne.read_annotations(glob.glob(epoch + f"/{name}*Base*")[0])
             print(f'base.info: {Base.description}')
@@ -128,7 +131,7 @@ def main(_config):
             ## train
             epochs = np.array(np.split(epochs, n_epochs, axis=1))
             print(f'max: {np.max(epochs)}, min:{np.min(epochs)}')
-            epochs = np.clip(epochs, a_min=-150 * 1e-6, a_max=150 * 1e-6)
+            epochs = np.clip(epochs, a_min=-150*1e6, a_max=150*1e6)
             labels = np.array(np.split(labels, n_epochs, axis=0))
             print(f"epochs.shape: {epochs.shape}")
             print(f'labels: {len(labels)}')
@@ -136,12 +139,11 @@ def main(_config):
             epochs = epochs[select_idx]
             labels = labels[select_idx]
             cnt = 0
-            filename = f'/home/cuizaixu_lab/huangweixuan/data/data/{MASS_aug_name}/SS2/{expert}'
+            filename = f'/home/cuizaixu_lab/huangweixuan/DATA/data/{MASS_aug_name}/SS2/{expert}'
             # filename = path_root
-            for idx in range(len(epochs))[356:]:
+            for idx in range(len(epochs)):
                 print(f'_______idx: {idx}________')
-                # idx = 6 #102 107 108 113
-                # idx = 108
+
                 count_label += int(np.sum(labels[idx]) > 0)
                 save_epochs = epochs[idx]
                 save_labels = labels[idx]
@@ -153,19 +155,19 @@ def main(_config):
                 dataframe = pd.DataFrame(
                     {'x': [save_epochs.tolist()], 'Spindles': [save_labels.tolist()], 'bads': [bads]}
                 )
-                # table = pa.Table.from_pandas(dataframe)
-                # os.makedirs(f"{filename}/{name}/train", exist_ok=True)
-                # with pa.OSFile(
-                #         f"{filename}/{name}/train/{str(cnt).zfill(5)}.arrow", "wb"
-                # ) as sink:
-                #     with pa.RecordBatchFileWriter(sink, table.schema) as writer:
-                #         writer.write_table(table)
-                # cnt += 1
-                # del dataframe
-                # del table
-                # gc.collect()
+                table = pa.Table.from_pandas(dataframe)
+                os.makedirs(f"{filename}/{name}/train", exist_ok=True)
+                with pa.OSFile(
+                        f"{filename}/{name}/train/{str(cnt).zfill(5)}.arrow", "wb"
+                ) as sink:
+                    with pa.RecordBatchFileWriter(sink, table.schema) as writer:
+                        writer.write_table(table)
+                cnt += 1
+                del dataframe
+                del table
+                gc.collect()
                 print('==========Augment==========')
-                if torch.sum(batch_labels) <= 200:
+                if torch.sum(batch_labels) <= 50:
                     print(f'coutinue')
                     continue
                 # collate(dict{'Spindle_label': label, 'x':(epochs, channels), index)
@@ -174,6 +176,7 @@ def main(_config):
                     batch_epoch = batch_epochs.detach().clone() * 1e6
                     batch = {'Spindle_label': batch_labels.detach().clone().unsqueeze(0),
                              'x': (batch_epoch, torch.tensor([4, 5, 16, 18, 22, 36, 38, 52])),
+                             'norms': [True],
                              'index': torch.tensor(1)}  # index is no use
                     batch = collate([batch])
                     print(f'===========begin: {i}===========cnt:{cnt}===========')
@@ -191,34 +194,33 @@ def main(_config):
                     assert save_epochs.shape[1] == 2000, f'shape : {save_epochs.shape}'
                     save_label = batch_labels.detach().clone()
                     inverse_flag = 'N'
-                    # if torch.rand(1) < 0.5:
-                    #     print('inverse the batch')
-                    #     generate_epoch = torch.flip(generate_epoch, dims=[-1])
-                    #     save_label = torch.flip(save_label, dims=[-1])
-                    #     inverse_flag = 'Y'
-                    if plot_cnt <= 500:
+                    if torch.rand(1) < 0.5:
+                        print('inverse the batch')
+                        generate_epoch = torch.flip(generate_epoch, dims=[-1])
+                        save_label = torch.flip(save_label, dims=[-1])
+                        inverse_flag = 'Y'
+                    if plot_cnt <= 50:
                         plot_generate(generate_epoch=generate_epoch, res=res, batch_epoch=batch_epoch,
                                       aug_time=aug_time, i=i, save_label=save_label, inverse=inverse_flag, name=name, idx=idx)
                         plot_cnt += 1
-                    # dataframe = pd.DataFrame(
-                    #     {'x': [generate_epoch.tolist()], 'Spindles': [save_label.tolist()], 'bads': [bads],
-                    #      'time_mask_patch': [res['time_mask_patch'].tolist()]}
-                    # )
-                    # table = pa.Table.from_pandas(dataframe)
-                    # os.makedirs(f"{filename}/{name}/train", exist_ok=True)
-                    # with pa.OSFile(
-                    #         f"{filename}/{name}/train/{str(cnt).zfill(5)}.arrow", "wb"
-                    # ) as sink:
-                    #     with pa.RecordBatchFileWriter(sink, table.schema) as writer:
-                    #         writer.write_table(table)
-                    # cnt += 1
-                    # del dataframe
-                    # del table
-                    # gc.collect()
+                    dataframe = pd.DataFrame(
+                        {'x': [generate_epoch.tolist()], 'Spindles': [save_label.tolist()], 'bads': [bads],
+                         'time_mask_patch': [res['time_mask_patch'].tolist()]}
+                    )
+                    table = pa.Table.from_pandas(dataframe)
+                    os.makedirs(f"{filename}/{name}/train", exist_ok=True)
+                    with pa.OSFile(
+                            f"{filename}/{name}/train/{str(cnt).zfill(5)}.arrow", "wb"
+                    ) as sink:
+                        with pa.RecordBatchFileWriter(sink, table.schema) as writer:
+                            writer.write_table(table)
+                    cnt += 1
+                    del dataframe
+                    del table
+                    gc.collect()
 
             ## validation and test
             cnt = 0
-            filename = f'/home/cuizaixu_lab/huangweixuan/data/data/{MASS_aug_name}/SS2/{expert}'
             print(f'len(epochs): {len(epochs)}')
             print(f'test path: {filename}')
             for idx in range(len(epochs)):
@@ -255,123 +257,131 @@ def main(_config):
                     del table
                     gc.collect()
     print('End')
-# E1_sub = f'/home/cuizaixu_lab/huangweixuan/data/data/{MASS_aug_name}/SS2/E1/*'
-# names = []
-# train_nums = []
-# test_nums = []
-# train_names = []
-# test_names = []
-# for sub in glob.glob(E1_sub):
-#     names.append(sub)
-#     train_names.append(os.path.join(sub, 'train'))
-#     test_names.append(os.path.join(sub, 'test'))
-# for name in names:
-#     print(f'------{name}-------')
-#     tmp = 0
-#     name_train = os.path.join(name, 'train')
-#     for item in os.listdir(name_train):
-#         if os.path.isfile(os.path.join(str(name_train), str(item))):
-#             tmp += 1
-#     print(f'num: {tmp}')
-#     train_nums.append(tmp)
-#     name_test = os.path.join(name, 'test')
-#     tmp = 0
-#
-#     for item in os.listdir(name_test):
-#         if os.path.isfile(os.path.join(str(name_test), str(item))):
-#             tmp += 1
-#     print(f'num: {tmp}')
-#     test_nums.append(tmp)
-#
-# train_nums = np.array(train_nums, dtype=object)
-# test_nums = np.array(test_nums, dtype=object)
-# train_names = np.array(train_names)
-# test_names = np.array(test_names)
-#
-# n = len(names)
-# idx = np.arange(n)
-# np.random.shuffle(idx)
-# names = np.array(names)
-# k_split = n // 5
-# res = {}
-# path = f'/home/cuizaixu_lab/huangweixuan/data/data/{MASS_aug_name}/SS2/'
-# for i in range(5):
-#     st = i * k_split
-#     ed = (i + 1) * k_split
-#     idx_split = idx[st:ed]
-#     idx_train = np.setdiff1d(idx, idx_split)
-#     res[f'train_{i}'] = {}
-#     res[f'train_{i}']['names'] = train_names[idx_train[1:]]
-#     res[f'train_{i}']['nums'] = train_nums[idx_train[1:]]
-#     res[f'val_{i}'] = {}
-#     res[f'val_{i}']['names'] = test_names[idx_train[:1]]
-#     res[f'val_{i}']['nums'] = test_nums[idx_train[:1]]
-#     res[f'test_{i}'] = {}
-#     res[f'test_{i}']['names'] = test_names[idx_split]
-#     res[f'test_{i}']['nums'] = test_nums[idx_split]
-#     print(len(res[f'test_{i}']['nums']), len(res[f'test_{i}']['names']), len(res[f'val_{i}']['nums']),
-#           len(res[f'train_{i}']['nums']))
-# np.save(os.path.join(path, f'all_split_E1'), arr=res, allow_pickle=True)
-#
-# MASS_aug_name = f"MASS_aug_new_2"
-# E2_sub = f'/home/cuizaixu_lab/huangweixuan/data/data/{MASS_aug_name}/SS2/E1/*'
-# names = []
-# train_nums = []
-# test_nums = []
-# train_names = []
-# test_names = []
-# for sub in glob.glob(E2_sub):
-#     names.append(sub)
-#     train_names.append(os.path.join(sub, 'train'))
-#     test_names.append(os.path.join(sub, 'test'))
-# for name in names:
-#     print(f'------{name}-------')
-#     tmp = 0
-#     name_train = os.path.join(name, 'train')
-#     for item in os.listdir(name_train):
-#         if os.path.isfile(os.path.join(str(name_train), str(item))):
-#             tmp += 1
-#     print(f'num: {tmp}')
-#     train_nums.append(tmp)
-#     name_test = os.path.join(name, 'test')
-#     tmp = 0
-#     for item in os.listdir(name_test):
-#         if os.path.isfile(os.path.join(str(name_test), str(item))):
-#             tmp += 1
-#     print(f'num: {tmp}')
-#     test_nums.append(tmp)
-#
-# train_nums = np.array(train_nums)
-# test_nums = np.array(test_nums)
-# train_names = np.array(train_names)
-# test_names = np.array(test_names)
-# print(f'train_names: {train_names}')
-# n = len(names)
-# idx = np.arange(n)
-# names = np.array(names)
-# k_split = 4
-# res = {}
-# path = f'/home/cuizaixu_lab/huangweixuan/data/data/{MASS_aug_name}/SS2/'
-# for i in range(5):
-#     st = i * k_split
-#     ed = (i + 1) * k_split
-#
-#     idx_split = idx[st:ed]
-#     idx_train = np.setdiff1d(idx, idx_split)
-#     np.random.shuffle(idx_train)
-#     res[f'train_{i}'] = {}
-#     res[f'train_{i}']['names'] = train_names[idx_train[1:]]
-#     res[f'train_{i}']['nums'] = train_nums[idx_train[1:]]
-#     res[f'val_{i}'] = {}
-#     res[f'val_{i}']['names'] = test_names[idx_split]
-#     res[f'val_{i}']['nums'] = test_nums[idx_split]
-#     res[f'test_{i}'] = {}
-#     res[f'test_{i}']['names'] = test_names[idx_split]
-#     res[f'test_{i}']['nums'] = test_nums[idx_split]
-#     print(idx, st, ed, idx_train)
-#     print(f'train name : {res[f"train_{i}"]["names"]}')
-#     print(f'test name : {res[f"test_{i}"]["names"]}')
-#     print(f'val name : {res[f"val_{i}"]["names"]}')
-# np.save(os.path.join(path, f'all_split_E1_new_5'), arr=res, allow_pickle=True)
+
+    E1_sub = f'/home/cuizaixu_lab/huangweixuan/DATA/data/{MASS_aug_name}/SS2/E1/*'
+    print(f'======================E1===========================')
+    names = []
+    train_nums = []
+    test_nums = []
+    train_names = []
+    test_names = []
+    for sub in glob.glob(E1_sub):
+        names.append(sub)
+        train_names.append(os.path.join(sub, 'train'))
+        test_names.append(os.path.join(sub, 'test'))
+    for name in names:
+        print(f'------{name}-------')
+        tmp = 0
+        name_train = os.path.join(name, 'train')
+        for item in os.listdir(name_train):
+            if os.path.isfile(os.path.join(str(name_train), str(item))):
+                tmp += 1
+        print(f'num: {tmp}')
+        train_nums.append(tmp)
+        name_test = os.path.join(name, 'test')
+        tmp = 0
+
+        for item in os.listdir(name_test):
+            if os.path.isfile(os.path.join(str(name_test), str(item))):
+                tmp += 1
+        print(f'num: {tmp}')
+        test_nums.append(tmp)
+
+    train_nums = np.array(train_nums, dtype=object)
+    test_nums = np.array(test_nums, dtype=object)
+    train_names = np.array(train_names)
+    test_names = np.array(test_names)
+    print(train_names, test_names)
+    n = len(names)
+    idx = np.arange(n)
+    np.random.shuffle(idx)
+    k_split = n // 5
+    res = {}
+    path = f'/home/cuizaixu_lab/huangweixuan/DATA/data/{MASS_aug_name}/SS2/'
+    for i in range(5):
+        st = i * k_split
+        ed = (i + 1) * k_split
+        idx_split = idx[st:ed]
+        idx_train = np.setdiff1d(idx, idx_split)
+        res[f'train_{i}'] = {}
+        res[f'train_{i}']['names'] = train_names[idx_train[1:]]
+        res[f'train_{i}']['nums'] = train_nums[idx_train[1:]]
+        res[f'val_{i}'] = {}
+        res[f'val_{i}']['names'] = test_names[idx_train[:1]]
+        res[f'val_{i}']['nums'] = test_nums[idx_train[:1]]
+        res[f'test_{i}'] = {}
+        res[f'test_{i}']['names'] = test_names[idx_split]
+        res[f'test_{i}']['nums'] = test_nums[idx_split]
+        print(len(res[f'test_{i}']['nums']), len(res[f'test_{i}']['names']), len(res[f'val_{i}']['nums']),
+              len(res[f'train_{i}']['nums']))
+    np.save(os.path.join(path, f'all_split_E1_new_5'), arr=res, allow_pickle=True)
+
+    print(f'======================E2===========================')
+
+    E2_sub = f'/home/cuizaixu_lab/huangweixuan/DATA/data/{MASS_aug_name}/SS2/E2/*'
+    names = []
+    train_nums = []
+    test_nums = []
+    train_names = []
+    orig_train_names = []
+    orig_train_nums = []
+    test_names = []
+    for sub in glob.glob(E2_sub):
+        names.append(sub)
+        train_names.append(os.path.join(sub, 'train'))
+        test_names.append(os.path.join(sub, 'test'))
+        orig_train_names.append(replace2orig(os.path.join(sub, 'train')))
+    for name in names:
+        print(f'------{name}-------')
+        tmp = 0
+        name_train = os.path.join(name, 'train')
+        for item in os.listdir(name_train):
+            if os.path.isfile(os.path.join(str(name_train), str(item))):
+                tmp += 1
+        print(f'num: {tmp}')
+        train_nums.append(tmp)
+        name_test = os.path.join(name, 'test')
+        tmp = 0
+        for item in os.listdir(name_test):
+            if os.path.isfile(os.path.join(str(name_test), str(item))):
+                tmp += 1
+        print(f'num: {tmp}')
+        test_nums.append(tmp)
+
+    train_nums = np.array(train_nums)
+    test_nums = np.array(test_nums)
+    train_names = np.array(train_names)
+    test_names = np.array(test_names)
+    print(f'train_names: {train_names}')
+    n = len(names)
+    idx = np.arange(n)
+    k_split = 3
+    path = f'/home/cuizaixu_lab/huangweixuan/DATA/data/{MASS_aug_name}/SS2/'
+    for j in range(5):
+        res = {}
+        for i in range(5):
+            st = i * k_split
+            ed = (i + 1) * k_split
+
+            idx_split = idx[st:ed]
+            idx_train = np.setdiff1d(idx, idx_split)
+            np.random.shuffle(idx_train)
+            res[f'train_{i}'] = {}
+            for _idx_train in idx_train[1:]:
+                tn = train_names[_idx_train]
+
+                res[f'train_{i}']['names'] = tn
+                res[f'train_{i}']['nums'] = train_nums[idx_train[1:]]
+            res[f'val_{i}'] = {}
+            res[f'val_{i}']['names'] = test_names[idx_split]
+            res[f'val_{i}']['nums'] = test_nums[idx_split]
+            res[f'test_{i}'] = {}
+            res[f'test_{i}']['names'] = test_names[idx_split]
+            res[f'test_{i}']['nums'] = test_nums[idx_split]
+            print(idx, st, ed, idx_train)
+            print(f'train name : {res[f"train_{i}"]["names"]}')
+            print(f'test name : {res[f"test_{i}"]["names"]}')
+            print(f'val name : {res[f"val_{i}"]["names"]}')
+        np.save(os.path.join(path, f'all_split_E2_new_5_{j}'), arr=res, allow_pickle=True)
 #
 #

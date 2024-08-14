@@ -14,10 +14,10 @@ def softmax_kernel_forward(
     output_row_stride,
     n_cols,
     causal,
-    **meta
+    BLOCK_SIZE: tl.constexpr,
 ):
     row_idx = tl.program_id(0)
-    BLOCK_SIZE = meta['BLOCK_SIZE']
+    BLOCK_SIZE = BLOCK_SIZE
 
     row_start_ptr = input_ptr + row_idx * input_row_stride
 
@@ -51,7 +51,7 @@ def softmax_kernel_backward(
     input_row_stride,
     output_row_stride,
     n_cols,
-    **meta
+    BLOCK_SIZE: tl.constexpr,
 ):
     '''
     dx,
@@ -72,7 +72,7 @@ def softmax_kernel_backward(
     :return:
     '''
     row_idx = tl.program_id(0)
-    BLOCK_SIZE = meta['BLOCK_SIZE']
+    BLOCK_SIZE =BLOCK_SIZE
 
     row_start_ptr = input_ptr + row_idx * input_row_stride
     grad_row_start_ptr = grad_ptr + row_idx * grad_row_stride
@@ -112,8 +112,8 @@ class _softmax(autograd.Function):
             y.stride(0),
             n_cols,
             causal,
-            num_warps = num_warps,
-            BLOCK_SIZE = BLOCK_SIZE,
+            num_warps=num_warps,
+            BLOCK_SIZE=BLOCK_SIZE,
         )
 
         if x.requires_grad:

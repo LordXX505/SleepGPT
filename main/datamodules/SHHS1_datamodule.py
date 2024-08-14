@@ -15,9 +15,9 @@ class SHHS1DataModule(BaseDataModule):
     @property
     def column_names(self):
         if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['data_setting']:
-            return ['x', 'Stage_label']
+            return ['signal', 'stage', 'good_channels']
         else:
-            return ['x']
+            return ['signal', 'good_channels']
 
     @property
     def stage(self):
@@ -54,9 +54,12 @@ class SHHS1DataModule(BaseDataModule):
             settings = kwargs['settings']
         else:
             settings = None
-        split = 'val1' if self.config['mode'] == 'pretrain' else 'Val'
+        split = 'Val'
+        kwargs.pop('settings')
 
         self.val_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
@@ -69,7 +72,8 @@ class SHHS1DataModule(BaseDataModule):
             all_time=self.config['all_time'],
             time_size=self.config['time_size'],
             pool_all=self.config['use_all_label'] == 'all',
-            split_len=None
+            split_len=self.config['split_len'],
+            *args, **kwargs,
 
         )
 
@@ -79,8 +83,11 @@ class SHHS1DataModule(BaseDataModule):
             settings = kwargs['settings']
         else:
             settings = None
-        split = 'train1' if self.config['mode'] == 'pretrain' else 'train11'
+        kwargs.pop('settings')
+        split = 'train11'
         self.train_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.train_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
@@ -93,8 +100,8 @@ class SHHS1DataModule(BaseDataModule):
             all_time=self.config['all_time'],
             time_size=self.config['time_size'],
             pool_all=self.config['use_all_label'] == 'all',
-            split_len=self.config['split_len']
-
+            split_len=self.config['split_len'],
+             * args, **kwargs,
         )
 
     def set_test_dataset(self, *args, **kwargs):
@@ -102,8 +109,12 @@ class SHHS1DataModule(BaseDataModule):
             settings = kwargs['settings']
         else:
             settings = None
-        split = 'test1' if self.config['mode'] == 'pretrain' else 'Test'
+        kwargs.pop('settings')
+
+        split = 'Test'
         self.test_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
@@ -116,7 +127,8 @@ class SHHS1DataModule(BaseDataModule):
             all_time=self.config['all_time'],
             time_size=self.config['time_size'],
             pool_all=self.config['use_all_label'] == 'all',
-            split_len=None
+            split_len=self.config['split_len'],
+            *args, **kwargs
         )
     def setup(self, stage, **kwargs):
         if stage == 'test':

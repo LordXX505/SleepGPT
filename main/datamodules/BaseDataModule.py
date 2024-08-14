@@ -20,6 +20,7 @@ class BaseDataModule(LightningModule):
         self.val_dataset = None
         self.config = _config
         self.data_dir = _config['data_dir'][idx]
+        print(f"BaseDataModule data_dir : {self.data_dir}")
         self.num_workers = _config["num_workers"]
         self.batch_size = _config["batch_size"]
         self.eval_batch_size = self.batch_size
@@ -61,6 +62,9 @@ class BaseDataModule(LightningModule):
     @property
     def spindle(self):
         raise NotImplementedError("return spindle")
+    @property
+    def apnea(self):
+        raise NotImplementedError("return spindle")
 
     @property
     def dataset_cls(self):
@@ -98,6 +102,8 @@ class BaseDataModule(LightningModule):
         else:
             kfold = None
         self.val_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
@@ -111,6 +117,7 @@ class BaseDataModule(LightningModule):
             time_size=self.config['time_size'],
             pool_all=self.config['use_all_label'] == 'all',
             kfold=kfold,
+            split_len=self.config['split_len'],
             **kwargs
         )
 
@@ -126,6 +133,8 @@ class BaseDataModule(LightningModule):
         else:
             kfold = None
         self.train_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.train_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
@@ -139,6 +148,7 @@ class BaseDataModule(LightningModule):
             time_size=self.config['time_size'],
             pool_all=self.config['use_all_label'] == 'all',
             kfold=kfold,
+            split_len=self.config['split_len'],
             **kwargs
 
         )
@@ -156,6 +166,8 @@ class BaseDataModule(LightningModule):
             kfold = None
 
         self.test_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
@@ -169,6 +181,7 @@ class BaseDataModule(LightningModule):
             time_size=self.config['time_size'],
             pool_all=self.config['use_all_label'] == 'all',
             kfold=kfold,
+            split_len=self.config['split_len'],
             **kwargs
 
         )

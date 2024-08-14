@@ -562,10 +562,10 @@ class Transformer(nn.Module):
 
         return ret
 
-class SpindleDecoderTransformer(nn.Module):
+class EventDecoderTransformer(nn.Module):
     def __init__(self, hidden_size, patch_size, weight=None, decoder_depth=6, enc_dim=512, num_heads=16, mlp_ratio=4.0,
                  qkv_bias=True, drop_rate=0.0, attn_drop_rate=0.0, dpr=None, norm_layer=nn.LayerNorm, num_layers=1,
-                 seq_len=10, multi=False, n_classes=5, *args, **kwargs):
+                 seq_len=10, multi=True, n_classes=200, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.first = nn.Sequential(nn.Linear(hidden_size, enc_dim),
@@ -587,7 +587,7 @@ class SpindleDecoderTransformer(nn.Module):
                                      drop_path=drop_path_rate[i] if dpr is not None else 0.0,
                                      norm_layer=norm_layer,
                                      ))
-        self.last = nn.Linear(enc_dim * 2, n_classes)
+        self.last = nn.Linear(enc_dim * 2, patch_size)
         # self.last_act = nn.GELU()
         # self.predic_all = nn.Linear(2000, 2000)
         self.pe = PositionalEncoding(out_features=enc_dim)
@@ -621,6 +621,7 @@ class SpindleDecoderTransformer(nn.Module):
         # x = F.sigmoid(self.predic_all(self.last_act(self.last(x).reshape(B, -1))))
         x = F.sigmoid(self.last(x).reshape(B, -1))
         return x
+
     def forward_single(self, x):
         time_c3 = x
         B = time_c3.shape[0]
@@ -641,11 +642,11 @@ class SpindleDecoderTransformer(nn.Module):
         x = x_embeds
         # x = F.sigmoid(self.predic_all(self.last_act(self.last(x).reshape(B, -1))))
         x = self.last(x).reshape(B, -1)
-        return {'tf': x}
+        return x
 
-    def forward(self, x, multi=False):
+    def forward(self, x, multi=True):
         if multi is True:
             res = self.forward_multimodal(x)
         else:
-            res = self.foward_single(x)
+            res = self.forward_single(x)
         return res

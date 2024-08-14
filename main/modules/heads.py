@@ -7,6 +7,7 @@ from . import FPN
 from . import vit
 from . import cross_model
 
+
 class Pooler(nn.Module):
     def __init__(self, hidden_size, out_size):
         super().__init__()
@@ -173,7 +174,8 @@ class ITCHead(nn.Module):
         x = self.fc(x)
         return x
 
-class SPindle_MLP(nn.Module):
+
+class Event_MLP(nn.Module):
     """ Very simple multi-layer perceptron (also called FFN)"""
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act_layer=nn.GELU):
@@ -189,7 +191,8 @@ class SPindle_MLP(nn.Module):
             x = self.act(layer(x)) if i < self.num_layers - 1 else layer(self.norm(x))
         return F.sigmoid(x)
 
-class Spindle_Head(nn.Module):
+
+class Event_Head(nn.Module):
     def __init__(self, hidden_size, patch_size, weight=None, decoder_depth=6, enc_dim=512, num_heads=16, mlp_ratio=4.0,
                  qkv_bias=True, drop_rate=0.0, attn_drop_rate=0.0, dpr=None, norm_layer=nn.LayerNorm, num_layers=1,
                  seq_len=10, num_queries=400, FPN_resnet=False,
@@ -199,22 +202,69 @@ class Spindle_Head(nn.Module):
         self.layers = num_layers
         self.Use_FPN = Use_FPN
         if Use_FPN == 'Trans':
-            self.decoder = vit.SpindleDecoderTransformer(hidden_size, patch_size, weight=None, decoder_depth=decoder_depth,
-                                                         enc_dim=enc_dim, num_heads=num_heads, mlp_ratio=mlp_ratio,
-                                                         qkv_bias=qkv_bias, drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, dpr=dpr,
-                                                         norm_layer=norm_layer, num_layers=num_layers, seq_len=seq_len,
-                                                         )
+            self.decoder = vit.EventDecoderTransformer(hidden_size, patch_size, weight=None,
+                                                       decoder_depth=decoder_depth,
+                                                       enc_dim=enc_dim, num_heads=num_heads, mlp_ratio=mlp_ratio,
+                                                       qkv_bias=qkv_bias, drop_rate=drop_rate,
+                                                       attn_drop_rate=attn_drop_rate, dpr=dpr,
+                                                       norm_layer=norm_layer, num_layers=num_layers, seq_len=seq_len
+                                                       )
         elif Use_FPN == 'Cross':
             assert seq_len % num_queries == 0, f'seq_len%num_queries is not 0, seq_len: {seq_len}, num_queries: {num_queries}'
-            self.decoder = cross_model.Cross_Attn_Spindle_Model(enc_dim, kvdim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias,
-                                                                seq_len=seq_len, drop_path=dpr, decoder_depth=decoder_depth, num_queries=num_queries)
+            self.decoder = cross_model.Cross_Attn_Event_Model(enc_dim, kvdim=hidden_size, num_heads=num_heads,
+                                                              qkv_bias=qkv_bias,
+                                                              seq_len=seq_len, drop_path=dpr,
+                                                              decoder_depth=decoder_depth, num_queries=num_queries)
         elif Use_FPN == 'FPN':
             self.decoder = FPN.FPN(depth=decoder_depth, resnet=FPN_resnet)
         elif Use_FPN == 'Swin':
             self.decoder = FPN.FPN(depth=decoder_depth, resnet=FPN_resnet)
         else:
-            self.decoder = SPindle_MLP(input_dim=hidden_size*2, hidden_dim=enc_dim, output_dim=patch_size, num_layers=decoder_depth)
+            self.decoder = Event_MLP(input_dim=hidden_size * 2, hidden_dim=enc_dim, output_dim=patch_size,
+                                     num_layers=decoder_depth)
 
+    def forward(self, x):
+        raise NotImplementedError
+
+
+class Apnea_Head(Event_Head):
+    def __init__(self, hidden_size, patch_size, decoder_depth=6, enc_dim=512, num_heads=16, mlp_ratio=4.0,
+                 qkv_bias=True, drop_rate=0.0, attn_drop_rate=0.0, dpr=None, norm_layer=nn.LayerNorm, num_layers=1,
+                 seq_len=10, Use_FPN=None):
+        super().__init__(hidden_size=hidden_size, patch_size=patch_size, weight=None, decoder_depth=decoder_depth,
+                         enc_dim=enc_dim, num_heads=num_heads, mlp_ratio=mlp_ratio,
+                         qkv_bias=qkv_bias, drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, dpr=dpr,
+                         norm_layer=norm_layer, num_layers=num_layers,
+                         seq_len=seq_len,
+                         Use_FPN=Use_FPN)
+
+    def forward(self, x):
+        # print(f"x.shape:{x.shape}")
+        time_c3, fft_c3 = x
+        B = time_c3.shape[0]
+        if self.Use_FPN == 'FPN' or self.Use_FPN == 'MLP':
+            x = torch.cat([time_c3, fft_c3], dim=-1)
+            x = self.decoder(x)
+        elif self.Use_FPN == 'Cross':
+            x = self.decoder(x)
+            return x
+        else:
+            x = self.decoder(x)
+        x = x.reshape(B, -1)
+        return x
+
+
+class Spindle_Head(Event_Head):
+    def __init__(self, hidden_size, patch_size, weight=None, decoder_depth=6, enc_dim=512, num_heads=16, mlp_ratio=4.0,
+                 qkv_bias=True, drop_rate=0.0, attn_drop_rate=0.0, dpr=None, norm_layer=nn.LayerNorm, num_layers=1,
+                 seq_len=10, num_queries=400, FPN_resnet=False,
+                 Use_FPN=None):
+        super().__init__(hidden_size=hidden_size, patch_size=patch_size, weight=None, decoder_depth=decoder_depth,
+                         enc_dim=enc_dim, num_heads=num_heads, mlp_ratio=mlp_ratio,
+                         qkv_bias=qkv_bias, drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, dpr=dpr,
+                         norm_layer=norm_layer, num_layers=num_layers,
+                         seq_len=seq_len,
+                         Use_FPN=Use_FPN)
     def forward(self, x):
         # print(f"x.shape:{x.shape}")
         time_c3, fft_c3 = x

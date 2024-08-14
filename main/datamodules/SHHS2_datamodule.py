@@ -14,9 +14,9 @@ class SHHS2DataModule(BaseDataModule):
     @property
     def column_names(self):
         if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['data_setting']:
-            return ['x', 'Stage_label']
+            return ['signal', 'stage', 'good_channels']
         else:
-            return ['x']
+            return ['signal', 'good_channels']
 
     @property
     def stage(self):
@@ -54,7 +54,11 @@ class SHHS2DataModule(BaseDataModule):
             settings = kwargs['settings']
         else:
             settings = None
+        kwargs.pop('settings')
+
         self.val_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
@@ -66,6 +70,8 @@ class SHHS2DataModule(BaseDataModule):
             mask_ratio=self.config['mask_ratio'],
             all_time=self.config['all_time'],
             time_size=self.config['time_size'],
+            split_len=self.config['split_len'],
+            *args, **kwargs
         )
 
     def set_train_dataset(self, *args, **kwargs):
@@ -73,18 +79,24 @@ class SHHS2DataModule(BaseDataModule):
             settings = kwargs['settings']
         else:
             settings = None
+        kwargs.pop('settings')
+
         self.train_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.train_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
-            split='train2',
+            split='train',
             stage=self.stage,
             spindle=self.spindle,
             random_choose_channels=self.config['random_choose_channels'],
             settings=settings,
             mask_ratio=self.config['mask_ratio'],
             all_time=self.config['all_time'],
+            split_len=self.config['split_len'],
             time_size=self.config['time_size'],
+            *args, **kwargs
         )
 
     def set_test_dataset(self, *args, **kwargs):
@@ -92,11 +104,15 @@ class SHHS2DataModule(BaseDataModule):
             settings = kwargs['settings']
         else:
             settings = None
+        kwargs.pop('settings')
+
         self.test_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
-            split='test2',
+            split='Testvisit2',
             stage=self.stage,
             spindle=self.spindle,
             random_choose_channels=self.config['random_choose_channels'],
@@ -104,6 +120,8 @@ class SHHS2DataModule(BaseDataModule):
             mask_ratio=self.config['mask_ratio'],
             all_time=self.config['all_time'],
             time_size=self.config['time_size'],
+            split_len=self.config['split_len'],
+            *args, **kwargs
         )
     def setup(self, stage, **kwargs):
         if stage == 'test':
@@ -114,7 +132,7 @@ class SHHS2DataModule(BaseDataModule):
         else:
             if self.setup_flag == 0:
                 self.set_train_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
-                self.set_test_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
-                self.set_val_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
+                # self.set_test_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
+                # self.set_val_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
                 self.setup_flag += 1
                 print('SHHS2 s')

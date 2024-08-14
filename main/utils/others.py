@@ -214,31 +214,31 @@ class Fpfn(nn.Module):
         target = target.float()
         res = self._get_loss(output, target, weight)
         loss = res['loss']
-        if store is True:
-            rootdir = f'/home/cuizaixu_lab/huangweixuan/data/ver_log/{path_name}'
-            idx = torch.where(loss > 1.1)[0]
-            # rank_zero_info(f'idx: {idx.shape}, {idx}')
-            if idx.shape[0] != 0:
-                import numpy as np
-                torch.set_printoptions(threshold=np.inf)
-                os.makedirs(rootdir, exist_ok=True)
-                version = self._get_next_version(rootdir)
-                torch.save({"output": output[idx].detach().cpu(), "target": target[idx].detach().cpu(),
-                            "idx": data_idx, 'loss': loss.detach().cpu()},
-                           f'{rootdir}/version_{version}_{stage}_1.ckpt')
-                rank_zero_info(f'Saving stage: {stage} result in {rootdir}/version_{version}_{stage}_1')
-            idx = torch.where(loss < 0.5)[0]
-            if idx.shape[0] != 0:
-                import numpy as np
-                torch.set_printoptions(threshold=np.inf)
-                os.makedirs(rootdir, exist_ok=True)
-                version = self._get_next_version(rootdir)
-                torch.save(
-                    {"output": output[idx].detach().cpu(),
-                     "target": target[idx].detach().cpu(),
-                     "idx": data_idx, 'loss': loss.detach().cpu()},
-                    f'{rootdir}/version_{version}_{stage}_0_5.ckpt')
-                rank_zero_info(f'Saving stage: {stage}  result in {rootdir}/version_{version}_{stage}_0_5')
+        # if store is True:
+        #     rootdir = f'/home/cuizaixu_lab/huangweixuan/DATA/ver_log/{path_name}'
+        #     idx = torch.where(loss > 1.1)[0]
+        #     # rank_zero_info(f'idx: {idx.shape}, {idx}')
+        #     if idx.shape[0] != 0:
+        #         import numpy as np
+        #         torch.set_printoptions(threshold=np.inf)
+        #         os.makedirs(rootdir, exist_ok=True)
+        #         version = self._get_next_version(rootdir)
+        #         torch.save({"output": output[idx].detach().cpu(), "target": target[idx].detach().cpu(),
+        #                     "idx": data_idx, 'loss': loss.detach().cpu()},
+        #                    f'{rootdir}/version_{version}_{stage}_1.ckpt')
+        #         rank_zero_info(f'Saving stage: {stage} result in {rootdir}/version_{version}_{stage}_1')
+        #     idx = torch.where(loss < 0.5)[0]
+        #     if idx.shape[0] != 0:
+        #         import numpy as np
+        #         torch.set_printoptions(threshold=np.inf)
+        #         os.makedirs(rootdir, exist_ok=True)
+        #         version = self._get_next_version(rootdir)
+        #         torch.save(
+        #             {"output": output[idx].detach().cpu(),
+        #              "target": target[idx].detach().cpu(),
+        #              "idx": data_idx, 'loss': loss.detach().cpu()},
+        #             f'{rootdir}/version_{version}_{stage}_0_5.ckpt')
+        #         rank_zero_info(f'Saving stage: {stage}  result in {rootdir}/version_{version}_{stage}_0_5')
         assert loss.ndim == 1
         return torch.mean(loss, dim=0), res
 
@@ -583,7 +583,28 @@ def set_metrics(pl_module, **kwargs):
             for k, v in pl_module.hparams.config["loss_names"].items():
                 if v < 1:
                     continue
-                if k == "FpFn":
+                if k == "Spnidle":
+                    if split == "train":
+                        setattr(pl_module, f"train_{k}_loss", Scalar())
+                        setattr(pl_module, f"train_{k}_TP", ACC())
+                        setattr(pl_module, f"train_{k}_FN", ACC())
+                        setattr(pl_module, f"train_{k}_FP", ACC())
+                    else:
+                        setattr(pl_module, f"validation_{k}_loss", Scalar())
+                        setattr(pl_module, f"validation_{k}_TP", ACC())
+                        setattr(pl_module, f"validation_{k}_FN", ACC())
+                        setattr(pl_module, f"validation_{k}_FP", ACC())
+                        setattr(pl_module, f"validation_{k}_Precision", Scalar())
+                        setattr(pl_module, f"validation_{k}_Recall", Scalar())
+                        setattr(pl_module, f"validation_{k}_F1", Scalar())
+                        setattr(pl_module, f"test_{k}_loss", Scalar())
+                        setattr(pl_module, f"test_{k}_TP", ACC())
+                        setattr(pl_module, f"test_{k}_FN", ACC())
+                        setattr(pl_module, f"test_{k}_FP", ACC())
+                        setattr(pl_module, f"test_{k}_Precision", Scalar())
+                        setattr(pl_module, f"test_{k}_Recall", Scalar())
+                        setattr(pl_module, f"test_{k}_F1", Scalar())
+                elif k == "Apnea":
                     if split == "train":
                         setattr(pl_module, f"train_{k}_loss", Scalar())
                         setattr(pl_module, f"train_{k}_TP", ACC())
