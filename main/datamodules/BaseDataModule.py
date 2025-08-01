@@ -51,6 +51,7 @@ class BaseDataModule(LightningModule):
 
         self.setup_flag = 0
 
+
     @property
     def column_names(self):
         raise NotImplementedError("return name of column")
@@ -65,6 +66,14 @@ class BaseDataModule(LightningModule):
     @property
     def apnea(self):
         raise NotImplementedError("return spindle")
+
+    @property
+    def pathology(self):
+        raise NotImplementedError("return pathology")
+
+    @property
+    def ods(self):
+        raise NotImplementedError("return pathology")
 
     @property
     def dataset_cls(self):
@@ -103,13 +112,14 @@ class BaseDataModule(LightningModule):
             kfold = None
         self.val_dataset = self.dataset_cls(
             patch_size=self.config['patch_size'],
-
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
             split='val',
             stage=self.stage,
             spindle=self.spindle,
+            pathology=self.pathology,
+            ods=self.ods,
             random_choose_channels=self.config['random_choose_channels'],
             settings=settings,
             mask_ratio=self.config['mask_ratio'],
@@ -134,13 +144,14 @@ class BaseDataModule(LightningModule):
             kfold = None
         self.train_dataset = self.dataset_cls(
             patch_size=self.config['patch_size'],
-
             transform_keys=self.train_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,
             split='train',
             stage=self.stage,
             spindle=self.spindle,
+            pathology=self.pathology,
+            ods=self.ods,
             random_choose_channels=self.config['random_choose_channels'],
             settings=settings,
             mask_ratio=self.config['mask_ratio'],
@@ -174,6 +185,8 @@ class BaseDataModule(LightningModule):
             split='test',
             stage=self.stage,
             spindle=self.spindle,
+            pathology=self.pathology,
+            ods=self.ods,
             random_choose_channels=self.config['random_choose_channels'],
             settings=settings,
             mask_ratio=self.config['mask_ratio'],

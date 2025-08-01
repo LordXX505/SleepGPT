@@ -9,6 +9,7 @@ import pandas as pd
 from PIL import Image
 from .base_dataset import BaseDatatset
 from .new_base_dataset import Aug_BaseDataset
+from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
 
 class ISRUCDataset(Aug_BaseDataset):

@@ -42,7 +42,7 @@ class MASSDataModule(BaseDataModule):
                 base_data_dir = os.path.basename(self.data_dir)
                 print(f'MASS data module using datasets: {base_data_dir}')
                 # self.dataset = data_set_cls[base_data_dir]
-                self.dataset = partial(data_set_cls[base_data_dir], file_name=f'MASS_P_{base_data_dir}.npy')
+                self.dataset = partial(data_set_cls[base_data_dir], file_name=f'MASS_channel_{base_data_dir}.npy')
         else:
             aug_dir = self.config['aug_dir']
             aug_prob = self.config['aug_prob']
@@ -72,6 +72,14 @@ class MASSDataModule(BaseDataModule):
             return True
         else:
             return False
+
+    @property
+    def pathology(self):
+        return False
+
+    @property
+    def ods(self):
+        return False
 
     @property
     def spindle(self):

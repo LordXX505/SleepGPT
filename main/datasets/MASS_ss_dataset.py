@@ -8,6 +8,7 @@ import os
 import pandas as pd
 from PIL import Image
 from .MASS_dataset import MASSDataset
+from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
 
 from .new_base_dataset import Aug_BaseDataset

@@ -12,3 +12,6 @@ from .MASS_dataset import MASSDataset
 from .EDF_Pretrain import EDf_Pre_Dataset
 from .ISRUC_dataset import ISRUCDataset
 from .MGH_dataset import MGHDataset
+from .CAP_Pathology_dataset import CAPDataset_rbd, CAPDataset_n, CAPDataset_narco, \
+    CAPDataset_nfle, CAPDataset_plm, CAPDataset_sdb, CAPDataset_ins
+from .UMS_dataset import UMSDataset

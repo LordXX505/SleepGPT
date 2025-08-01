@@ -7,6 +7,25 @@ from . import FPN
 from . import vit
 from . import cross_model
 
+def parse_layer_range(layer_range_str):
+    """
+    Parse a string defining a layer range into a list of integers.
+
+    Args:
+    -----
+    layer_range_str: str
+        String defining the layer range, e.g., "5-11" or "4-6".
+
+    Returns:
+    --------
+    list[int]:
+        List of integers representing the selected layers.
+    """
+    if '-' in layer_range_str:
+        start, end = map(int, layer_range_str.split('-'))
+        return list(range(start, end + 1))  # Include the end layer
+    else:
+        raise ValueError(f"Invalid format for layer range: {layer_range_str}")
 
 class Pooler(nn.Module):
     def __init__(self, hidden_size, out_size):
@@ -353,3 +372,48 @@ class Masked_decoder2(nn.Module):
         x = rearrange(x, 'B (C D) P -> B (C P) D', C=self.channels)
 
         return x
+
+class LongnetClassificationHead(nn.Module):
+    def __init__(self, dim, num_classes, selected_layers):
+        """
+        Classification head to select embeddings from specific Transformer layers
+        and feed them into a classifier.
+
+        Args:
+        -----
+        dim: int
+            Dimensionality of the input embeddings.
+        num_classes: int
+            Number of output classes for classification.
+        selected_layers: list[int]
+            Indices of layers from which embeddings are taken, e.g., [5, 11].
+        """
+        super().__init__()
+        if isinstance(selected_layers, str):
+            selected_layers = parse_layer_range(selected_layers)
+        self.selected_layers = selected_layers
+        self.classifier = nn.Linear(dim * len(selected_layers), num_classes)
+
+    def forward(self, layer_outputs):
+        """
+        Forward pass for the classification head.
+
+        Args:
+        -----
+        layer_outputs: list[torch.Tensor]
+            List of embeddings from all Transformer layers, where each Tensor has shape (batch_size, dim).
+
+        Returns:
+        --------
+        torch.Tensor:
+            Classification logits of shape (batch_size, num_classes).
+        """
+        # Select embeddings from specified layers
+        selected_embeddings = [layer_outputs[i] for i in self.selected_layers]
+
+        # Concatenate embeddings from selected layers
+        combined_embeddings = torch.cat(selected_embeddings, dim=-1)  # Shape: (batch_size, dim * num_selected_layers)
+        # Pass through the classifier
+        logits = self.classifier(combined_embeddings)
+
+        return logits

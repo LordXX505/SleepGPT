@@ -107,6 +107,8 @@ class normalize:
             # min_val, indices = torch.min(x, keepdim=True,dim=-1)
             # return (x - min_val + 1e-6) / (1e-6 + max_val - min_val)
             return x
+        elif x.shape[0] == 4:
+            return (x - self.mu4.unsqueeze(-1)) / self.std4.unsqueeze(-1)
         else:
             return (x - self.mu.unsqueeze(-1)) / self.std.unsqueeze(-1)
 

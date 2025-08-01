@@ -173,7 +173,6 @@ def compute_time_fft_only(pl_module, batch, stage, aggregate=True):
 def compute_fft_only(pl_module, batch, stage):
     pass
 
-
 def compute_mtm(pl_module, batch, stage):
     """
     The implementation of masked time-fft reconstruction refers to MAE (https://github.com/facebookresearch/mae)
@@ -526,35 +525,47 @@ def compute_itc(pl_module, batch, stage, aggregate=True):
     return ret
 
 
-def compute_ce(pl_module, batch, stage, persub=False):
+def compute_ce(pl_module, batch, stage, persub=False, save_flag=None, loss_mode=None):
+    if save_flag is None:
+        save_flag = ['features']
     res = {}
+    save_res = {}
+    infer_res = {}
     for name in pl_module.multi_y:
         if name == 'tf':
             infer = pl_module.infer(batch, time_mask=False)
             if pl_module.return_alpha is True:
                 return {'token': infer['token']}
             if pl_module.local_pooling:
-                res.update({'local': infer['local_feats']})
+                infer_res.update({'local': infer['local_feats']})
         else:
             infer = getattr(pl_module, f"infer_{name}")(batch, time_mask=False)
         # print(f"cls_feats; {infer['cls_feats']}")
-        res.update(infer['cls_feats'])
+        infer_res.update(infer['cls_feats'])
     # d = res.shape[-1]
     index = batch['index']
     target = batch['Stage_label']
     targe2 = target.detach().clone()
-
-    for k, v in res.items():
-        if hasattr(pl_module, f'stage_pred_{k}_proj'):
-            res[k] = getattr(pl_module, f'stage_pred_{k}_proj')(v).float()
+    if pl_module.first_log_gpu is not True:
+        print(infer_res.keys())
+    for k, v in infer_res.items():
+        if k not in save_flag:
+            if hasattr(pl_module, f'stage_pred_{k}_proj'):
+                res[k] = getattr(pl_module, f'stage_pred_{k}_proj')(v).float()
+            else:
+                res[k] = v.float()
+            preds = res[k]
+            # print(preds.shape)
+            if k == 'tf':
+                preds2 = preds.detach().clone()
+            # preds = preds[target != -100]
+            res[k] = preds
         else:
-            res[k] = v.float()
-        preds = res[k]
-        # print(preds.shape)
-        if k == 'tf':
-            preds2 = preds.detach().clone()
-        # preds = preds[target != -100]
-        res[k] = preds
+            save_res[k] = v
+    if pl_module.spo2_ods_settings.get('inj', False) and pl_module.hybrid_loss:
+        res["spo2_cls_feats"] = infer_res['spo2_cls_feats']
+    if pl_module.first_log_gpu is not True:
+        print(infer_res.keys(), res.keys(), save_res.keys())
     # target = target[target != -100]
     # torch.set_printoptions(threshold=np.inf)
     # rank_zero_info(f"object target: {target}")
@@ -569,6 +580,13 @@ def compute_ce(pl_module, batch, stage, persub=False):
             total_loss += ce_loss
         if pl_module.first_log_gpu is not True:
             print('Using SoftTargetCrossEntropy Loss')
+    elif pl_module.spo2_ods_settings.get('inj', False):
+        criterion = pl_module.hybrid_loss
+        ods_valid = batch['ods_valid']
+        total_loss = criterion(res['tf'], res['spo2_cls_feats'], target, batch['Ods_label'], ods_mask=ods_valid,
+                               num_classes=pl_module.num_classes)
+        if pl_module.first_log_gpu is not True:
+            print('Using hybrid_loss ')
     elif pl_module.poly is True:
         criterion = PolyLoss()
         total_loss = 0.0
@@ -622,17 +640,16 @@ def compute_ce(pl_module, batch, stage, persub=False):
 
     ret = {
         'ce_loss': total_loss,
-        'label': target2,
-        'feats': torch.argmax(preds2, dim=-1),
+        'label': target.detach(),
+        'feats': torch.argmax(res['tf'], dim=-1),
         'index': index2,
+        **save_res,
     }
 
     phase = stage
     # print(f"celoss: {ret['ce_loss']}")
     # print('loss = getattr(pl_module, f"{phase}_CrossEntropy_loss")(ret["ce_loss"])')
     loss = getattr(pl_module, f"{phase}_CrossEntropy_loss")(ret["ce_loss"])
-
-
     if stage == 'test' and persub is True:
         rank_zero_info(f"batch name: {len(batch['name'])}, target: {target.shape}, tf: {res['tf'].shape}")
         for index, (v, t) in enumerate(zip(res['tf'], target)):
@@ -642,11 +659,41 @@ def compute_ce(pl_module, batch, stage, persub=False):
     # print("pl_module.log")
     pl_module.log(f"ce/{phase}/loss", loss, on_step=True, sync_dist_group=True, prog_bar=True)
     for k, v in res.items():
-        ce_acc = getattr(pl_module, f"{phase}_CrossEntropy_accuracy_{k}")(
-            v, target
-        )
-        confmat = getattr(pl_module, f"{phase}_CrossEntropy_conf_{k}")(v, target)
-        pl_module.log(f"ce/{phase}/{k}/ce_acc", ce_acc, on_step=True, sync_dist_group=True, prog_bar=True)
+        if 'spo2_cls_feats' in k:  # 二分类
+            temp_target = batch['Ods_label']
+        else:  # 多分类分期
+            temp_target = batch['Stage_label']
+        # -------- accuracy（torchmetrics 支持 logits）--------
+        ce_acc = getattr(pl_module, f"{phase}_CrossEntropy_accuracy_{k}")(v, temp_target)
+
+        if v.ndim == temp_target.ndim + 1:
+            if v.shape[1] > 1:
+                v = v.argmax(dim=1)
+            else:  # shape (B,1,…) → (B,…)
+                v = v.squeeze(1)
+        if 'spo2_cls_feats' in k:
+            preds = v.sigmoid()
+        else:
+            preds = v
+        confmat = getattr(pl_module, f"{phase}_CrossEntropy_conf_{k}")(preds, temp_target)
+
+        pl_module.log(f"ce/{phase}/{k}/ce_acc",
+                      ce_acc, on_step=True, sync_dist_group=True, prog_bar=True)
+
+    # with torch.no_grad():
+    #     ods_labels = res['spo2_cls_feats']
+    #     prob = ods_labels.sigmoid().flatten().cpu()
+    #     print("prob range:", prob.min().item(), prob.max().item())
+    #     print("mean :", prob.mean().item())
+    #
+    #     # 粗调阈值
+    #     for thr in [0.5, 0.6, 0.7, 0.8]:
+    #         pred = (prob > thr).int()
+    #         tp = ((pred == 1) & (ods_labels.flatten() == 1)).sum()
+    #         fp = ((pred == 1) & (ods_labels.flatten() == 0)).sum()
+    #         tn = ((pred == 0) & (ods_labels.flatten() == 0)).sum()
+    #         fn = ((pred == 0) & (ods_labels.flatten() == 1)).sum()
+    #         print(f"thr={thr}:  TP={tp}  FP={fp}  TN={tn}  FN={fn}")
     return ret
 
 
@@ -809,3 +856,46 @@ def compute_fpfn(pl_module, prob, IOU_th, batch, stage, use_fpfn=True, store=Fal
     FP = getattr(pl_module, f"{phase}_FpFn_FP")(ret["FP"])
     pl_module.log(f"FpFn/{phase}/loss", loss, on_step=True, sync_dist_group=True, prog_bar=True)
     return ret
+
+
+def compute_po(pl_module, batch, stage, persub):
+    index = batch['index']
+    target = batch['Stage_label']
+    save_res = {}
+    if 'Pathology_label' in batch.keys():
+        save_res = {'pathology': batch['Pathology_label']}
+    output = pl_module.infer(batch, time_mask=False, stage=stage)
+    if pl_module.visual is True:
+        features = torch.cat([output['cls_feats'], output['cls_feats_fft']], dim=-1)
+        save_res.update({"features": features})
+        if 'Pathology_label' in batch.keys():
+            save_res.update({"save_info": batch['Pathology_label']})
+        loss = 0
+    else:
+        target = batch['Pathology_label']
+        predict = output['cls_feats']
+        if pl_module.time_size != 1:
+            target = target[:, 0]
+        loss =  F.cross_entropy(predict, target)
+    ret = {
+        'label': target.detach(),
+        'feats': None,
+        'index': index,
+        'loss': loss,
+        **save_res,
+    }
+    phase = stage
+    # print(f"celoss: {ret['ce_loss']}")
+    # print('loss = getattr(pl_module, f"{phase}_CrossEntropy_loss")(ret["ce_loss"])')
+    if pl_module.visual is not True:
+        loss = getattr(pl_module, f"{phase}_Pathology_loss")(ret["loss"])
+
+        pl_module.log(f"Pathology/{phase}/loss", loss, on_step=True, sync_dist_group=True, prog_bar=True)
+        acc = getattr(pl_module, f"{phase}_Pathology_accuracy")(
+            predict, target
+        )
+        confmat = getattr(pl_module, f"{phase}_Pathology_conf")(predict, target)
+        pl_module.log(f"Pathology/{phase}/acc", acc, on_step=True, sync_dist_group=True, prog_bar=True)
+    return ret
+
+

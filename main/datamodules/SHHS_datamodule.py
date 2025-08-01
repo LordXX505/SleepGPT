@@ -26,6 +26,10 @@ class SHHSDataModule(BaseDataModule):
             return True
 
     @property
+    def ods(self):
+        return False
+
+    @property
     def spindle(self):
         return False
 

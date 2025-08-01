@@ -96,7 +96,7 @@ class Model_Pre(LightningModule):
         if config["loss_names"]["itm"] > 0:
             self.itm_score = heads.ITMHead(self.num_features)
 
-        if config['loss_names']['FpFn'] > 0:
+        if config['loss_names']['Spindle'] > 0:
             assert config['spindle'] is True
             self.spindle_pred_proj = heads.Spindle_Head(self.num_features, self.transformer.patch_size)
 
@@ -149,7 +149,7 @@ class Model_Pre(LightningModule):
         self.token_type_embeddings.apply(init_weights)
         if self.hparams.config['loss_names']['mtm'] > 0:
             self.Masked_docoder.apply(init_weights)
-        if self.hparams.config['loss_names']['FpFn'] > 0:
+        if self.hparams.config['loss_names']['Spindle'] > 0:
             self.spindle_pred_proj.apply(init_weights)
         if self.hparams.config['loss_names']['CrossEntropy'] > 0:
             self.stage_pred_proj.apply(init_weights)
@@ -508,7 +508,6 @@ class Model_Pre(LightningModule):
         cls_tfffn_feats = cls_tfffn_feats / cls_tfffn_feats.norm(dim=-1, keepdim=True)
 
         ret = {
-
             "time_feats": time_feats,
             "fft_feats": fft_feats,
             "cls_feats": cls_feats,
@@ -702,10 +701,11 @@ class Model_Pre(LightningModule):
                                                                              aug=aug_fft)
 
                         epochs = batch['epochs'][0]
-                        batch['epochs'][0] = self.normalzied_local(epochs, stage=stage)
+                        # batch['epochs'][0] = self.normalzied_local(epochs, stage=stage)
                         batch['epochs'] = (batch['epochs'][0], epochs_fft)
                         if not self.first_log_gpu:
-                            print(batch['mask'][0].shape)
+                            rank_zero_info(f"maks shape: {batch['mask'][0].shape}")
+                            rank_zero_info(f"attention mask: {batch['mask'][0]}")
                         attention_mask = self.get_attention_mask(batch['mask'][0],
                                                                  attn_mask_fft)  # List[[b, 1], [b, num_patch*c], [b, 1], [b, num_patch*c]]
 

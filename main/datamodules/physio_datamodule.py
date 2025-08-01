@@ -40,6 +40,9 @@ class physioDataModule(BaseDataModule):
         return self.dataset
 
     @property
+    def ods(self):
+        return False
+    @property
     def dataset_name(self):
         return 'physio'
 

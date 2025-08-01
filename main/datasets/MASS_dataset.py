@@ -8,6 +8,7 @@ import os
 import pandas as pd
 from PIL import Image
 from .base_dataset import BaseDatatset
+from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
 
 from .new_base_dataset import Aug_BaseDataset
@@ -34,7 +35,7 @@ class MASSDataset(Aug_BaseDataset):
             else:
                 file_name = kwargs['file_name']
                 kwargs.pop('file_name')
-            print(f'mass datasets items file name: {file_name}')
+            print(f'mass datasets items file name: {file_name}, kfold is {k}')
             items = np.load(os.path.join(kwargs['data_dir'], f'{file_name}'), allow_pickle=True)
             if items.dtype == np.dtype('O'):
                 data = items.item()[f'{split}_{k}']
@@ -53,7 +54,7 @@ class MASSDataset(Aug_BaseDataset):
         expert = kwargs.pop('expert', None)
         if expert is not None:
             kwargs['data_dir'] = os.path.join(kwargs['data_dir'], expert)
-        print(f"data_dir: {kwargs['data_dir']}")
+        rank_zero_info(f"data_dir: {kwargs['data_dir']}")
         # print(len(names), len(nums))
         super().__init__(names=names, concatenate=False, nums=nums, split=split, *args, **kwargs)
 

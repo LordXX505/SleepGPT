@@ -10,6 +10,7 @@ import pandas as pd
 from PIL import Image
 from .base_dataset import BaseDatatset
 from .new_base_dataset import Aug_BaseDataset
+from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
 
 class SHHSDataset(Aug_BaseDataset):
@@ -44,6 +45,7 @@ class SHHSDataset(Aug_BaseDataset):
         except:
             raise FileNotFoundError(f"Neither {file_path_npy} nor {file_path_npz} found.")
         if items is not None:
+            print(f'items: {items}')
             if isinstance(items, np.lib.npyio.NpzFile):
                 names = items['names']
                 nums = items['nums']
@@ -57,7 +59,7 @@ class SHHSDataset(Aug_BaseDataset):
         else:
             raise ValueError("Loaded data is None.")
         kwargs.pop('kfold', None)
-
+        print(f'names: {names}, file_path_npy: {file_path_npy, file_path_npz}')
         # print(os.path.join(kwargs['data_dir'], 'train.npy'))
         super().__init__(names=names, nums=nums, split=split, *args, **kwargs)
 
@@ -67,7 +69,8 @@ class SHHSDataset(Aug_BaseDataset):
 
     @property
     def channels(self):
-        if self.mode == 'large':
+        # rank_zero_info(f'shhs mode: {self.mode}')
+        if self.mode == 'large' or self.mode == 'base' or 'conv' in self.mode:
             return np.array([4, 5, 15, 16, 18])
         else:
             return np.array([0, 3, 6, 7, 17, 18, 20])

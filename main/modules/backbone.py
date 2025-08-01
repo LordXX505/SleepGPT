@@ -1,5 +1,7 @@
 import copy
 import os
+
+import h5py
 from lightning.pytorch.utilities import grad_norm
 import sys
 from functools import partial
@@ -29,8 +31,8 @@ from . import vit
 from . import Swin_transformer
 from main.utils import cal_F1_score, cal_Precision, cal_Recall
 import torch.distributed as dist
-
-
+from main.modules.long_net import LongNetTransformer
+from . import WearableAdapter
 class Model(LightningModule):
     def __init__(self, config, **kwargs):
         super().__init__()
@@ -52,6 +54,7 @@ class Model(LightningModule):
         self.res_feats = []
         self.res_name = {}
         self.visual = config['visual']
+        self.loss_mode = None
         if 'fold_now' in kwargs:
             self.fold_now = kwargs['fold_now']
         if self.visual is True:
@@ -64,8 +67,17 @@ class Model(LightningModule):
         if 'persub' in kwargs:
             self.persub = kwargs['persub']
             self.test_names = kwargs['test_sub_names']
+            if self.visual is True:
+                print(f'test_names: {self.test_names}')
+                self.all_embeddings = torch.zeros(len(self.test_names), 5, 4, 1536)
+                self.name_2_idx = {}
+                idx = 0
+                for name in self.test_names.values():
+                    base_name = os.path.basename(name)
+                    self.name_2_idx[base_name] = idx
+                    idx += 1
             rank_zero_info(f'test_names: {self.test_names}')
-            self._ckpt = kwargs['_ckpt']
+            self._ckpt = kwargs['_ckpt']  # main_test_kfold_persub.py Model(_ckpt=ckpt)
             if 'persub_mode' in kwargs:
                 self.persub_mode = kwargs['persub_mode']
         else:
@@ -82,7 +94,6 @@ class Model(LightningModule):
         self.build_relative_position_embed(config)
         self.poly = config['poly']
         self.num_encoder_layers = config['num_encoder_layers']
-
         if self.use_pooling:
             dpr = [x.item() for x in
                    torch.linspace(0.00, config["drop_path_rate"], 12 + self.num_encoder_layers)]
@@ -90,6 +101,10 @@ class Model(LightningModule):
             dpr = config["drop_path_rate"]
         rank_zero_info(f"dpr_backbone: {dpr}")
         self.use_triton = config['use_triton']
+        if config['spo2_ods_settings']['inj'] is True:
+            self.spo2_ods_settings = config['spo2_ods_settings']
+        else:
+            self.spo2_ods_settings = {}
         self.transformer = multiway_transformer.__dict__[config["model_arch"]](
             patch_size=self.patch_size,
             pretrained=False,
@@ -100,17 +115,50 @@ class Model(LightningModule):
             use_mean_pooling=(self.use_pooling == 'mean'),
             use_relative_pos_emb=self.use_relative_pos_emb,
             all_num_relative_distance=self.all_num_relative_distance,
-            use_triton=self.use_triton
+            use_triton=self.use_triton,
+            spo2_ods_settings=self.spo2_ods_settings
         )
+        self.num_features = self.transformer.num_features
+        # Build SpO₂ encoder if provided
+        if self.spo2_ods_settings.get('inj', False):
+            self.d_spo2 = self.spo2_ods_settings.get('d_spo2', self.num_features)
+            xattn_layers = self.spo2_ods_settings.get('xattn_layers', [])
+            self.spo2_encoder = WearableAdapter.MultiScaleSpO2Extractor(d_model=self.d_spo2)
+            output_dim = self.num_features*2
+            if self.spo2_ods_settings.get('concat', False):
+                self.pre_proj = nn.Linear(self.num_features*2, self.d_spo2)
+                self.pre_proj.apply(init_weights)
+                output_dim = self.d_spo2*2
+            if self.spo2_ods_settings.get('use_seq', False):
+                input_dim = self.d_spo2*2 if self.spo2_ods_settings.get('concat', False) else self.num_features
+                self.spo2_seq_encoder = WearableAdapter.OdsTemporalEncoder(input_dim=input_dim, hidden_dim=input_dim//2,
+                                                                           num_layers=1, model_type=self.spo2_ods_settings.get('model_type', 'lstm'))
+                output_dim = self.spo2_seq_encoder.output_dim
+                self.spo2_seq_encoder.apply(init_weights)
+            self.ods_head = nn.Sequential(
+                nn.Linear(output_dim, output_dim//2), nn.ReLU(),
+                nn.Linear(output_dim//2, 1)
+            )
+            self.spo2_encoder.apply(init_weights)
+            self.ods_head.apply(init_weights)
+            if self.spo2_ods_settings.get('hybrid_loss', False):
+                ods_pos_w = self.spo2_ods_settings.get('ods_pos_w', 10)
+                rank_zero_info(f'ods_pos_w: {ods_pos_w}')
+                self.hybrid_loss = partial(WearableAdapter.hybrid_loss, ods_pos_w=ods_pos_w)
+            else:
+                self.hybrid_loss = None
+
         self.tfffn_start_layer_index = self.transformer.tfffn_start_layer_index  # 12
         self.num_layers = len(self.transformer.blocks)
-        self.num_features = self.transformer.num_features
         self.window_size = config['Swin_window_size']
         self.all_time = config['all_time']
         self.decoder_features = config['decoder_features']
         self.time_size = config['time_size']
         self.patch_time = config['patch_time']
+        self.decoder_depth = config['decoder_depth']
+        self.decoder_heads = config['decoder_heads']
         self.time_mask_last = False
+        self.longnet_pool = config['longnet_pool']
         if self.patch_time != 30:
             self.time_mask_last = True
             print(f'backbone patch_time: {self.patch_time, self.time_mask_last}')
@@ -121,8 +169,12 @@ class Model(LightningModule):
                 self.mask_same = False
             if 'mode' in config['visual_setting'].keys():
                 self.visual_mode = config['visual_setting']['mode']
-
-            rank_zero_info(f'visual_setting: {self.mask_same}')
+                self.save_extra_name = config['visual_setting']['save_extra_name']
+            if self.persub is False:
+                self.save_cnt = 0
+            else:
+                self.save_cnt = {}
+            rank_zero_info(f'visual_setting: {self.mask_same, self.mode}')
 
         self.token_type_embeddings = nn.Embedding(2, self.num_features)
         self.mixup_fn = None
@@ -133,12 +185,13 @@ class Model(LightningModule):
             self.stage_pred_local_proj.apply(init_weights)
             self.local_norm = nn.LayerNorm(self.num_features * 2)
         mixup_active = config['mixup'] > 0
+        self.num_classes = kwargs['num_classes']
         if mixup_active:
             rank_zero_info('Using mixup')
             self.mixup_fn = mixup.Mixup(
                 mixup_alpha=config['mixup'],
                 prob=1, switch_prob=0.5, mode='batch',
-                label_smoothing=0.1, num_classes=5)
+                label_smoothing=0.1, num_classes=kwargs['num_classes'])
 
         self.time_only = config['time_only']
         self.fft_only = config['fft_only']
@@ -147,6 +200,26 @@ class Model(LightningModule):
         self.use_local_f = config['local_pooling']
         assert self.time_only is False
         assert self.fft_only is False
+        if config['loss_names']['Pathology'] > 0:
+            if self.visual is not True:
+                if self.use_pooling == 'longnet':
+                    self.pooler = heads.Attn(self.num_features * 2, self.num_features * 2, reshape=False,
+                                             channels=self.transformer.num_patches, double=False,
+                                             channel_wise=False, return_alpha=self.return_alpha)
+                    self.decoder_transformer_block = LongNetTransformer(dim = self.decoder_features, depth=self.decoder_depth, dim_head=self.decoder_heads,
+                                                                  num_patches=self.time_size * self.transformer.num_patches, dilated_ratios=config['longnet_dr'], segment_lengths=config['longnet_sl'],
+                                                                global_pool=self.longnet_pool
+                                                                  )
+                    self.head = heads.LongnetClassificationHead(self.decoder_features, num_classes=7, selected_layers=config['decoder_selected_layers'])
+                else:
+                    self.pooler = heads.Attn(self.num_features * 2, self.num_features * 2, reshape=False,
+                                             channels=self.transformer.num_patches, double=False,
+                                             channel_wise=False, return_alpha=self.return_alpha)
+                    self.head = heads.LongnetClassificationHead(self.decoder_features, num_classes=7, selected_layers=config['decoder_selected_layers'])
+                self.pooler.apply(init_weights)
+                self.decoder_transformer_block.apply(init_weights)
+                self.head.apply(init_weights)
+
         if config['loss_names']['CrossEntropy'] > 0:
             # task layers
             if self.use_pooling is not None:
@@ -193,7 +266,7 @@ class Model(LightningModule):
                         self.subject_tp = {}
                         self.subject_num = {}
                         self.decoder_transformer_block = Swin_transformer.GlobalSwin(
-                            time_size=self.time_size, num_classes=5,
+                            time_size=self.time_size, num_classes=kwargs['num_classes'],
                             embed_dim=self.decoder_features,
                             window_size=self.window_size, mlp_ratio=4., qkv_bias=True, qk_scale=None,
                             drop_rate=0., attn_drop_rate=0., drop_path_rate=config["drop_path_rate"],
@@ -201,6 +274,25 @@ class Model(LightningModule):
                             use_checkpoint=False, fused_window_process=False,
                             patches_resolution=self.time_size * self.transformer.num_patches,
                         )
+
+                    elif self.use_pooling == 'longnet':
+                        self.pooler = heads.Attn(self.num_features * 2, self.num_features * 2, reshape=False,
+                                                 channels=self.transformer.num_patches, double=False,
+                                                 channel_wise=False, return_alpha=self.return_alpha)
+                        self.decoder_transformer_block = LongNetTransformer(dim=self.decoder_features,
+                                                                            depth=self.decoder_depth,
+                                                                            dim_head=self.decoder_heads,
+                                                                            num_patches=self.time_size * self.transformer.num_patches,
+                                                                            dilated_ratios=config['longnet_dr'],
+                                                                            segment_lengths=config['longnet_sl'],
+                                                                            sleep_stage=True,
+                                                                            global_pool=True
+                                                                            )
+                        self.head = heads.LongnetClassificationHead(self.decoder_features, num_classes=kwargs['num_classes'],
+                                                                    selected_layers=config['decoder_selected_layers'])
+                        self.pooler.apply(init_weights)
+                        self.decoder_transformer_block.apply(init_weights)
+                        self.head.apply(init_weights)
                     else:
                         self.decoder_transformer_block = \
                             vit.DecoderTransformer(hidden_size=self.transformer.embed_dim,
@@ -242,7 +334,7 @@ class Model(LightningModule):
                                                     dpr=config["drop_path_rate"],
                                                     seq_len=self.patch_time * 100, )
 
-        if config['loss_names']['CrossEntropy'] > 0 and self.use_pooling != 'swin' and self.use_pooling != 'Trans':
+        if config['loss_names']['CrossEntropy'] > 0 and self.use_pooling != 'swin' and self.use_pooling != 'longnet':
             # self.stage_pred_proj = heads.Stage_Head(self.num_features)
             if self.all_time:
                 if self.use_local_f:
@@ -492,7 +584,6 @@ class Model(LightningModule):
         time_max_len = res['x_len']  # 1+num_patches*max_channels
         if self.transformer.actual_channels is not None:
             assert time_max_len == 1 + self.transformer.num_patches * len(self.transformer.actual_channels)
-
         # print('time_max_len', time_max_len)
         x = res['x']  # time, fft
         # print('res x ', torch.isnan(x).sum())
@@ -510,17 +601,73 @@ class Model(LightningModule):
         # print('x_embeds, fft_embeds', torch.isnan(x_embeds).sum(), torch.isnan(fft_embeds).sum())
         x = co_embeds
         all_hiddens = []
-
+        spo2_tok = None
+        h_ods_stack = []
+        if self.spo2_ods_settings.get('inj', False):
+            if self.spo2_encoder is not None and "spo2" in batch:
+                spo2_tok = self.spo2_encoder(batch["spo2"])  # (B,T_eeg,d_spo2)
+                assert torch.isnan(spo2_tok).sum() == 0, "SpO₂ encoder produced NaN"
         for i, blk in enumerate(self.transformer.blocks):
-            x = blk(x, mask=attention_mask, modality_type='tf', relative_position_bias=None,
-                    relative_position_index=self.time_fft_relative_position_index)
-            x_nan = torch.isnan(x).sum()
+            if getattr(blk, "use_xattn", False) and spo2_tok is not None:
+                x = blk(x,
+                        mask=attention_mask,
+                        modality_type='tf',
+                        relative_position_bias=None,
+                        relative_position_index=self.time_fft_relative_position_index,
+                        spo2_tok=spo2_tok)  # ★ 传入
+                # 保存第一次注入后的特征作为 ODS 输入
+                h_ods_stack.append(x)
+            else:
+                x = blk(x,
+                        mask=attention_mask,
+                        modality_type='tf',
+                        relative_position_bias=None,
+                        relative_position_index=self.time_fft_relative_position_index)
             all_hiddens.append(x)
+            assert not torch.isnan(x).any(), f"NaN in x before attn, layer {i}"
+            assert not torch.isinf(x).any(), f"Inf in x before attn, layer {i}"
+            if spo2_tok is not None:
+                assert not torch.isnan(spo2_tok).any(), f"NaN in spo2_tok at layer {i}"
+                assert not torch.isinf(spo2_tok).any(), f"Inf in spo2_tok at layer {i}"
+            x_nan = torch.isnan(x).sum()
             assert x_nan == 0, f"infer transformer.blocks layer{i} is out of break"
+        if len(h_ods_stack) == 0:
+            h_ods = x
+        elif len(h_ods_stack) == 1:
+            h_ods = h_ods_stack[0]
+        else:
+            h_ods = torch.stack(h_ods_stack, dim=0).mean(0)  # (B, T_eeg, d)
+
         if self.training:
             self.gpu_monitor(x, block_log=False)
         x = self.transformer.norm(x)
+
         local_feats = None
+        cls_feats = {}
+        if self.spo2_ods_settings.get('inj', False):
+            assert 'Ods_label' in batch.keys()
+            time_ods_feats, fft_ods_feats = (
+                h_ods[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
+                h_ods[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
+            )
+            time_h_ods = time_ods_feats[:, 1:]
+            fft_h_ods = fft_ods_feats[:, 1:]
+            feats_ods = torch.mean(torch.cat([time_h_ods, fft_h_ods], dim=-1), dim=1)
+            if self.spo2_ods_settings.get('concat', False):
+                spo2_tok_mean = spo2_tok.mean(1) # B,D
+                spo2_tok_proj = self.pre_proj(feats_ods)
+                concat_feats_ods = torch.cat([spo2_tok_proj, spo2_tok_mean], dim=-1)
+            else:
+                concat_feats_ods = feats_ods
+            if self.spo2_ods_settings.get('use_seq', False):
+                B, D = concat_feats_ods.shape
+                concat_feats_ods_reshape = concat_feats_ods.reshape(-1, self.time_size, D)
+                out = rearrange(self.spo2_seq_encoder(concat_feats_ods_reshape)[0], 'B T D -> (B T) D', T=self.time_size)
+                spo2_cls_feats = self.ods_head(out)
+            else:
+                spo2_cls_feats = self.ods_head(concat_feats_ods)
+            cls_feats.update({'spo2_cls_feats': spo2_cls_feats})
+
         if self.current_tasks[0] == 'CrossEntropy':
             time_feats, fft_feats = (
                 x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
@@ -599,6 +746,20 @@ class Model(LightningModule):
                         use_tf=True,
                         use_g_mid=False,
                         epoch_mask=batch['epoch_mask'], training=self.training)
+            elif self.use_pooling == 'longnet':
+                C = len(
+                    self.transformer.actual_channels) if self.transformer.actual_channels is not None else self.transformer.max_channels
+                x_time = rearrange(time_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
+                x_fft = rearrange(fft_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
+                x_pool = torch.cat([x_time, x_fft], dim=-1)
+                attention_mask_t = rearrange(attention_mask[:, 1:time_max_len], 'B (C P) -> (B P) C', C=C)
+                token = self.pooler(x_pool, attn_mask=attention_mask_t)
+                if self.return_alpha is True:
+                    rank_zero_info(f'token: {token[0]}')
+                    return {'token': token}
+                outs = self.decoder_transformer_block(rearrange(token, '(B T) P D ->B (T P) D', T=self.time_size))
+                logits = self.head(outs)
+                cls_feats = {'tf': logits, 'features': outs}
             else:
                 C = len(
                     self.transformer.actual_channels) if self.transformer.actual_channels is not None else self.transformer.max_channels
@@ -609,10 +770,8 @@ class Model(LightningModule):
                 token = self.pooler(x_pool, attn_mask=attention_mask_t)
                 if self.return_alpha is True:
                     rank_zero_info(f'token: {token[0]}')
-
                     return {'token': token}
-                cls_feats = self.decoder_transformer_block(rearrange(token, '(B T) P D ->B (T P) D', T=self.time_size))
-
+                cls_feats.update(self.decoder_transformer_block(rearrange(token, '(B T) P D ->B (T P) D', T=self.time_size)))
         elif self.current_tasks[0] == 'Spindle':
             time_feats, fft_feats = (
                 x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
@@ -635,6 +794,29 @@ class Model(LightningModule):
             # cls = torch.cat([time_c3, fft_c3], dim=-1)
             # cls = torch.transpose(torch.cat([time_c3, fft_c3], dim=-1), dim0=1, dim1=2)
             cls_feats = self.apnea_pred_proj((time_c3, fft_c3))
+        elif self.current_tasks[0] == 'Pathology':
+            if  self.visual is True:
+                time_feats, fft_feats = (
+                    x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
+                    x[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
+                )
+                cls_feats = time_feats[:, 1:]
+                cls_feats_fft = fft_feats[:, 1:]
+            else:
+                time_feats, fft_feats = (
+                    x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
+                    x[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
+                )
+                C = len(
+                    self.transformer.actual_channels) if self.transformer.actual_channels is not None else self.transformer.max_channels
+                x_time = rearrange(time_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
+                x_fft = rearrange(fft_feats[:, 1:], 'B (C P) D -> (B P) C D', C=C)
+                x_pool = torch.cat([x_time, x_fft], dim=-1)
+                attention_mask_t = rearrange(attention_mask[:, 1:time_max_len], 'B (C P) -> (B P) C', C=C)
+                token = self.pooler(x_pool, attn_mask=attention_mask_t)
+                outs = self.decoder_transformer_block(rearrange(token, '(B T) P D ->B (T P) D', T=self.time_size))
+                logits = self.head(outs)
+                cls_feats = logits
         else:
             # print(time_max_len)
             time_feats, fft_feats = (
@@ -659,6 +841,7 @@ class Model(LightningModule):
             'stage': stage,
             'x': x,
         }
+
         # print("cls_feats:", torch.isnan(cls_feats).sum(), cls_feats.shape)
         return ret
 
@@ -954,7 +1137,7 @@ class Model(LightningModule):
     def prepare_forward(self):
         pass
 
-    def forward(self, batch, stage, manual=False, aug_fft=False) -> Any:
+    def forward(self, batch, stage, manual=False, aug_fft=False, loss_mode=None) -> Any:
         ret = dict()
         if 1:
             # get the FFT
@@ -970,10 +1153,15 @@ class Model(LightningModule):
                 assert len(batch['epochs']) == 1
                 if 'Stage_label' in batch.keys():
                     batch['Stage_label'] = torch.stack(batch['Stage_label'], dim=0).squeeze(-1)
+                if 'Ods_label' in batch.keys():
+                    batch['Ods_label'] = torch.stack(batch['Ods_label'], dim=0).squeeze(1).squeeze(-1).reshape(-1)
+                    batch['ods_valid'] = torch.stack(batch['ods_valid'], dim=0).squeeze(1).squeeze(-1).reshape(-1)
                 if 'Spindle_label' in batch.keys():
                     batch['Spindle_label'] = torch.stack(batch['Spindle_label'], dim=0).squeeze(1).squeeze(-1)
                 if 'Apnea_label' in batch.keys():
                     batch['Apnea_label'] = torch.stack(batch['Apnea_label'], dim=0).squeeze(1).squeeze(-1)
+                if 'Pathology_label' in batch.keys():
+                    batch['Pathology_label'] = torch.stack(batch['Pathology_label'], dim=0).squeeze(1).squeeze(-1)
                 if self.training and self.mixup_fn is not None:
                     batch['epochs'][0], batch['Stage_label'] = self.mixup_fn(batch['epochs'][0], batch['Stage_label'])
                 epochs_fft, attn_mask_fft = self.transformer.get_fft(batch['epochs'][0], batch['mask'][0], aug=aug_fft)
@@ -985,7 +1173,7 @@ class Model(LightningModule):
                 # for i in attention_mask:
                 # rank_zero_info(f"{i}.shape: {i.shape}")
                 if self.hparams.config['use_pooling'] == 'time_fft' or self.hparams.config['use_pooling'] == 'attn' \
-                        or self.hparams.config['use_pooling'] == 'swin':
+                        or self.hparams.config['use_pooling'] == 'swin' or self.hparams.config['use_pooling'] == 'longnet':
                     # mid = int(self.time_size // 2) + 1
                     if not self.first_log_gpu:
                         rank_zero_info(f'stage mid : {-1}')
@@ -995,6 +1183,8 @@ class Model(LightningModule):
                             rank_zero_info(f'spindle shape : {batch["Spindle_label"].shape}')
                         if 'Apnea_label' in batch.keys():
                             rank_zero_info(f'apnea shape : {batch["Apnea_label"].shape}')
+                        if 'Pathology_label' in batch.keys():
+                            rank_zero_info(f'apnea shape : {batch["Pathology_label"].shape}')
                         rank_zero_info(f'epochs 0  shape : {batch["epochs"][0].shape}')
                         rank_zero_info(f'epochs 1  shape : {batch["epochs"][1].shape}')
 
@@ -1010,13 +1200,15 @@ class Model(LightningModule):
             ret.update(self.infer(batch, time_mask=True, stage=stage))
             return ret
 
-        assert len(self.current_tasks) == 1 and self.current_tasks[0] in ['CrossEntropy', 'Spindle', 'mtm', 'Apnea']
+        assert len(self.current_tasks) == 1 and self.current_tasks[0] in ['CrossEntropy', 'Spindle', 'mtm', 'Apnea','Pathology']
         if self.current_tasks[0] == 'mtm':
             ret.update(self.infer(batch, stage=stage, time_mask=True, mask_same=self.mask_same))
         if self.current_tasks[0] == 'CrossEntropy':
-            ret.update(objectives.compute_ce(self, batch, stage=stage, persub=self.persub))
+            ret.update(objectives.compute_ce(self, batch, stage=stage, persub=self.persub, loss_mode=loss_mode))
             if self.training:
                 self.gpu_monitor(batch['epochs'][0], phase='compute_ce last gpu', block_log=True)
+        if self.current_tasks[0] == 'Pathology':
+            ret.update(objectives.compute_po(self, batch, stage=stage, persub=self.persub))
         if self.current_tasks[0] == 'Spindle':
             if stage == 'train':
                 if self.trainer.max_steps is None or self.trainer.max_steps == -1:
@@ -1059,12 +1251,63 @@ class Model(LightningModule):
 
         return ret
 
+    def _freeze_crossattn(self):
+        for blk_id in self.hparams.config["spo2_ods_settings"]["xattn_layers"]:
+            blk = self.transformer.blocks[blk_id]
+            for p in blk.xattn.parameters():
+                p.requires_grad = False
+            for p in blk.gate_fc.parameters():
+                p.requires_grad = False
+            blk.gamma_spo.requires_grad = False
+            blk.gamma_spo.data.zero_()
+
+    def _unfreeze_crossattn(self):
+        for blk_id in self.hparams.config["spo2_ods_settings"]["xattn_layers"]:
+            blk = self.transformer.blocks[blk_id]
+            for p in blk.xattn.parameters():
+                p.requires_grad = True
+            for p in blk.gate_fc.parameters():
+                p.requires_grad = True
+            blk.gamma_spo.requires_grad = True
+
+    def _freeze_stage(self):
+        # 冻结 EEG 主干与分类器
+        for p in self.transformer.parameters():
+            p.requires_grad = False
+        for p in self.decoder_transformer_block.parameters():
+            p.requires_grad = False
+        for p in self.pooler.parameters():
+            p.requires_grad = False
+
+    def _unfreeze_all(self):
+        for p in self.parameters():
+            p.requires_grad = True
+
     def training_step(self, batch) -> STEP_OUTPUT:
         assert self.training is True
         self.set_task()
-        output = self(batch, stage="train")
+        if False and self.spo2_ods_settings.get('inj', False):
+            epoch = self.current_epoch
+            stage1_epoch = self.hparams.config.get("stage1_epoch", 5)
+            stage2_epoch = self.hparams.config.get("stage2_epoch", 10)
+
+            if epoch < stage1_epoch:
+                self.loss_mode = "stage_only"
+                self._freeze_crossattn()
+            elif epoch < stage2_epoch:
+                self.loss_mode = "ods_only"
+                self._unfreeze_crossattn()
+                if self.hparams.config.get("freeze_stage", False):
+                    self._freeze_stage()
+            else:
+                self.loss_mode = "hybrid"
+                self._unfreeze_all()
+            output = self(batch, stage="train", loss_mode=self.loss_mode)
+        else:
+            output = self(batch, stage="train", loss_mode=self.loss_mode)
+        # rank_zero_info(f'output: {output.items()}')
         total_loss = sum([v for k, v in output.items() if "loss" in k])
-        # rank_zero_info(f'total_loss: {total_loss}')
+
         return total_loss
 
     # def on_after_backward(self) -> None:
@@ -1079,15 +1322,76 @@ class Model(LightningModule):
         #     for name, parms in self.named_parameters():
         #         self.log(f'{name}/grad_value', torch.mean(parms.grad))
         self.epoch_end(stage="train")
-
+#
+#     ret = {
+#         "local_feats": local_feats,
+#         "cls_feats": cls_feats,
+#         "cls_feats_fft": cls_feats_fft,
+#         "time_max_len": time_max_len,
+#         "batch": batch,  # epochs, mask, Stage_label, Spindle_label
+#         'time_mask_patch': res['time_mask_patch'],  # mask to calculate the loss
+#         'fft_mask_patch': res['fft_mask_patch'],
+#         'stage': stage,
+#         'x': x,
+#     }
     def test_step(self, batch, batch_idx):
         if self.training:
             raise Exception(f"self.training is not False in test")
         self.set_task()
-        if self.visual is True:
-            min_idx = Visual_cal_all.visual(batch, self, self.persub)
-            self.min_idx = batch['name'][min_idx]
-            rank_zero_info(f"min_idx: {min_idx}, batch_idx: {batch['name'][min_idx]}")
+        if self.visual is True and self.training is not True:
+            if self.visual_mode == 'UMAP':
+                output = self(batch, stage="test")
+                if "features" in output:
+                    cls_feats_feature = output['features']
+                else:
+                    cls_feats_feature = torch.cat([output['cls_feats'], output['cls_feats_fft']], dim=-1)
+                predicted = output['feats']
+                true_lable = output['label']
+                if predicted is None:
+                    predicted = [0]
+                name = batch['name']
+                if 'save_info' in output:
+                    save_info = output['save_info']
+                else:
+                    save_info = None
+                if hasattr(self, 'fold_now'):
+                    kfold = self.fold_now
+                else:
+                    kfold = self.hparams.config["kfold"] if self.hparams.config['kfold'] is not None else '0'
+                if self.persub:
+                    for idx in range(len(name)):
+                        if save_info is not None:
+                            # si = save_info[idx].item()
+                            try:
+                                self.all_embeddings[self.name_2_idx[name[idx]]][true_lable[idx]] += cls_feats_feature[idx].reshape(4, 15, -1).mean(dim=1).to('cpu')
+                            except:
+                                print(f'name idx: {name[idx]}, self.name_2_idx: {self.name_2_idx}')
+                                raise RuntimeError
+                            # self.save({'cls_feats_feature': cls_feats_feature[idx],
+                            #            'predicted': predicted,
+                            #            'true_lable': true_lable[idx]}, path=f'{self.visual_mode}/{self.save_extra_name}/{si}/{name[idx]}/{kfold}',
+                            #           sub_name=name[idx], si=si)
+                        else:
+                            try:
+                                self.all_embeddings[self.name_2_idx[name[idx]]][true_lable[idx]] += cls_feats_feature[idx].reshape(4, 15, -1).mean(dim=1).to('cpu')
+                            # self.save({'cls_feats_feature': cls_feats_feature[idx],
+                            #            'predicted': predicted,
+                            #            'true_lable': true_lable[idx]},
+                            #           path=f'{self.visual_mode}/{self.save_extra_name}/{name[idx]}/{kfold}',
+                            #           sub_name=name[idx])
+                            except:
+                                print(f'name idx: {name[idx]}, self.name_2_idx: {self.name_2_idx}')
+                                raise RuntimeError
+
+                else:
+                    self.save({'cls_feats_feature': cls_feats_feature,
+                               'predicted': predicted,
+                               'true_lable': true_lable},
+                              path=f'{self.visual_mode}/{kfold}/{self.save_extra_name}')
+            else:
+                min_idx = Visual_cal_all.visual(batch, self, self.persub)
+                self.min_idx = batch['name'][min_idx]
+                rank_zero_info(f"min_idx: {min_idx}, batch_idx: {batch['name'][min_idx]}")
         else:
             output = self(batch, stage="test")
             if self.return_alpha is True:
@@ -1097,6 +1401,7 @@ class Model(LightningModule):
                 self.res_index.append(output['index'].reshape(-1, self.time_size))
                 self.res_label.append(output['label'].reshape(-1, self.time_size))
                 self.res_feats.append(output['feats'].reshape(-1, self.time_size))
+
         rank_zero_info("test_step end")
 
         # rank_zero_info(f'total_loss: {total_loss}')
@@ -1159,16 +1464,37 @@ class Model(LightningModule):
             v >= 1
         ]
 
-    def save(self, dict, path):
+    def save(self, data_dict, path, sub_name=None, si=0, agg=True):
         if hasattr(self, '_ckpt'):
             path = os.path.join(path, f'{self._ckpt.split("/")[-1]}')
         os.makedirs(
-            os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result/{self.hparams.config["datasets"][0]}',
-                         f'{path}'),
+            os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result',
+                        f'{path}'),
             exist_ok=True)
-        torch.save(dict,
-                   os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result/{self.hparams.config["datasets"][0]}',
-                                f'{path}', 'res.ckpt'))
+        if agg is True:
+            if self.persub is False:
+                save_cnt = self.save_cnt
+            else:
+                if si in self.save_cnt:
+                    if sub_name in self.save_cnt[si]:
+                        save_cnt = self.save_cnt[si][sub_name]
+                    else:
+                        self.save_cnt[si] = {sub_name: 0}
+                        save_cnt = 0
+                else:
+                    self.save_cnt[si] = {sub_name: 0}
+                    save_cnt = 0
+            torch.save(data_dict,
+                       os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result',
+                                    f'{path}', f'res_{save_cnt}.ckpt'))
+            if self.persub is False:
+                self.save_cnt += 1
+            else:
+                self.save_cnt[si][sub_name] += 1
+        else:
+            torch.save(data_dict,
+                       os.path.join(f'/home/cuizaixu_lab/huangweixuan/DATA/result',
+                                    f'{path}', f'res.ckpt'))
 
     def epoch_end(self, stage):
         phase = stage
@@ -1178,28 +1504,37 @@ class Model(LightningModule):
         else:
             kfold = self.hparams.config["kfold"] if self.hparams.config['kfold'] is not None else '0'
         if self.visual is True:
-            value = getattr(self, f"{phase}_loss").compute()
-            value2 = getattr(self, f"{phase}_loss2").compute()
-            if hasattr(self, 'fold_now'):
-                kfold = self.fold_now
+            if self.visual_mode != 'UMAP':
+                value = getattr(self, f"{phase}_loss").compute()
+                value2 = getattr(self, f"{phase}_loss2").compute()
+                if hasattr(self, 'fold_now'):
+                    kfold = self.fold_now
+                else:
+                    kfold = self.hparams.config["kfold"] if self.hparams.config['kfold'] is not None else '0'
+                mode = self.visual_mode
+                getattr(self, f"{phase}_loss").reset()
+                getattr(self, f"{phase}_loss2").reset()
+                for c in range(self.transformer.choose_channels.shape[0]):
+                    self.log(f"{phase}_c{c}_loss", value[c], prog_bar=True, on_epoch=True, sync_dist=True)
+                    self.log(f"{phase}_c{c}_loss2", value2[c], prog_bar=True, on_epoch=True, sync_dist=True)
+                persubject_loss = {}
+                self.save(path=f'{mode}/{kfold}/overall_{self.transformer.mask_ratio}',
+                          dict={'loss': value, 'loss2': value2})
+                if self.persub:
+                    for tn in self.test_names.values():
+                        _tn = tn.split('/')[-1]
+                        sub_loss = getattr(self, f"test_{_tn}_loss").compute()
+                        sub_loss2 = getattr(self, f"test_{_tn}_loss2").compute()
+                        persubject_loss[_tn] = {'loss1': sub_loss, 'loss2': sub_loss2}
+                    self.save(path=f'{mode}/{kfold}', dict=persubject_loss)
             else:
-                kfold = self.hparams.config["kfold"] if self.hparams.config['kfold'] is not None else '0'
-            mode = self.visual_mode
-            getattr(self, f"{phase}_loss").reset()
-            getattr(self, f"{phase}_loss2").reset()
-            for c in range(self.transformer.choose_channels.shape[0]):
-                self.log(f"{phase}_c{c}_loss", value[c], prog_bar=True, on_epoch=True, sync_dist=True)
-                self.log(f"{phase}_c{c}_loss2", value2[c], prog_bar=True, on_epoch=True, sync_dist=True)
-            persubject_loss = {}
-            self.save(path=f'{mode}/{kfold}/overall_{self.transformer.mask_ratio}',
-                      dict={'loss': value, 'loss2': value2})
-            if self.persub:
-                for tn in self.test_names.values():
-                    _tn = tn.split('/')[-1]
-                    sub_loss = getattr(self, f"test_{_tn}_loss").compute()
-                    sub_loss2 = getattr(self, f"test_{_tn}_loss2").compute()
-                    persubject_loss[_tn] = {'loss1': sub_loss, 'loss2': sub_loss2}
-                self.save(path=f'{mode}/{kfold}', dict=persubject_loss)
+                for idx, name in enumerate(self.test_names.values()):
+                    base_name = os.path.basename(name)
+                    self.save({'cls_feats_feature': self.all_embeddings[idx],
+                               'predicted': [0],
+                               'true_lable': [0]},
+                              path=f'{self.visual_mode}/{self.save_extra_name}/{base_name}/{kfold}',
+                              sub_name=base_name, agg=False)
         else:
             for loss_name, v in self.hparams.config["loss_names"].items():
                 if v < 1:
@@ -1221,7 +1556,16 @@ class Model(LightningModule):
                     getattr(self, f"{phase}_{loss_name}_loss").reset()
                     max_acc = 0.0
                     max_macro = 0.0
+                    ods_acc = 0.0
                     multi_y = copy.deepcopy(self.multi_y)
+                    if self.spo2_ods_settings.get('inj', False):
+                        ods_acc = getattr(self, f"{phase}_{loss_name}_accuracy_spo2_cls_feats").compute()
+                        self.log(f"{loss_name}/{phase}/ods_acc", ods_acc,  on_epoch=True, sync_dist_group=True, prog_bar=True)
+                        getattr(self, f"{phase}_{loss_name}_accuracy_spo2_cls_feats").reset()
+                        confmat = getattr(self, f"{phase}_{loss_name}_conf_spo2_cls_feats").compute()
+                        if stage == 'validation':
+                            rank_zero_info(f"conf_spo2_cls_feats: {confmat}")
+                        getattr(self, f"{phase}_{loss_name}_conf_spo2_cls_feats").reset()
                     if self.local_pooling:
                         multi_y.append('local')
                     for name in multi_y:
@@ -1258,17 +1602,51 @@ class Model(LightningModule):
                                     _tn = tn.split('/')[-1]
                                     sub_conf = getattr(self, f"test_{_tn}_conf").compute()
                                     persubject_acc[_tn] = sub_conf
-                                os.makedirs(
-                                    f'/home/cuizaixu_lab/huangweixuan/DATA/temp_log/{self.hparams.config["kfold"]}',
-                                    exist_ok=True)
-                                torch.save(persubject_acc, f'/home/cuizaixu_lab/'
-                                                           f'huangweixuan/DATA/temp_log/{self.hparams.config["kfold"]}/{self._ckpt.split("/")[-1]}')
+                                try:
+                                    os.makedirs(
+                                        f'/home/cuizaixu_lab/huangweixuan/DATA/temp_log/{self.hparams.config["kfold"]}',
+                                        exist_ok=True)
+                                    rank_zero_info(f'save persub path = /home/cuizaixu_lab/huangweixuan/DATA/temp_log/{self.hparams.config["kfold"]}')
+                                    torch.save(persubject_acc, f'/home/cuizaixu_lab/'
+                                                               f'huangweixuan/DATA/temp_log/{self.hparams.config["kfold"]}/{self._ckpt.split("/")[-1]}')
+                                except:
+                                    os.makedirs(
+                                        f'/lustre/home/2201210064/Sleep/temp_log/{self.hparams.config["kfold"]}',
+                                        exist_ok=True)
+                                    rank_zero_info(
+                                        f'save persub path = /lustre/home/2201210064/Sleep/temp_log/{self.hparams.config["kfold"]}')
+                                    torch.save(persubject_acc, f'/lustre/home/'
+                                                               f'2201210064/Sleep/temp_log/{self.hparams.config["kfold"]}/{self._ckpt.split("/")[-1]}')
                             # plt.close('all')
 
                         getattr(self, f"{phase}_{loss_name}_conf_{name}").reset()
-                    metric = max_acc + max_macro
+                    metric = max_acc + max_macro + ods_acc
                     self.log(f"{loss_name}/{phase}/max_accuracy_epoch", max_acc, prog_bar=True, on_epoch=True,
                              sync_dist=True, )
+                elif loss_name == 'Pathology':
+                    value = getattr(self, f"{phase}_{loss_name}_loss").compute()
+                    self.log(f"{loss_name}/{phase}/score", value, prog_bar=True, on_epoch=True, sync_dist=True)
+                    getattr(self, f"{phase}_{loss_name}_loss").reset()
+                    value_acc = float(
+                        format(getattr(self, f"{phase}_{loss_name}_accuracy").compute(), '.3f'))
+                    self.log(f"{loss_name}/{phase}/max_accuracy_epoch", value_acc, prog_bar=True, on_epoch=True,
+                             sync_dist=True)
+                    getattr(self, f"{phase}_{loss_name}_accuracy").reset()
+                    confmat = getattr(self, f"{phase}_{loss_name}_conf").compute()
+                    rank_zero_info(f"confmat: {confmat}")
+                    precision, recall, kappa, sensitivity, specificity = objectives.confusion(confmat)
+                    macro_f1 = torch.mean(2 * precision * recall / (precision + recall), dim=-1)
+                    self.log(f"{loss_name}/{phase}/macro_f1", macro_f1, prog_bar=True, on_epoch=True,
+                             sync_dist=True)
+                    self.log(f"{loss_name}/{phase}/kappa_score", kappa, prog_bar=True, on_epoch=True,
+                             sync_dist=True)
+                    self.log(f"{loss_name}/{phase}/precision", precision, prog_bar=True, on_epoch=True,
+                             sync_dist=True)
+                    self.log(f"{loss_name}/{phase}/recall", recall, prog_bar=True, on_epoch=True,
+                             sync_dist=True)
+                    getattr(self, f"{phase}_{loss_name}_conf").reset()
+                    metric = value_acc + macro_f1
+
                 elif loss_name == 'Spindle':
                     value = getattr(self, f"{phase}_{loss_name}_loss").compute()
                     self.log(f"{loss_name}/{phase}/score", value, prog_bar=True, on_epoch=True, sync_dist=True)

@@ -11,6 +11,7 @@ from PIL import Image
 from .new_base_dataset import Aug_BaseDataset
 from .base_dataset import BaseDatatset
 
+from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
 class SDDataset(Aug_BaseDataset):
     def __init__(self, split="", *args, **kwargs):

@@ -64,6 +64,10 @@ class EDFDataModule(BaseDataModule):
             return ['x']
 
     @property
+    def ods(self):
+        return False
+
+    @property
     def stage(self):
         if self.config['mode'] != 'pretrain' and 'visualization' not in self.config['data_setting'] \
                 and 'EDF_Pretrain' not in self.config['mode']:
@@ -74,7 +78,9 @@ class EDFDataModule(BaseDataModule):
     @property
     def spindle(self):
         return False
-
+    @property
+    def pathology(self):
+        return False
     @property
     def dataset_cls(self):
         return self.dataset
@@ -146,6 +152,9 @@ class EDFAugDataModule(BaseDataModule):
 
     @property
     def spindle(self):
+        return False
+    @property
+    def pathology(self):
         return False
 
     @property

@@ -134,7 +134,8 @@ def main(_config):
                     label_list.append(stage)
                     batch_orig = {'stage': stage.detach().clone().unsqueeze(0),
                                   'x': (epoch, torch.tensor([4, 5, 16, 18, 22, 36, 38, 52])),
-                                  'index': torch.tensor(1)}  # index is no use
+                                  'index': torch.tensor(1),
+                                  'need_norm': True}  # index is no use
                     batch_list.append(batch_orig)
                 batch_cpu = collate(batch_list)
                 batch_cuda = move_to_device(batch_cpu, device)
@@ -151,7 +152,7 @@ def main(_config):
                                            sub=base_name, cnt=sub_arr_index, mode='Random')
                     save_epoch(generate_epoch[sub_arr_index].detach().cpu().numpy()+origin[sub_arr_index].detach().cpu().numpy(),
                                label_list[sub_arr_index].detach().cpu().numpy()[0],
-                               filename=os.path.join('/', *path.split('/')[:-1], 'Aug_Random0.25'), name=base_name
+                               filename=os.path.join('/', *path.split('/')[:-1], 'Aug_Random'), name=base_name
                                , cnt=sub_arr_index+start_index)
 
     print('------------------all finished------------------')

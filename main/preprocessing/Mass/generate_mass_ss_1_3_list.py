@@ -8,8 +8,8 @@ from sklearn.model_selection import train_test_split
 def main(dataset_num):
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str,
-                        # default="/Volumes/T7",
-                        default="/home/cuizaixu_lab/huangweixuan/data",
+                        default="/Volumes/T7",
+                        # default="/home/cuizaixu_lab/huangweixuan/data",
                         help="File path to the Sleep-EDF dataset.")
     parser.add_argument("--output_dir", type=str, default="MASS_Processed",
                         help="Directory where to save outputs.")
@@ -44,12 +44,12 @@ def main(dataset_num):
                 names.append(sub)
         ed.append(len(names))
         for name in temp_names:
-            print(f'------{name}-------')
+            # print(f'------{name}-------')
             tmp = 0
             for item in os.listdir(name):
                 if os.path.isfile(os.path.join(str(name), str(item))):
                     tmp += 1
-            print(f'num: {tmp}')
+            # print(f'num: {tmp}')
             nums.append(tmp)
 
     nums = np.array(nums)
@@ -58,11 +58,12 @@ def main(dataset_num):
     n = len(names)
     idx = np.arange(n)
     res = {}
-    for i in range(5):
+    for i in range(20):
         random_state = (2019 + i)
         print(f'random_state: {random_state}')
         train_idx, test_idx = train_test_split(idx, test_size=0.3, random_state=random_state)
         print(train_idx, test_idx)
+        num_all = 0
         res[f'test_{i}'] = {}
         res[f'test_{i}']['names'] = []
         res[f'test_{i}']['nums'] = []
@@ -75,16 +76,18 @@ def main(dataset_num):
         for _ in test_idx:
             res[f'test_{i}']['names'].append(names[_])
             res[f'test_{i}']['nums'].append(nums[_])
+            num_all += nums[_]
         for _ in test_idx:
             res[f'val_{i}']['names'].append(names[_])
             res[f'val_{i}']['nums'].append(nums[_])
         for _ in train_idx:
             res[f'train_{i}']['names'].append(names[_])
             res[f'train_{i}']['nums'].append(nums[_])
-    np.save(os.path.join(args.output_dir, f'SS{dataset_num}', f'MASS_P_SS{dataset_num}.npy'), arr=res, allow_pickle=True)
+        print(num_all//20)
+    np.save(os.path.join(args.output_dir, f'SS{dataset_num}', f'MASS_channel_SS{dataset_num}.npy'), arr=res, allow_pickle=True)
     print(f'len: names: {len(names)}')
 
 
 if __name__ == '__main__':
-    for i in range(1, 2):
+    for i in [1, 2, 3, 5]:
         main(dataset_num=i)

@@ -439,6 +439,7 @@ class By_Event(nn.Module):
         TP = 0.0
         FN = 0.0
         FP = 0.0
+
         # print(output.shape)
         len = output.shape[1]
 
@@ -578,7 +579,7 @@ def binary_to_array(x):
 
 
 def set_metrics(pl_module, **kwargs):
-    if pl_module.visual is not True:
+    if pl_module.visual is not True or pl_module.visual_mode == 'UMAP':
         for split in ["train", "validation", "test"]:
             for k, v in pl_module.hparams.config["loss_names"].items():
                 if v < 1:
@@ -633,16 +634,19 @@ def set_metrics(pl_module, **kwargs):
                         setattr(pl_module, f"train_{k}_loss", Scalar())
                         setattr(pl_module, f"train_{k}_local_loss", Scalar())
                         setattr(pl_module, f"train_{k}_local_accuracy_tf", Accuracy())
-                        setattr(pl_module, f"train_{k}_local_conf_tf", confmat(task="multiclass", num_classes=5))
+                        setattr(pl_module, f"train_{k}_local_conf_tf", confmat(task="multiclass", num_classes=kwargs['num_classes']))
                         for name in multi_y:
                             setattr(pl_module, f"train_{k}_accuracy_{name}", Accuracy())
-                            setattr(pl_module, f"train_{k}_conf_{name}", confmat(task="multiclass", num_classes=5))
+                            setattr(pl_module, f"train_{k}_conf_{name}", confmat(task="multiclass", num_classes=kwargs['num_classes']))
+                        if pl_module.spo2_ods_settings.get('inj', False):
+                            setattr(pl_module, f"train_{k}_accuracy_spo2_cls_feats", Accuracy())
+                            setattr(pl_module, f"train_{k}_conf_spo2_cls_feats", confmat(task="binary", num_classes=2))
                     else:
                         if 'persub' in kwargs and kwargs['persub'] is True:
                             test_names = kwargs['test_sub_names']
                             for tn in test_names.values():
                                 _tn = tn.split('/')[-1]
-                                setattr(pl_module, f"test_{_tn}_conf", confmat(task="multiclass", num_classes=5))
+                                setattr(pl_module, f"test_{_tn}_conf", confmat(task="multiclass", num_classes=kwargs['num_classes']))
                         if pl_module.return_alpha is True:
                             for stage in [0, 1, 2, 3, 4]:
                                 if pl_module.transformer.actual_channels is not None:
@@ -651,12 +655,28 @@ def set_metrics(pl_module, **kwargs):
                                     setattr(pl_module, f"{stage}_mapping", ChannelwiseScalar(8, need_sum=False))
                         setattr(pl_module, f"test_{k}_loss", Scalar())
                         setattr(pl_module, f"validation_{k}_loss", Scalar())
+                        if pl_module.spo2_ods_settings.get('inj', False):
+                            setattr(pl_module, f"validation_{k}_accuracy_spo2_cls_feats", Accuracy())
+                            setattr(pl_module, f"test_{k}_accuracy_spo2_cls_feats", Accuracy())
+                            setattr(pl_module, f"validation_{k}_conf_spo2_cls_feats", confmat(task="binary", num_classes=2))
+                            setattr(pl_module, f"test_{k}_conf_spo2_cls_feats", confmat(task="binary", num_classes=2))
                         for name in multi_y:
                             setattr(pl_module, f"validation_{k}_accuracy_{name}", Accuracy())
                             setattr(pl_module, f"test_{k}_accuracy_{name}", Accuracy())
-                            setattr(pl_module, f"test_{k}_conf_{name}", confmat(task="multiclass", num_classes=5))
-                            setattr(pl_module, f"validation_{k}_conf_{name}", confmat(task="multiclass", num_classes=5))
-
+                            setattr(pl_module, f"test_{k}_conf_{name}", confmat(task="multiclass", num_classes=kwargs['num_classes']))
+                            setattr(pl_module, f"validation_{k}_conf_{name}", confmat(task="multiclass", num_classes=kwargs['num_classes']))
+                elif k == "Pathology":
+                    if split == "train":
+                        setattr(pl_module, f"train_{k}_loss", Scalar())
+                        setattr(pl_module, f"train_{k}_accuracy", Accuracy())
+                        setattr(pl_module, f"train_{k}_conf", confmat(task="multiclass", num_classes=7))
+                    else:
+                        setattr(pl_module, f"test_{k}_loss", Scalar())
+                        setattr(pl_module, f"test_{k}_accuracy", Accuracy())
+                        setattr(pl_module, f"test_{k}_conf", confmat(task="multiclass", num_classes=7))
+                        setattr(pl_module, f"validation_{k}_loss", Scalar())
+                        setattr(pl_module, f"validation_{k}_accuracy", Accuracy())
+                        setattr(pl_module, f"validation_{k}_conf", confmat(task="multiclass", num_classes=7))
                 elif k == "mtm":
                     setattr(pl_module, f"{split}_{k}_loss2", Scalar())
                     setattr(pl_module, f"{split}_{k}_loss", Scalar())

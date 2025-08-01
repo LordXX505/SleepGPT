@@ -29,6 +29,10 @@ class YoungDataModule(BaseDataModule):
             return True
 
     @property
+    def ods(self):
+        return False
+
+    @property
     def spindle(self):
         return self.config['spindle'] is True
 
@@ -39,8 +43,12 @@ class YoungDataModule(BaseDataModule):
     @property
     def dataset_name(self):
         return 'Young'
+    @property
+    def pathology(self):
+        return False
 
     def setup(self, stage, **kwargs):
+        kwargs.pop('umap_dataset')
         if self.setup_flag == 0:
             self.set_val_dataset(settings=self.config['data_setting']['Young'], **kwargs)
             self.set_test_dataset(settings=self.config['data_setting']['Young'], **kwargs)

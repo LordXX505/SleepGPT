@@ -39,6 +39,10 @@ class ISRUCDataModule(BaseDataModule):
         return False
 
     @property
+    def ods(self):
+        return False
+
+    @property
     def dataset_cls(self):
         return self.dataset
 

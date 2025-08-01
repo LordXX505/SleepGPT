@@ -10,6 +10,7 @@ from torch import tensor
 import pandas as pd
 import seaborn as sns
 from math import pi
+from scipy.stats import ttest_ind, chi2_contingency
 
 cmap = LinearSegmentedColormap.from_list("mycmap",
                                          [(0, "#282A62"), (0.2, "#692F7C"), (0.4, "#B43970"),
@@ -144,7 +145,34 @@ def visual_radar_f1():
         ans[i] = macro_f1_sub
         overall_metric[i] = (kappa, acc, macro_f1)
     print(f'ans: {ans}')
-    print(f'overall_metric: {overall_metric}')
+    overall_metric = [0, 0]  # 存储两个模型的整体指标
+    overall_kappa, overall_acc, overall_macro_f1 = [[], []], [[], []], [[], []]  # 分别存储每个数据集的指标
+
+    # 遍历数据集，分别计算每个数据集的 kappa, acc, macro_f1
+    for i in [1, 2, 3, 5]:
+        for model in range(2):  # 模型 0 和模型 1
+            recision, recall, kappa, sensitivity, specificity, acc, macro_f1, macro_f1_sub = confusion(mass[i][model])
+            overall_kappa[model].append(kappa.item())
+            overall_acc[model].append(acc.item())
+            overall_macro_f1[model].append(macro_f1.item())
+
+    # 计算每个模型的平均值
+    for model in range(2):
+        overall_metric[model] = (
+            np.mean(overall_kappa[model]),
+            np.mean(overall_acc[model]),
+            np.mean(overall_macro_f1[model])
+        )
+    stat, p, dof, expected = chi2_contingency(res_overall)
+
+    print(f"overall_metric: {overall_metric}")
+    # 计算 p-value
+    kappa_p_value = ttest_ind(overall_kappa[0], overall_kappa[1], equal_var=False).pvalue
+    acc_p_value = ttest_ind(overall_acc[0], overall_acc[1], equal_var=False).pvalue
+    macro_f1_p_value = ttest_ind(overall_macro_f1[0], overall_macro_f1[1], equal_var=False).pvalue
+    from scipy.stats import mannwhitneyu
+    stat, p = mannwhitneyu(overall_acc[0], overall_acc[1])
+    print(kappa_p_value, acc_p_value, macro_f1_p_value)
     max_per_class = np.max(np.stack([ans[0], ans[1]]), axis=0)
     ans[0] = np.where(max_per_class != 0, ans[0] / max_per_class, 1)
     ans[1] = np.where(max_per_class != 0, ans[1] / max_per_class, 1)
@@ -200,12 +228,12 @@ def visual_radar_f1():
     fig, ax = plt.subplots()
     rects1 = ax.barh(x - width / 2, overall_metric[0], width, label='Model 1', color='#4DBADB', alpha=0.75)
     rects2 = ax.barh(x + width / 2, overall_metric[1], width, label='Model 2', color='#E44A33', alpha=0.75)
-    for rect in rects1 + rects2:
-        width = rect.get_width()
-        ax.text(width, rect.get_y() + rect.get_height() / 2,
-                f'{width:.3f}', ha='left', va='center')
+    # for rect in rects1 + rects2:
+    #     width = rect.get_width()
+    #     ax.text(width, rect.get_y() + rect.get_height() / 2,
+    #             f'{width:.3f}', ha='left', va='center')
     ax.set_yticks(x)
-    ax.set_xlim([0.65, 0.85])
+    ax.set_xlim([0.55, 0.85])
     ax.set_yticklabels(categories)
     plt.savefig(f'/Users/hwx_admin/Sleep/result/heatmap/overall_metric.svg')
 

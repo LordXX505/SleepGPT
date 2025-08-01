@@ -122,7 +122,7 @@ def main():
         file_name = os.path.join(args.data_dir, 'processed', f'Aug_{portion}_New', )
         file_aug_name = os.path.join(args.data_dir, 'Aug_file', f'Aug_{portion}_New', )
 
-        for i in range(1):
+        for i in range(10):
             res[f'train_{i}'] = {}
             res[f'train_{i}']['names'] = []
             res[f'train_{i}']['nums'] = []

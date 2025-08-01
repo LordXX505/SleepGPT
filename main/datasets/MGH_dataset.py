@@ -12,6 +12,7 @@ from PIL import Image
 from .base_dataset import BaseDatatset
 from .new_base_dataset import Aug_BaseDataset
 
+from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
 class MGHDataset(Aug_BaseDataset):
     def __init__(self, split="", *args, **kwargs):

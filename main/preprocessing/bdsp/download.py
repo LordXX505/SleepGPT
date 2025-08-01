@@ -8,12 +8,14 @@ from botocore.config import Config
 s3 = boto3.client('s3')
 
 # 配置参数
-bucket_name = 'arn:aws:s3:us-east-1:184438910517:accesspoint/bdsp-psg-access-point'  # 这里假设访问点名称遵循标准格式
+bucket_name = 'arn:aws:s3:us-east-1:184438910517:accesspoint/bdsp-psg-access-point'  # 假设访问点名称遵循标准格式
 prefix = 'PSG/bids/'  # 设置为你需要下载的对象的前缀
-local_path = '/data'  # 替换为你本地存储文件的路径
+local_path = '/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/'  # 替换为你本地存储文件的路径
+# local_path = '/Volumes/T7/data/bdsp'  # 替换为你本地存储文件的路径
 
-# 编译正则表达式模式，用于匹配指定范围内的对象
-pattern = re.compile(r'PSG/bids/sub-S000112\d{7}/*')
+# 编译正则表达式模式，匹配以 .tsv、.json、.csv 结尾的文件
+# pattern = re.compile(r'PSG/bids/sub-S000111\d{7}/.*\.(tsv|json|csv)$')
+pattern = re.compile(r'PSG/bids/participants.json')
 
 # 创建本地存储路径（如果不存在）
 if not os.path.exists(local_path):
@@ -35,7 +37,12 @@ pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 for page in pages:
     for obj in page.get('Contents', []):
         key = obj['Key']
-        if pattern.match(key):
+        if 'sub' not in key:
+            print(key)
+        else:
+            continue
+
+        if pattern.match(key):  # 匹配 .tsv、.json、.csv 文件
             # 创建本地文件路径
             local_file_path = os.path.join(local_path, key)
             local_file_dir = os.path.dirname(local_file_path)

@@ -31,6 +31,9 @@ class SHHS1DataModule(BaseDataModule):
         return False
 
     @property
+    def ods(self):
+        return False
+    @property
     def dataset_cls(self):
         return SHHSDataset
 
@@ -110,11 +113,21 @@ class SHHS1DataModule(BaseDataModule):
         else:
             settings = None
         kwargs.pop('settings')
-
-        split = 'Test'
+        if "umap_dataset" in kwargs.keys():
+            umap_dataset = kwargs['umap_dataset']['save_extra_name']
+            kwargs.pop('umap_dataset')
+        else:
+            umap_dataset = None
+        if umap_dataset is None:
+            split = 'Test'
+        else:
+            split_name = umap_dataset.split('_')[:]
+            if 'train' in split_name:
+                split = 'train_osa_c2_new'
+            else:
+                split = 'test_osa_c2_new'
         self.test_dataset = self.dataset_cls(
             patch_size=self.config['patch_size'],
-
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
             column_names=self.column_names,

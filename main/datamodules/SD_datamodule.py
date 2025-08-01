@@ -33,6 +33,10 @@ class SDDataModule(BaseDataModule):
         return SDDataset
 
     @property
+    def ods(self):
+        return False
+
+    @property
     def dataset_name(self):
         return 'SD'
 

@@ -5,25 +5,41 @@ from torchmetrics import ConfusionMatrix
 confmat = ConfusionMatrix
 
 class Accuracy(Metric):
-    def __init__(self, dist_sync_on_step=False):
+    """
+    - logits 形状:
+        * 二分类:  (B,) 或 (B, 1)   => 使用 sigmoid+0.5 判断
+        * 多分类:  (B, C) (C>=2)    => 使用 argmax(dim=-1)
+    - target 形状:
+        * 二分类:  (B,)      (0/1)
+        * 多分类:  (B,)      (类别索引) 或 one-hot (B,C)
+    """
+
+    def __init__(self, dist_sync_on_step: bool = False):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
-        self.add_state("correct", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("correct", default=torch.tensor(0.), dist_reduce_fx="sum")
+        self.add_state("total",   default=torch.tensor(0.), dist_reduce_fx="sum")
 
-    def update(self, logits, target):
-        logits, target = (
-            logits.detach().to(self.correct.device),
-            target.detach().to(self.correct.device),
-        )
-        preds = logits.argmax(dim=-1)
+    def _binary_pred(self, logit: torch.Tensor) -> torch.Tensor:
+        """sigmoid→阈值 0.5 → {0,1}"""
+        return (logit.sigmoid() > 0.5).long()
 
-        if target.numel() == 0:
-            return 1
-        if preds.shape != target.shape:
+    def update(self, logits: torch.Tensor, target: torch.Tensor):
+        logits, target = logits.detach().to(self.correct.device), target.detach().to(self.correct.device)
+
+        # -------- 1. 处理 target 可能是 one-hot ----------
+        if target.ndim == 2 and target.size(-1) > 1:
             target = target.argmax(dim=-1)
 
-        self.correct += torch.sum(preds == target)
-        self.total += target.numel()
+        # -------- 2. 生成 preds ----------
+        # 二分类 logit: shape (B,) or (B,1)
+        if logits.ndim == 1 or logits.size(-1) == 1:
+            preds = self._binary_pred(logits.view(-1))
+        else:                         # 多分类
+            preds = logits.argmax(dim=-1)
+
+        # -------- 3. 累积 ----------
+        self.correct += (preds == target).sum()
+        self.total   += target.numel()
 
     def compute(self):
         return self.correct / self.total

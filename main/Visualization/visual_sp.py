@@ -49,25 +49,25 @@ def main(_config):
     for _, _dm in enumerate(dm.dms):
         n = len(_dm.test_dataset)
         idx = np.arange(n)
-        np.random.seed(505)
+        print(f'idx: {idx}')
+        np.random.seed(1234)
         np.random.shuffle(idx)
         for id in idx:
             batch = _dm.test_dataset[id]
-
-            if cnt > 20:
-                sys.exit(0)
-            else:
-                cnt += 1
+            # if cnt > 20:
+            #     sys.exit(0)
+            # else:
+            #     cnt += 1
             print(f'cnt: {cnt}')
             # test_list = ['shhs1-202110']
             # if batch['name'] not in test_list:
             #     continue
             batch = dm.collate([batch])
-            batch['random_mask'][0][0] = torch.zeros(120)
-            batch['random_mask'][0][0][60:75] = torch.ones(15)
-            batch['random_mask'][0][0][75:90] = torch.ones(15)
-
-            batch['random_mask'][0][0][105:120] = torch.ones(15)
+            # batch['random_mask'][0][0] = torch.zeros(120)
+            # batch['random_mask'][0][0][60:75] = torch.ones(15)
+            # batch['random_mask'][0][0][75:90] = torch.ones(15)
+            #
+            # batch['random_mask'][0][0][105:120] = torch.ones(15)
             fig, Axes = plt.subplots(nrows=c, ncols=2, sharex='all', figsize=(32, 20))
             fig.suptitle('Masked RandomPlot')
             color = get_param(c)
@@ -76,7 +76,8 @@ def main(_config):
             epochs = res['batch']['epochs'][0]
             epochs_fft = res['batch']['epochs'][1]
             loss = pre_train.forward_masked_loss_channel(res['cls_feats'], epochs, res['time_mask_patch'])
-            loss2 = pre_train.forward_masked_loss_2D_channel(res['cls_feats_fft'], epochs_fft, res['fft_mask_patch'])
+            # loss2 = pre_train.forward_masked_loss_2D_channel(res['cls_feats_fft'], epochs_fft, res['fft_mask_patch'])
+            loss2=0
             idx = torch.where(loss > 100)
             print(f'loss: {loss} loss2: {loss2}')
             loss = torch.where(torch.isnan(loss), 0, loss)

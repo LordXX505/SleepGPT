@@ -38,6 +38,8 @@ class MultiDataModule(LightningDataModule):
         self.mask_strategies = _config['mask_strategies']
         self.negtive_index = None
         self.positive_index = None
+        self.print_test = 0
+        self.umap_dataset = _config['visual_setting']
 
     def prepare_data(self) -> None:
         for dm in self.dms:
@@ -53,7 +55,11 @@ class MultiDataModule(LightningDataModule):
             config_dict['mode'] = self.mode
             if self.mask_strategies is not None:
                 config_dict['mask_strategies'] = self.mask_strategies
-
+            if stage == 'fit' or stage == 'validate' or stage == 'test':
+                config_dict['print_test'] = self.print_test
+                self.print_test += 1
+            if self.umap_dataset['mode'] is not None:
+                config_dict['umap_dataset'] = self.umap_dataset
             print(f'datamodule config_dict: {config_dict}')
             dm.setup(stage, **config_dict)
             if self.need_BDS:

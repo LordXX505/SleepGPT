@@ -11,6 +11,8 @@ from .EDF_datamodule import EDFDataModule, EDFAugDataModule
 from .ISRUC_datamodule import ISRUCDataModule
 from .MGH_datamodule import MGHDataModule
 from .Apnea_datamodule import ApneaDataModule
+from .CAP_datamodule import CAPDataModule
+from .UMS_datamodule import UMSDataModule
 _datamodules = {
     'physio_train': physioDataModule,
     'physio_test': physioDataModule,
@@ -32,5 +34,12 @@ _datamodules = {
     'ISRUC_S1': ISRUCDataModule,
     'MGH': MGHDataModule,
     'MASS_Apnea': ApneaDataModule,
-
+    'CAP_n': CAPDataModule,
+    'CAP_ins': CAPDataModule,
+    'CAP_narco': CAPDataModule,
+    'CAP_nfle': CAPDataModule,
+    'CAP_plm': CAPDataModule,
+    'CAP_rbd': CAPDataModule,
+    'CAP_sdb': CAPDataModule,
+    'UMS': UMSDataModule
 }

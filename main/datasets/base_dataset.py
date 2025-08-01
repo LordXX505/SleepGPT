@@ -7,6 +7,7 @@ import torch
 import io
 import pyarrow as pa
 import os
+from pytorch_lightning.utilities.rank_zero import rank_zero_info
 
 from main.transforms import keys_to_transforms, normalize
 from torch.utils import data

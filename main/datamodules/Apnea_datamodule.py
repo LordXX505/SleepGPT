@@ -60,7 +60,7 @@ class ApneaDataModule(BaseDataModule):
             settings = kwargs['settings']
         else:
             settings = None
-        split = 'test'
+        split = 'val'
         kwargs.pop('settings')
 
         self.val_dataset = self.dataset_test(

@@ -11,7 +11,8 @@ from .base_dataset import BaseDatatset
 import glob
 from .new_base_dataset import Aug_BaseDataset
 
-class YoungDataset(BaseDatatset):
+from pytorch_lightning.utilities.rank_zero import rank_zero_info
+class YoungDataset(Aug_BaseDataset):
     def __init__(self, split="", *args, **kwargs):
         """
         Args:

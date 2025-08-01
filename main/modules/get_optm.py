@@ -236,7 +236,7 @@ def param_groups_lrd(pl_module, lr=1, weight_decay=0.05, no_weight_decay_list=[]
         "norm2.bias",
         "norm2.weight",
         "fc_norm",
-         "token_type_embeddings"
+        "token_type_embeddings"
     ]
 
     num_layers = len(pl_module.transformer.blocks) + 1
@@ -304,7 +304,6 @@ def param_groups_no_layer_decay(pl_module, lr=1, weight_decay=0.05, no_weight_de
             "norm2_time",
             "norm2_fft",
             "token_type_embeddings"
-
         ]
     head_names = ["spindle_pred_proj", "stage_pred", "pooler", "decoder_transformer_block"]
     lr_mult = pl_module.hparams.config["lr_mult"]
@@ -351,21 +350,25 @@ def param_groups_no_layer_decay(pl_module, lr=1, weight_decay=0.05, no_weight_de
 
     return list(param_groups.values())
 
-def get_layer_id_for_vit(name, num_layers):
+def get_layer_id_for_vit(name: str, num_layers: int):
     if name.startswith("transformer"):
-        name = '.'.join(name.split('.')[1:])
-    """
-    Assign a parameter with its layer id
-    Following BEiT: https://github.com/microsoft/unilm/blob/master/beit/optim_factory.py#L33
-    """
-    if name in ['cls_token', 'pos_embed', 'fft_cls_token', 'cls_token_pos_embed', 'mask_token', 'channel_embed']:
+        name = ".".join(name.split(".")[1:])
+
+    if name in {'cls_token', 'pos_embed', 'fft_cls_token',
+                'cls_token_pos_embed', 'mask_token', 'channel_embed'}:
         return 0
-    elif name.startswith('patch_embed') or name.startswith("token_type_embeddings"):
+    elif name.startswith(('patch_embed', 'token_type_embeddings')):
         return 0
-    elif name.startswith('blocks'):
+
+    if 'cross_attn' in name or 'xattn' in name \
+       or 'spo2_extractor' in name or 'spo2_encoder' in name:
+        return num_layers
+
+    # ---- ③ 普通 Blocks / Norm ----
+    if name.startswith('blocks'):
         return int(name.split('.')[1]) + 1
     elif name.startswith('norm'):
-        return num_layers-1
+        return num_layers - 1      # 顶层 LayerNorm
     else:
         return num_layers
 

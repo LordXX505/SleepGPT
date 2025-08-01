@@ -11,12 +11,26 @@ def _loss_names(d):
         "itc": 0,
         "itm": 0,
         'Apnea': 0,
+        'Pathology': 0,
     }
 
     ret.update(d)
 
     return ret
+def _spo2_ods_settings(d):
+    ret = {
+        'inj': False,
+        'd_spo2': 128,
+        'xattn_layers': [12],
+        'hybrid_loss': True,
+        'ods_pos_w': 10,
+        'model_type': 'lstm',
+        'use_seq': False,
+        'concat': False
+    }
+    ret.update(d)
 
+    return ret
 
 def _train_transform_keys(d):
     ret = {
@@ -33,6 +47,7 @@ def config():
     extra_name = None
     exp_name = 'sleep'
     seed = 3407
+    random_seed = [3407]
     precision = "16-mixed"
     mode = 'pretrain'
     kfold=None
@@ -120,7 +135,7 @@ def config():
 
     # data settings
     data_setting = {'SHHS': None, 'Young': "AMP", 'SD': 'AMP', 'Physio': None,
-                    'MASS': None, 'ISRUC': None, 'EDF': None, 'MGH': None,}
+                    'MASS': None, 'ISRUC': None, 'EDF': None, 'MGH': None, 'CAP': None, 'UMS': None}
 
     resume_during_training = None
 
@@ -134,7 +149,7 @@ def config():
     decoder_features = 128
     pool = 'attn'
     smoothing = 0.0
-    decoder_heads = 12
+
     use_global_fft = False
     use_all_label = None
     split_len = None
@@ -165,6 +180,12 @@ def config():
     Use_FPN = None
     Event_decoder_depth = 4
     Event_enc_dim = 384
+    decoder_depth = 0
+    decoder_heads = 12
+    decoder_selected_layers = None
+    longnet_dr = 2
+    longnet_sl = 8
+    longnet_pool = False
     num_queries = 400
     FPN_resnet = False
     CE_Weight = 10
@@ -173,7 +194,7 @@ def config():
     EDF_Mode = None
     subset = None
     visual = False
-    visual_setting = {'mask_same': False, 'mode': None}
+    visual_setting = {'mask_same': False, 'mode': None, 'save_extra_name': None}
     persub = None
     return_alpha = False
     kfold_test = None
@@ -183,6 +204,11 @@ def config():
     use_triton = False
     aug_dir = None
     aug_prob = 0.
+    num_classes = 5
+    stage1_epoch = 5,  # 前5个 epoch 只训练stage
+    stage2_epoch = 10,  # 接下来5个epoch 开启 cross-attn 和 ODS
+    freeze_stage = False  # 是否冻结 stage 模块（可选）
+    spo2_ods_settings = _spo2_ods_settings({'inj': False})
 
 @ex.named_config
 def test():
@@ -375,7 +401,7 @@ def finetune_phy():
 
     # data
     datasets = ['physio_train']
-    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/Physio/training"]
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/Physio/training"]
 
     # train configs
     dropout = 0
@@ -480,6 +506,207 @@ def finetune_edf():
     multi_y = ['tf']
     actual_channels = 'EDF'
 @ex.named_config
+def ums_new_dataset():
+    datasets = ['UMS']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/UMS_new"]
+    num_classes = 4
+    actual_channels = 'Fpz'
+
+@ex.named_config
+def ums_bjnz_spo2_ods_F3_new_dataset():
+    datasets = ['UMS']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/UMS_new_F3"]
+    num_classes = 4
+    actual_channels = 'F3'
+    stage1_epoch = 5,  # 前5个 epoch 只训练stage
+    stage2_epoch = 10,  # 接下来5个epoch 开启 cross-attn 和 ODS
+    freeze_stage = False  # 是否冻结 stage 模块（可选）
+
+@ex.named_config
+def fusion_12_layes():
+    spo2_ods_settings = _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [11],
+                                            'ods_pos_w': 2
+                                            })
+@ex.named_config
+def fusion_8_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [7],
+                                             'ods_pos_w': 2
+                                             })
+@ex.named_config
+def fusion_4_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [3],
+                                             'ods_pos_w': 2
+                                             })
+@ex.named_config
+def fusion_ods_pos_w_5_4_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [3],
+                                            'ods_pos_w': 2
+                                            })
+
+@ex.named_config
+def fusion_4812_layes():
+    spo2_ods_settings = _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [3, 7, 11],
+                                            'ods_pos_w': 2
+
+                                            })
+
+@ex.named_config
+def fusion_28_layes():
+    spo2_ods_settings = _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 256,
+                                            'xattn_layers': [1, 7],
+                                            'ods_pos_w': 2
+
+                                            })
+@ex.named_config
+def fusion_1_layes():
+    spo2_ods_settings = _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 256,
+                                            'xattn_layers': [0],
+                                            'ods_pos_w': 2
+
+                                            })
+
+@ex.named_config
+def fusion_2468_layes():
+    spo2_ods_settings = _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 256,
+                                            'xattn_layers': [1, 3, 5, 7],
+                                            'ods_pos_w': 2
+
+                                            })
+@ex.named_config
+def fusion_2_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [1],
+                                            'ods_pos_w': 2
+                                            })
+@ex.named_config
+def fusion_2_concat_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [1],
+                                            'ods_pos_w': 2,
+                                             'concat': True
+                                            })
+@ex.named_config
+def fusion_2_concat_256_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 256,
+                                            'xattn_layers': [1],
+                                            'ods_pos_w': 2,
+                                             'concat': True
+                                            })
+@ex.named_config
+def fusion_8_concat_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [7],
+                                            'ods_pos_w': 2,
+                                             'concat': True
+                                            })
+@ex.named_config
+def fusion_28_concat_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [1, 7],
+                                            'ods_pos_w': 2,
+                                             'concat': True
+                                            })
+@ex.named_config
+def fusion_2_seq_concat_layes():
+    spo2_ods_settings =  _spo2_ods_settings({'inj': True,
+                                            'd_spo2': 128,
+                                            'xattn_layers': [1],
+                                            'ods_pos_w': 2,
+                                             'concat': True,
+                                             'use_seq': True,
+                                            })
+@ex.named_config
+def ums_wm2_Fpz_new_dataset():
+    datasets = ['UMS']
+    data_dir = ["/lustre/home/2201210064/DATA/data/UMS_new_Fpz"]
+    num_classes = 4
+    actual_channels = 'Fpz'
+
+@ex.named_config
+def ums_wm2_F3_new_dataset():
+    datasets = ['UMS']
+    data_dir = ["/lustre/home/2201210064/DATA/data/UMS_new_F3"]
+    num_classes = 4
+    actual_channels = 'F3'
+@ex.named_config
+def finetune_ums():
+    mode = "finetune"
+    extra_name = "Finetune_ums"
+    # batch
+    batch_size = 169
+    max_epoch = 50
+    accum_iter = 2
+    mask_ratio = None
+    mixup = 0.8
+
+    # data
+    datasets = ['UMS']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/UMS"]
+
+    # train configs
+    dropout = 0
+    loss_names = _loss_names({"CrossEntropy": 1})
+    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3, 4, 6]], "mode": ["shuffle"]})
+
+    start_epoch = 0
+    num_workers = 0
+    drop_path_rate = 0.1
+    patch_size = 200
+    lr_mult = 1  # multiply lr for downstream heads
+    blr = 1.5e-5
+    end_lr = 0
+
+    warmup_steps = 5
+
+    # dir
+    output_dir = './checkpoint/2201210064/experiments'
+    log_dir = './checkpoint_log/2201210064/experiments'
+    load_path = ""
+
+    # sche and opt
+    lr_policy = "cosine"
+    optim = "adamw"
+    clip_grad = False
+    weight_decay = 0.05
+
+    # device
+    device = 'cuda'
+    deepspeed = False
+    dist_on_itp = True
+
+
+    # evaluation
+    dist_eval = False
+    eval = False
+
+    # other
+    fast_dev_run = 7
+    use_relative_pos_emb=True
+    local_pooling = True
+    # multi_y = ['tf', 'time', 'fft']
+    multi_y = ['tf']
+    actual_channels = 'ums'
+    data_setting = {'UMS': None}
+
+@ex.named_config
 def finetune_mass_stage():
     mode = "Finetune_mass_all"
     extra_name = "Finetune_mass_all"
@@ -541,6 +768,11 @@ def finetune_mass_stage():
     # multi_y = ['tf', 'time', 'fft']
     multi_y = ['tf']
     data_setting = {'MASS': 'AMP'}
+
+    longnet_dr = [1, 2, 4, 8, 16]
+    longnet_sl = [32, 64, 128, 512, 1024]
+    decoder_heads = 32
+
 @ex.named_config
 def finetune_ISRUC_S1():
     mode = "finetune_ISRUC_S1"
@@ -647,6 +879,57 @@ def finetune_MASS_Spindle():
     # other
     gradient_clip_val = 1.0
     fast_dev_run = 7
+
+@ex.named_config
+def finetune_CAP():
+    mode = "Finetune_cap_all"
+    extra_name = "Finetune_cap_all"
+    # batch
+    batch_size = 169
+    max_epoch = 50
+    accum_iter = 2
+    mask_ratio = None
+
+    dropout = 0
+    loss_names = _loss_names({"Pathology": 1})
+    transform_keys = _train_transform_keys({"keys": [[0, 1, 2, 3, 4, 6]], "mode": ["shuffle"]})
+    start_epoch = 0
+    num_workers = 0
+    drop_path_rate = 0.1
+    patch_size = 200
+    lr_mult = 1  # multiply lr for downstream heads
+    blr = 1.5e-5
+    end_lr = 0
+
+    warmup_steps = 5
+
+    # dir
+    output_dir = './checkpoint/2201210064/experiments'
+    log_dir = './checkpoint_log/2201210064/experiments'
+    load_path = ""
+
+    # sche and opt
+    lr_policy = "cosine"
+    optim = "adamw"
+    clip_grad = False
+    weight_decay = 0.05
+
+    # device
+    device = 'cuda'
+    deepspeed = False
+    dist_on_itp = True
+
+
+    # evaluation
+    dist_eval = False
+    eval = False
+
+    # other
+    gradient_clip_val = 1.0
+    fast_dev_run = 7
+    longnet_dr = [1, 2, 4, 8, 16]
+    longnet_sl = [32, 64, 128, 512, 1024]
+    decoder_heads = 32
 @ex.named_config
 def finetune_MASS_Apnea():
     mode = "Apneadetection_SS1"
@@ -820,12 +1103,16 @@ def edf_portion_5_datasets():
     mode = "Other_EDF_Finetune"
     extra_name = "Finetune_edf_portion_5"
     EDF_Mode = 'Portion_5_New'
+
 @ex.named_config
 def edf_portion_12_datasets():
     mode = "Other_EDF_Finetune"
     extra_name = "Finetune_edf_portion_12"
     EDF_Mode = 'Portion_12_New'
 
+@ex.named_config
+def repeat():
+    random_seed = [2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033,]
 @ex.named_config
 def pretrain_time_fft_mtm():
 
@@ -1207,13 +1494,116 @@ def visualization_no_fft():
     visual_setting = {'mask_same': False, 'mode': 'no_fft'}
 @ex.named_config
 def visualization_mask_same():
-    mask_ratio = [0.25]
+    mask_ratio = [0.75]
     visual_setting = {'mask_same': True, 'mode': 'mask_same'}
 @ex.named_config
 def visualization_using_all_fft():
     mask_ratio = [0.5, 0.0]
     visual_setting = {'mask_same': False, 'mode': 'all_fft'}
+@ex.named_config
+def visualization_umap():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP'}
+    visual = True
 
+@ex.named_config
+def visualization_umap_CAP():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'CAP_umap'}
+    visual = True
+
+@ex.named_config
+def visualization_umap_shhs():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'shhs1_train_new_c2_umap'}
+    visual = True
+    loss_names = _loss_names({"Pathology": 1})
+    mode = 'shhs_umap'
+
+@ex.named_config
+def visualization_umap_edf_2013():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'edf_2013_1_umap'}
+    visual = True
+@ex.named_config
+def visualization_umap_edf_2018():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'edf_2013_1_umap'}
+    visual = True
+@ex.named_config
+def visualization_umap_edf_2013_TCC():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'edf_2013_TCC_umap'}
+    visual = True
+
+@ex.named_config
+def visualization_umap_MASS():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS_1():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP_1'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS_2():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP_2'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS_5():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP_5'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS_12():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP_12'}
+    visual = True
+
+@ex.named_config
+def visualization_umap_MASS_1_aug():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP_1_aug'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS_2_aug():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP_2_aug'}
+    visual = True
+
+@ex.named_config
+def visualization_umap_MASS_5_aug():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP_5_aug'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS_12_aug():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS_UMAP_12_aug'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS1_PZ():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS1_PZ_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS2_PZ():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS2_PZ_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS3_PZ():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS3_PZ_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS5_PZ():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS5_PZ_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS1_F3():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS1_F3_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS2_F3():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS2_F3_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS3_F3():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS3_F3_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_MASS5_F3():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'MASS5_F3_UMAP'}
+    visual = True
+@ex.named_config
+def visualization_umap_phy():
+    visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'PHY_UMAP'}
+    visual = True
 @ex.named_config
 def visualization_sp():
     mode = "Stagedetection"
@@ -1466,7 +1856,7 @@ def SHHS1_WM_datasets():
     datasets = ['SHHS1']
     data_dir = ["/lustre/home/2201210064/DATA/data/shhs_new/shhs"]
     kfold = None
-    data_setting = ['SHHS']
+    data_setting = {'SHHS': 'AMP'}
 @ex.named_config
 def SHHS1_load_path():
     datasets = ['SHHS2']
@@ -1481,7 +1871,7 @@ def SHHS2_datasets():
 @ex.named_config
 def Young_datasets():
     datasets = ['Young']
-    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/Young"]
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA_C/data/data/Young"]
     data_setting = {'Young': None}
 
 @ex.named_config
@@ -1509,6 +1899,23 @@ def Local_ISRUC_S1():
     datasets = ['ISRUC_S1']
     data_dir = ["/Volumes/T7/DATA/ISRUC/processed"]
     data_setting = ['ISRUC']
+
+
+@ex.named_config
+def CAP_datasets():
+
+    datasets = ['CAP_n', 'CAP_ins', 'CAP_narco', 'CAP_nfle', 'CAP_plm', 'CAP_rbd',
+                'CAP_sdb']
+    data_dir = ["/home/cuizaixu_lab/huangweixuan/DATA/data/CAP/processed/n",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/CAP/processed/ins",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/CAP/processed/narco",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/CAP/processed/nfle",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/CAP/processed/plm",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/CAP/processed/rbd",
+                "/home/cuizaixu_lab/huangweixuan/DATA/data/CAP/processed/sdb",
+                ]
+    data_setting = {'CAP': None}
+
 @ex.named_config
 def all_datasets():
     datasets = ['SD', 'physio_train', 'physio_test', 'SHHS1', 'SHHS2', 'Young',

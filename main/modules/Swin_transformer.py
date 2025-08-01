@@ -575,9 +575,9 @@ class GlobalSwin(nn.Module):
         return x
 
     def forward(self, x):
-        x = self.forward_features(x)
-        x = self.head(x)
-        return {'tf': x}
+        x_forward_features = self.forward_features(x)
+        x_result = self.head(x_forward_features)
+        return {'tf': x_result, 'features': x_forward_features.detach()}
 
 
 class SwinTransformer(nn.Module):

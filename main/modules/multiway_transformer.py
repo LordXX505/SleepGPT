@@ -13,10 +13,11 @@ from einops import rearrange
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from timm.models import register_model
 from pytorch_lightning.utilities.rank_zero import rank_zero_info
-from main.transforms import FFT_Transform
-from .triton_transformer import layernorm, softmax
-import pynvml
+from typing import List
 
+from main.transforms import FFT_Transform
+import pynvml
+from . import WearableAdapter
 
 # from visualizer import get_local
 
@@ -162,8 +163,8 @@ class Attention(nn.Module):
         # print("Memory Total: ", meminfo.total/unit)
         # print("Memory Free: ", meminfo.free/unit)
         # print("Memory Used: ", meminfo.used/unit)
-        attn = softmax(attn, causal=False, use_triton=self.use_triton).type_as(x)
-        # attn = attn.softmax(dim=-1).type_as(x)
+        # attn = torch.softmax(attn, dim=-1).type_as(x)
+        attn = attn.softmax(dim=-1).type_as(x)
         # print('softmaxattn:', attn)
         attn = self.attn_drop(attn)
 
@@ -203,7 +204,9 @@ class Block(nn.Module):
             use_relative_pos_emb=True,
             all_num_relative_distance=-1,
             use_cb=False,
-            use_triton=False
+            use_triton=False,
+            with_xattn=None,
+            d_spo2=None
     ):
         super().__init__()
         self.norm1 = norm_layer(dim)
@@ -282,8 +285,15 @@ class Block(nn.Module):
 
         self.max_time_len = max_time_len
 
+        # (optional) Cross‑Attn branch ------------------------------------------------
+        self.use_xattn = with_xattn
+        if with_xattn:
+            assert d_spo2 is not None, "d_spo2 must be provided when with_xattn=True"
+            self.xattn = WearableAdapter.GatedCrossAttn(dim, d_spo2, n_heads=8, p_drop=attn_drop)
+            self.gamma_spo = nn.Parameter(torch.zeros(dim))  # zero‑init safeguard
+
     def forward(self, x, mask=None, modality_type=None, relative_position_bias=None, relative_position_index=None,
-                not_use_tf=False):
+                not_use_tf=False, spo2_tok=None):
         # unit = 1024*1024*1024
         # print("*******blk********")
         # handle = pynvml.nvmlDeviceGetHandleByIndex(0)
@@ -295,6 +305,9 @@ class Block(nn.Module):
         x = x + self.drop_path(
             self.gamma_1 * self.attn(self.norm1(x), mask=mask, relative_position_bias=relative_position_bias,
                                      relative_position_index=relative_position_index))
+        # Cross‑Attn (if enabled & given)
+        if self.use_xattn and (spo2_tok is not None):
+            x = x + self.drop_path(self.gamma_spo * self.xattn(x, spo2_tok))
         # print('blk x', torch.isnan(x).sum())
         # print("*******blk_forward********")
         # handle = pynvml.nvmlDeviceGetHandleByIndex(0)
@@ -419,7 +432,7 @@ class PatchEmbed(nn.Module):
             assert len_ >= 0
 
             assert C == self.choose_channels.shape[0]
-            fft_proj = rearrange(self.fft_proj(x[len_ - 1]), 'B (C D) P -> B (C P) D', C=self.in_chans)
+            fft_proj = rearrange(self.fft_proj(x[len_ - 1]).squeeze(-1), 'B (C D) P -> B (C P) D', C=self.in_chans)
 
             return fft_proj
 
@@ -453,6 +466,7 @@ class MultiWayTransformer(nn.Module):
             use_relative_pos_emb=False,
             all_num_relative_distance=-1,
             use_triton=False,
+            spo2_ods_settings=None
     ):
         """
         Args:
@@ -498,6 +512,10 @@ class MultiWayTransformer(nn.Module):
         ) = embed_dim  # num_features for consistency with other models
         norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
         self.max_channels = config['random_choose_channels']
+        self.spo2_ods_settings = spo2_ods_settings or {}
+        # Build SpO₂ encoder if provided
+        self.d_spo2 = self.spo2_ods_settings.get('d_spo2', embed_dim)
+        xattn_layers: List[int] = self.spo2_ods_settings.get('xattn_layers', [])
         self.patch_embed = PatchEmbed(
             epoch_duration=self.epoch_duration,
             fs=self.fs,
@@ -548,9 +566,10 @@ class MultiWayTransformer(nn.Module):
         max_time_len = len(self.actual_channels) if self.actual_channels is not None else self.max_channels
         self.max_time_len = self.num_patches * max_time_len
         rank_zero_info(f'choose max_time_len: {max_time_len}, self.max_time_len: {self.max_time_len}')
-        self.blocks = nn.ModuleList(
-            [
-                Block(
+        self.blocks = nn.ModuleList()
+        for i in range(depth):
+            use_x = i in xattn_layers
+            blk = Block(
                     dim=embed_dim,
                     num_heads=num_heads,
                     mlp_ratio=mlp_ratio,
@@ -570,12 +589,11 @@ class MultiWayTransformer(nn.Module):
                     use_cb=config['use_cb'],
                     use_relative_pos_emb=self.use_relative_pos_emb,
                     all_num_relative_distance=all_num_relative_distance,
-                    use_triton=use_triton
+                    use_triton=use_triton,
+                    with_xattn=use_x,
+                    d_spo2=self.d_spo2
                 )
-                for i in range(depth)
-            ]
-        )
-
+            self.blocks.append(blk)
         self.norm = norm_layer(embed_dim)
         # if config['time_only']:
         #     self.decoder_norm = norm_layer(embed_dim)
@@ -584,19 +602,31 @@ class MultiWayTransformer(nn.Module):
         self.init_weights()
 
     def init_weights(self):
+        self.apply(self._init_weights)
         if self.pos_embed is not None:
             trunc_normal_(self.pos_embed, std=.02)
             trunc_normal_(self.cls_token_pos_embed, std=.02)
         # trunc_normal_(self.channel_embed, std=.02)
         # print('init_weights', w_fft, torch.isnan(w_fft).sum())
 
-        self.apply(self._init_weights)
-
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
+            if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
+
+        elif isinstance(m, nn.MultiheadAttention):
+            if m.in_proj_weight is not None:
+                trunc_normal_(m.in_proj_weight, std=0.02)
+            if m.q_proj_weight is not None:
+                trunc_normal_(m.q_proj_weight, std=0.02)
+                trunc_normal_(m.k_proj_weight, std=0.02)
+                trunc_normal_(m.v_proj_weight, std=0.02)
+            if m.bias_k is not None:
+                nn.init.constant_(m.bias_k, 0)
+            if m.bias_v is not None:
+                nn.init.constant_(m.bias_v, 0)
+
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
@@ -607,7 +637,7 @@ class MultiWayTransformer(nn.Module):
 
     def get_actual_channels(self, actual_channels):
         all_c = np.array(["C3", "C4", "EMG", "EOG", "F3", "Fpz", "O1", "Pz"])
-        if actual_channels is None:
+        if actual_channels is None or actual_channels=='none':
             self.actual_channels = None
         elif actual_channels == 'shhs':
             self.actual_channels = torch.tensor(torch.arange(4))
@@ -617,6 +647,8 @@ class MultiWayTransformer(nn.Module):
             self.actual_channels = torch.tensor([0])
         elif actual_channels == 'MASS_Apnea':
             self.actual_channels = torch.tensor([0, 1, 2, 3, 4, 6, 7])
+        elif actual_channels == 'ums':
+            self.actual_channels = torch.tensor([4])
         elif 'EDF' in actual_channels:
             self.actual_channels = torch.tensor([3, 5, 7])
             edf_aug = actual_channels.split('_')
@@ -771,6 +803,7 @@ class MultiWayTransformer(nn.Module):
                 time_ratio = fft_ratio = self.mask_ratio
             x_time, time_mask_patch = self.random_masking2(x_time, time_ratio, attn_mask,
                                                            mask_w)  # [N,L_t,D], [N, L_t]
+            # rank_zero_info(f'time_mask_patch : {time_mask_patch}, mask_w: {mask_w},{time_ratio }, {fft_ratio}')
             x_fft, fft_mask_patch = self.random_masking(x_fft, fft_ratio,
                                                         attn_mask, mask_w_fft
                                                         )  # [N,L_t,D], [N, L_t]
@@ -895,8 +928,8 @@ class FilterbankShape(object):
 def backbone_base_patch200(pretrained=False, **kwargs):
     patch_size = kwargs.pop("patch_size", 200)
     model = MultiWayTransformer(
-        patch_size=patch_size, embed_dim=384, depth=12, num_heads=12,
-        mlp_ratio=4, qkv_bias=True, tfffn_start_layer_index=10,
+        patch_size=patch_size, embed_dim=384, depth=8, num_heads=12,
+        mlp_ratio=4, qkv_bias=True, tfffn_start_layer_index=6,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 

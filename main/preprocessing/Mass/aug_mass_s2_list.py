@@ -96,8 +96,7 @@ def main():
         print(f'num: {tmp}')
         nums.append(tmp)
 
-    edf20_permutation = np.array([8, 6, 12, 9, 4, 13, 2, 15, 10, 18, 16, 14, 19, 3, 7,
-                                  1, 5, 11, 17]) - 1
+    edf20_permutation = np.array([7, 19, 11, 4, 3, 1, 15, 6, 12 ,17, 8, 9, 2, 5, 13, 10, 16, 18, 14]) - 1
     # 8,6,18,9,10,6
     # edf20_permutation = np.array([8, 6, 12, 9, 4, 13, 2, 15, 10, 18, 16, 14, 19, 3, 7,
     #                               1, 5, 11, 17]) - 1
@@ -115,76 +114,28 @@ def main():
     # load files
     ######## TesT ##########
     test_files = edf20_permutation[(len_train + len_valid):]
-    for portion in [12]:
-        # subset_items = training_files[:portion]
-        file_name = os.path.join(args.data_dir, 'SS2', f'Aug_{portion}', )
-        file_aug_name = os.path.join(args.data_dir, 'Aug_Random', f'Aug_{portion}', )
-        kfold = 4
-        idx = np.arange(0, len(edf20_permutation))
-        for i in range(5):
-            st = i * kfold
-            ed = min((i + 1) * kfold, 19)
-            idx_split = idx[st:ed]
-            idx_train = np.random.choice(np.setdiff1d(idx, idx_split), size=12, replace=False)
-            res[f'train_{i}'] = {}
-            res[f'train_{i}']['names'] = []
-            res[f'train_{i}']['nums'] = []
-            for ds_idx in edf20_permutation[idx_train]:
-                for tn_idx in files_dict[ds_idx]:
-                    res[f'train_{i}']['names'].append(names[tn_idx])
-                    res[f'train_{i}']['nums'].append(nums[tn_idx])
-            res[f'val_{i}'] = {}
-            res[f'val_{i}']['names'] = []
-            res[f'val_{i}']['nums'] = []
-            for ds_idx in edf20_permutation[idx_split]:
-                for tn_idx in files_dict[ds_idx]:
-                    res[f'val_{i}']['names'].append(names[tn_idx])
-                    res[f'val_{i}']['nums'].append(nums[tn_idx])
-            res[f'test_{i}'] = {}
-            res[f'test_{i}']['names'] = []
-            res[f'test_{i}']['nums'] = []
-
-            for ds_idx in edf20_permutation[idx_split]:
-                for tn_idx in files_dict[ds_idx]:
-                    res[f'test_{i}']['names'].append(names[tn_idx])
-                    res[f'test_{i}']['nums'].append(nums[tn_idx])
-            print(f'train name : {res[f"train_{i}"]["names"]}')
-
-            res_aug[f'train_{i}'] = {}
-            res_aug[f'train_{i}']['names'] = []
-            res_aug[f'train_{i}']['nums'] = []
-            for ds_idx in edf20_permutation[idx_train]:
-                for tn_idx in files_dict[ds_idx]:
-                    res_aug[f'train_{i}']['names'].append(aug_names[tn_idx])
-                    res_aug[f'train_{i}']['nums'].append(nums[tn_idx])
-            res_aug[f'val_{i}'] = {}
-            res_aug[f'val_{i}']['names'] = []
-            res_aug[f'val_{i}']['nums'] = []
-            res_aug[f'test_{i}'] = {}
-            res_aug[f'test_{i}']['names'] = []
-            res_aug[f'test_{i}']['nums'] = []
-            print(f'train name : {res_aug[f"train_{i}"]["names"]}, {idx_train}, {idx_split}')
-
-        np.save(file_name, arr=res, allow_pickle=True)
-        np.save(file_aug_name, arr=res_aug, allow_pickle=True)
-
-    # for portion in [1, 2, 5, 12]:
-    #     subset_items = training_files[:portion]
+    # for portion in [12]:
+    #     # subset_items = training_files[:portion]
     #     file_name = os.path.join(args.data_dir, 'SS2', f'Aug_{portion}', )
     #     file_aug_name = os.path.join(args.data_dir, 'Aug_Random', f'Aug_{portion}', )
-    #
-    #     for i in range(1):
+    #     kfold = 4
+    #     idx = np.arange(0, len(edf20_permutation))
+    #     for i in range(5):
+    #         st = i * kfold
+    #         ed = min((i + 1) * kfold, 19)
+    #         idx_split = idx[st:ed]
+    #         idx_train = np.random.choice(np.setdiff1d(idx, idx_split), size=12, replace=False)
     #         res[f'train_{i}'] = {}
     #         res[f'train_{i}']['names'] = []
     #         res[f'train_{i}']['nums'] = []
-    #         for ds_idx in subset_items:
+    #         for ds_idx in edf20_permutation[idx_train]:
     #             for tn_idx in files_dict[ds_idx]:
     #                 res[f'train_{i}']['names'].append(names[tn_idx])
     #                 res[f'train_{i}']['nums'].append(nums[tn_idx])
     #         res[f'val_{i}'] = {}
     #         res[f'val_{i}']['names'] = []
     #         res[f'val_{i}']['nums'] = []
-    #         for ds_idx in test_files:
+    #         for ds_idx in edf20_permutation[idx_split]:
     #             for tn_idx in files_dict[ds_idx]:
     #                 res[f'val_{i}']['names'].append(names[tn_idx])
     #                 res[f'val_{i}']['nums'].append(nums[tn_idx])
@@ -192,17 +143,16 @@ def main():
     #         res[f'test_{i}']['names'] = []
     #         res[f'test_{i}']['nums'] = []
     #
-    #         for ds_idx in test_files:
+    #         for ds_idx in edf20_permutation[idx_split]:
     #             for tn_idx in files_dict[ds_idx]:
     #                 res[f'test_{i}']['names'].append(names[tn_idx])
     #                 res[f'test_{i}']['nums'].append(nums[tn_idx])
     #         print(f'train name : {res[f"train_{i}"]["names"]}')
-    #         print(f'test name : {res[f"test_{i}"]["names"]}')
     #
     #         res_aug[f'train_{i}'] = {}
     #         res_aug[f'train_{i}']['names'] = []
     #         res_aug[f'train_{i}']['nums'] = []
-    #         for ds_idx in subset_items:
+    #         for ds_idx in edf20_permutation[idx_train]:
     #             for tn_idx in files_dict[ds_idx]:
     #                 res_aug[f'train_{i}']['names'].append(aug_names[tn_idx])
     #                 res_aug[f'train_{i}']['nums'].append(nums[tn_idx])
@@ -212,9 +162,58 @@ def main():
     #         res_aug[f'test_{i}'] = {}
     #         res_aug[f'test_{i}']['names'] = []
     #         res_aug[f'test_{i}']['nums'] = []
-    #         print(f'train name : {res_aug[f"train_{i}"]["names"]}')
+    #         print(f'train name : {res_aug[f"train_{i}"]["names"]}, {idx_train}, {idx_split}')
+    #
     #     np.save(file_name, arr=res, allow_pickle=True)
     #     np.save(file_aug_name, arr=res_aug, allow_pickle=True)
+
+    for portion in [1, 2, 5, 12]:
+        subset_items = training_files[:portion]
+        file_name = os.path.join(args.data_dir, 'SS2', f'Aug_{portion}', )
+        file_aug_name = os.path.join(args.data_dir, 'Aug_Random', f'Aug_{portion}', )
+
+        for i in range(1):
+            res[f'train_{i}'] = {}
+            res[f'train_{i}']['names'] = []
+            res[f'train_{i}']['nums'] = []
+            for ds_idx in subset_items:
+                for tn_idx in files_dict[ds_idx]:
+                    res[f'train_{i}']['names'].append(names[tn_idx])
+                    res[f'train_{i}']['nums'].append(nums[tn_idx])
+            res[f'val_{i}'] = {}
+            res[f'val_{i}']['names'] = []
+            res[f'val_{i}']['nums'] = []
+            for ds_idx in test_files:
+                for tn_idx in files_dict[ds_idx]:
+                    res[f'val_{i}']['names'].append(names[tn_idx])
+                    res[f'val_{i}']['nums'].append(nums[tn_idx])
+            res[f'test_{i}'] = {}
+            res[f'test_{i}']['names'] = []
+            res[f'test_{i}']['nums'] = []
+
+            for ds_idx in test_files:
+                for tn_idx in files_dict[ds_idx]:
+                    res[f'test_{i}']['names'].append(names[tn_idx])
+                    res[f'test_{i}']['nums'].append(nums[tn_idx])
+            print(f'train name : {res[f"train_{i}"]["names"]}')
+            print(f'test name : {res[f"test_{i}"]["names"]}')
+
+            res_aug[f'train_{i}'] = {}
+            res_aug[f'train_{i}']['names'] = []
+            res_aug[f'train_{i}']['nums'] = []
+            for ds_idx in subset_items:
+                for tn_idx in files_dict[ds_idx]:
+                    res_aug[f'train_{i}']['names'].append(aug_names[tn_idx])
+                    res_aug[f'train_{i}']['nums'].append(nums[tn_idx])
+            res_aug[f'val_{i}'] = {}
+            res_aug[f'val_{i}']['names'] = []
+            res_aug[f'val_{i}']['nums'] = []
+            res_aug[f'test_{i}'] = {}
+            res_aug[f'test_{i}']['names'] = []
+            res_aug[f'test_{i}']['nums'] = []
+            print(f'train name : {res_aug[f"train_{i}"]["names"]}')
+        np.save(file_name, arr=res, allow_pickle=True)
+        np.save(file_aug_name, arr=res_aug, allow_pickle=True)
 
 if __name__ == '__main__':
     main()
