@@ -110,6 +110,18 @@ srun python3 main.py with pretrain_shhs_stage2 SHHS1_WM_datasets
 - `SHHS1_WM_datasets`: dataset loader setup
 - Additional arguments (e.g. `mask_ratio`, `loss_function`, `model_arch`) are passed via CLI.
 
+### 💾 Pretrained Checkpoint
+
+We provide a pretrained checkpoint that can be used for downstream tasks such as sleep staging and spindle detection.
+
+- **Download link**: [Google Drive](https://drive.google.com/file/d/1aSU60xUDtXhOAaCrkx6lrIxHSO1dVMQc/view?usp=drive_link)
+
+To use the checkpoint, specify the `load_path` in your training or fine-tuning script:
+
+```bash
+load_path=/your/path/to/ModelCheckpoint.ckpt
+```
+
 ---
 
 ### 🧪 Fine-tuning (K-Fold)
