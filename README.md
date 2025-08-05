@@ -156,7 +156,7 @@ All configurations are defined in [`config.py`](./config.py), so you don’t nee
 
 ## 🔍 Demo: Visualizing Masked Reconstruction
 
-See [`demo_visual_masked_reconstruction.md`](docs/demo_visual_masked_reconstruction.md) for a full explanation and how to run the visualization script.
+See [`masked_reconstruction_demo.md`](docs/masked_reconstruction_demo.md) for a full explanation and how to run the visualization script.
 
 
 ## 📝 Citation
