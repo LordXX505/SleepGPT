@@ -128,7 +128,7 @@ load_path=/your/path/to/ModelCheckpoint.ckpt
 
 Fine-tuning runs use `main_kfold.py`, usually with k-fold evaluation and resume support.
 
-Launch with:
+Launch with (e.g. MASS SS2 dataset):
 
 ```bash
 sbatch Start_ft_mass_stage_p.sh
