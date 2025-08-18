@@ -1,5 +1,6 @@
 import copy
 import os
+from collections import defaultdict
 
 import h5py
 from lightning.pytorch.utilities import grad_norm
@@ -33,6 +34,7 @@ from main.utils import cal_F1_score, cal_Precision, cal_Recall
 import torch.distributed as dist
 from main.modules.long_net import LongNetTransformer
 from . import WearableAdapter
+
 class Model(LightningModule):
     def __init__(self, config, **kwargs):
         super().__init__()
@@ -823,7 +825,7 @@ class Model(LightningModule):
                 x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
                 x[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
             )
-            if hasattr(self, Masked_docoder) and hasattr(self, Masked_docoder_fft):
+            if hasattr(self, "Masked_docoder") and hasattr(self, "Masked_docoder_fft"):
                 cls_feats = self.Masked_docoder(time_feats)  # b, L*t, patch_size
                 cls_feats_fft = self.Masked_docoder_fft(fft_feats)
             else:
@@ -1438,15 +1440,26 @@ class Model(LightningModule):
                                                     store=True, compute=False, aggregate=True, weight=self.weight)
             rank_zero_info(f'validation output: {output}')
         self.epoch_end(stage="validation")
-    def save_rem_features(self, save_dir, subject_id, features_dict):
-        with h5py.File(os.path.join(save_dir, f"{subject_id}.h5"), 'a') as f:
-            for epoch_id, feat_tensor in features_dict.items():
-                f.create_dataset(f'epoch_{epoch_id}', data=feat_tensor.cpu().numpy(), compression='gzip')
+
+    def write_one_epoch(self, save_dir, name, index, feature):
+        path = os.path.join(save_dir, f"{name}.h5")
+        with h5py.File(path, "a") as f:
+            dset = f"epoch_{int(index)}"
+            if dset in f:  # 去重保护（重复跑不会报错）
+                return
+            # 如需减小体积，可改为 feat.half().numpy()；读取时再转回 float32
+            f.create_dataset(
+                dset,
+                data=feature.numpy(),
+                compression="gzip",
+                shuffle=True,
+            )
 
     def predict_step(self, batch, batch_idx):
         self.set_task()
         if self.training:
-            raise Exception(f"self.training is not False in validation")
+            raise RuntimeError("predict_step called while training=True")
+
         output = self(batch, stage="predict")
         feats_sub_dict = defaultdict(dict)
         name = batch['name']
@@ -1457,22 +1470,21 @@ class Model(LightningModule):
                 B, C, D = cls_feats.shape
                 cls_feats_fft = output['cls_feats_fft']['features']
                 features = torch.cat([cls_feats, cls_feats_fft], dim=-1)
-                items = [(str(names[i]), int(index[i]), features[i].detach().cpu()) for i in range(B)]
-                for idx, n in enumerate(name):
-                    feats_sub_dict[n][index[idx]] = features
-
-                if hasattr(self, '_ckpt'):
-                    path = os.path.join(path, f'{self._ckpt.split("/")[-1]}')
+                items = [(str(name[i]), int(index[i]), features[i].detach().cpu()) for i in range(B)]
+                if dist.is_available() and dist.is_initialized():
+                    gathered = [None] * dist.get_world_size()
+                    dist.all_gather_object(gathered, items)  # 每个 rank 一份 list
                 else:
-                    path = 'shhs_feat'
-                os.makedirs(
-                    os.path.join(f'./result',
-                                 f'{path}'),
-                    exist_ok=True)
-                save_dir =  os.path.join(f'./result',
-                                 f'{path}')
-                for n in feats_sub_dict.keys():
-                    self.save_rem_features(save_dir=save_dir, subject_id=n, features_dict=feats_sub_dict[n])
+                    gathered = [items]
+                tag = getattr(self, "_ckpt", "no_ckpt")
+                save_dir = os.path.join("./result", str(tag))
+                os.makedirs(save_dir, exist_ok=True)
+                if self.global_rank == 0:
+                    for rank_items in gathered:
+                        for sid, eid, feat in rank_items:
+                            self.write_one_epoch(save_dir, sid, eid, feat)
+
+
     def on_predict_epoch_end(self) -> None:
         self.epoch_end(stage="predict")
 
