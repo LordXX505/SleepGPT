@@ -823,9 +823,13 @@ class Model(LightningModule):
                 x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
                 x[:, time_max_len:] * attention_mask[:, time_max_len:].unsqueeze(-1)
             )
+            if hasattr(self, Masked_docoder) and hasattr(self, Masked_docoder_fft):
+                cls_feats = self.Masked_docoder(time_feats)  # b, L*t, patch_size
+                cls_feats_fft = self.Masked_docoder_fft(fft_feats)
+            else:
+                cls_feats = {'features': time_feats}
+                cls_feats_fft = {'features': fft_feats}
 
-            cls_feats = self.Masked_docoder(time_feats)  # b, L*t, patch_size
-            cls_feats_fft = self.Masked_docoder_fft(fft_feats)
             # if self.mask_same:
             #     print(f"res['time_mask_patch']: {res['time_mask_patch']}, res['fft_mask_patch']: {res['fft_mask_patch']}")
             #     assert res['time_mask_patch'] == res['fft_mask_patch'], f"res['time_mask_patch']: {res['time_mask_patch']}" \
@@ -1197,7 +1201,7 @@ class Model(LightningModule):
                     else:
                         batch['Stage_label'] = batch['Stage_label'][:, -1]
         if len(self.current_tasks) == 0:
-            ret.update(self.infer(batch, time_mask=True, stage=stage))
+            ret.update(self.infer(batch, time_mask=False, stage=stage))
             return ret
 
         assert len(self.current_tasks) == 1 and self.current_tasks[0] in ['CrossEntropy', 'Spindle', 'mtm', 'Apnea','Pathology']
@@ -1434,6 +1438,43 @@ class Model(LightningModule):
                                                     store=True, compute=False, aggregate=True, weight=self.weight)
             rank_zero_info(f'validation output: {output}')
         self.epoch_end(stage="validation")
+    def save_rem_features(self, save_dir, subject_id, features_dict):
+        with h5py.File(os.path.join(save_dir, f"{subject_id}.h5"), 'a') as f:
+            for epoch_id, feat_tensor in features_dict.items():
+                f.create_dataset(f'epoch_{epoch_id}', data=feat_tensor.cpu().numpy(), compression='gzip')
+
+    def predict_step(self, batch, batch_idx):
+        self.set_task()
+        if self.training:
+            raise Exception(f"self.training is not False in validation")
+        output = self(batch, stage="predict")
+        feats_sub_dict = defaultdict(dict)
+        name = batch['name']
+        index = batch['index']
+        if self.visual is True:
+            if self.visual_mode == 'rem_feat':
+                cls_feats = output['cls_feats']['features']
+                B, C, D = cls_feats.shape
+                cls_feats_fft = output['cls_feats_fft']['features']
+                features = torch.cat([cls_feats, cls_feats_fft], dim=-1)
+                items = [(str(names[i]), int(index[i]), features[i].detach().cpu()) for i in range(B)]
+                for idx, n in enumerate(name):
+                    feats_sub_dict[n][index[idx]] = features
+
+                if hasattr(self, '_ckpt'):
+                    path = os.path.join(path, f'{self._ckpt.split("/")[-1]}')
+                else:
+                    path = 'shhs_feat'
+                os.makedirs(
+                    os.path.join(f'./result',
+                                 f'{path}'),
+                    exist_ok=True)
+                save_dir =  os.path.join(f'./result',
+                                 f'{path}')
+                for n in feats_sub_dict.keys():
+                    self.save_rem_features(save_dir=save_dir, subject_id=n, features_dict=feats_sub_dict[n])
+    def on_predict_epoch_end(self) -> None:
+        self.epoch_end(stage="predict")
 
     def lr_scheduler_step(self, scheduler: LRSchedulerTypeUnion, metric: Optional[Any]) -> None:
         # for params in self.optimizers().param_groups:

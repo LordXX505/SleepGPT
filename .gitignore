@@ -152,6 +152,7 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 *.h5
+
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
@@ -177,3 +178,4 @@ events.out*
 *.txt
 *.xlsx
 *.png
+
