@@ -115,10 +115,12 @@ class SHHS1DataModule(BaseDataModule):
         kwargs.pop('settings')
         if "umap_dataset" in kwargs.keys():
             umap_dataset = kwargs['umap_dataset']['save_extra_name']
+            mode = kwargs['umap_dataset']['mode']
             kwargs.pop('umap_dataset')
         else:
             umap_dataset = None
-        if umap_dataset is None:
+            mode = None
+        if mode is None or mode != 'UMAP':
             split = 'Test'
         else:
             split_name = umap_dataset.split('_')[:]
@@ -126,7 +128,7 @@ class SHHS1DataModule(BaseDataModule):
                 split = 'train_osa_c2_new'
             else:
                 split = 'test_osa_c2_new'
-        self.test_dataset = self.dataset_cls(
+        self.predict_dataset = self.dataset_cls(
             patch_size=self.config['patch_size'],
             transform_keys=self.val_transform_keys,
             data_dir=self.data_dir,
@@ -143,6 +145,32 @@ class SHHS1DataModule(BaseDataModule):
             split_len=self.config['split_len'],
             *args, **kwargs
         )
+
+    def set_predict_dataset(self, *args, **kwargs):
+        if "settings" in kwargs.keys():
+            settings = kwargs['settings']
+        else:
+            settings = None
+        kwargs.pop('settings')
+        split = 'Test'
+        self.train_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+            transform_keys=self.train_transform_keys,
+            data_dir=self.data_dir,
+            column_names=self.column_names,
+            split=split,
+            stage=self.stage,
+            spindle=self.spindle,
+            random_choose_channels=self.config['random_choose_channels'],
+            settings=settings,
+            mask_ratio=self.config['mask_ratio'],
+            all_time=self.config['all_time'],
+            time_size=self.config['time_size'],
+            pool_all=self.config['use_all_label'] == 'all',
+            split_len=self.config['split_len'],
+            *args, **kwargs,
+        )
+
     def setup(self, stage, **kwargs):
         if stage == 'test':
             if self.setup_flag == 0:
@@ -152,6 +180,11 @@ class SHHS1DataModule(BaseDataModule):
         elif stage == 'validate':
             if self.setup_flag == 0:
                 self.set_val_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
+                print('predict SHHS1 s')
+                self.setup_flag += 1
+        elif stage == 'predict':
+            if self.setup_flag == 0:
+                self.set_predict_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
                 print('predict SHHS1 s')
                 self.setup_flag += 1
         else:

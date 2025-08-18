@@ -132,6 +132,11 @@ class SHHS2DataModule(BaseDataModule):
                 self.set_test_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
                 print('SHHS2 s')
                 self.setup_flag += 1
+        elif stage == 'predict':
+            if self.setup_flag == 0:
+                self.set_predict_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)
+                print('SHHS2 s')
+                self.setup_flag += 1
         else:
             if self.setup_flag == 0:
                 self.set_train_dataset(settings=self.config['data_setting']['SHHS'], **kwargs)

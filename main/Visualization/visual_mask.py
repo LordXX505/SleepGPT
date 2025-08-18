@@ -25,7 +25,7 @@ def get_param(nums) -> List[str]:
 def get_names():
     # return ['C3', 'C4', 'ECG', 'EMG1', 'EOG1', 'F3', 'F4', 'Fpz', 'O1', 'O2',
     #    'Pz']
-    return ['abd', 'ari', 'C3', 'C4', 'ecg', 'EMG', 'EOG1', 'F3',  'Fpz', 'O1',
+    return ['C3', 'C4', 'EMG', 'EOG', 'F3',  'Fpz', 'O1',
            'Pz']
 
 

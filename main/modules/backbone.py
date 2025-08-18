@@ -1441,7 +1441,9 @@ class Model(LightningModule):
             rank_zero_info(f'validation output: {output}')
         self.epoch_end(stage="validation")
 
-    def write_one_epoch(self, save_dir, name, index, feature):
+    def write_one_epoch(self, save_dir, name, index, stage, feature):
+        if stage != 4:
+            return
         path = os.path.join(save_dir, f"{name}.h5")
         with h5py.File(path, "a") as f:
             dset = f"epoch_{int(index)}"
@@ -1464,13 +1466,14 @@ class Model(LightningModule):
         feats_sub_dict = defaultdict(dict)
         name = batch['name']
         index = batch['index']
+        stage = batch['Stage_label']
         if self.visual is True:
             if self.visual_mode == 'rem_feat':
                 cls_feats = output['cls_feats']['features']
                 B, C, D = cls_feats.shape
                 cls_feats_fft = output['cls_feats_fft']['features']
                 features = torch.cat([cls_feats, cls_feats_fft], dim=-1)
-                items = [(str(name[i]), int(index[i]), features[i].detach().cpu()) for i in range(B)]
+                items = [(str(name[i]), int(index[i]), stage[i].detach().cpu(), features[i].detach().cpu()) for i in range(B)]
                 if dist.is_available() and dist.is_initialized():
                     gathered = [None] * dist.get_world_size()
                     dist.all_gather_object(gathered, items)  # 每个 rank 一份 list
@@ -1481,8 +1484,8 @@ class Model(LightningModule):
                 os.makedirs(save_dir, exist_ok=True)
                 if self.global_rank == 0:
                     for rank_items in gathered:
-                        for sid, eid, feat in rank_items:
-                            self.write_one_epoch(save_dir, sid, eid, feat)
+                        for sid, eid, stage, feat in rank_items:
+                            self.write_one_epoch(save_dir, sid, eid, stage, feat)
 
 
     def on_predict_epoch_end(self) -> None:

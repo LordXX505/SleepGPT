@@ -13,9 +13,11 @@ class MultiDataModule(LightningDataModule):
         self.test_sampler = None
         self.val_sampler = None
         self.train_sampler = None
+        self.predict_sampler = None
         self.test_dataset = None
         self.val_dataset = None
         self.train_dataset = None
+        self.predict_dataset = None
         datamodule_keys = _config['datasets']
         assert len(datamodule_keys) > 0
         super().__init__()
@@ -124,6 +126,16 @@ class MultiDataModule(LightningDataModule):
                     print(f'***************len of test datasets:{len(dm.test_dataset)} ****************')
             print(f'***************Using {num} test datasets****************')
             print(f'***************len of test datasets:{len(self.test_dataset)} ****************')
+        else:
+            self.collate = self.dms[0].predict_dataset.collate
+            self.predict_dataset = ConcatDataset([dm.predict_dataset for dm in self.dms])
+            num = 0
+            for dm in self.dms:
+                if dm.predict_dataset is not None:
+                    num += 1
+                    print(f'***************len of predict datasets:{len(dm.predict_dataset)} ****************')
+            print(f'***************Using {num} predict datasets****************')
+            print(f'***************len of predict datasets:{len(self.predict_dataset)} ****************')
         if self.subest is not None and stage == 'fit':
             subset_size = int(self.subest * len(self.train_dataset))
             print(f'Train dataloader is partially used. subset_size: {subset_size}')
@@ -134,6 +146,8 @@ class MultiDataModule(LightningDataModule):
                 self.test_sampler = DistributedSampler(self.test_dataset, shuffle=False)
             elif stage == 'validate':
                 self.val_sampler = DistributedSampler(self.val_dataset, shuffle=False, )
+            elif stage == 'predict':
+                self.predict_sampler = DistributedSampler(self.predict_dataset, shuffle=False, )
             else:
                 if self.need_BDS:
                     positive_indices = np.arange(self.positive_index)
@@ -187,9 +201,9 @@ class MultiDataModule(LightningDataModule):
 
     def predict_dataloader(self):
         loader = DataLoader(
-            self.test_dataset,
+            self.predict_dataset,
             batch_size=self.batch_size,
-            sampler=self.test_sampler,
+            sampler=self.predict_sampler,
             num_workers=self.num_workers,
             collate_fn=self.collate
         )

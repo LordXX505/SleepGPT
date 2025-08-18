@@ -22,12 +22,15 @@ from main.modules.get_mu_std import Mu_Std
 from torch.distributed.elastic.multiprocessing.errors import record
 import main.datasets as dtst
 
-def get_idx2name(_config, k):
+def get_idx2name(_config, k, stage='test'):
     dm = MultiDataModule(_config, kfold=k)
     idx_2_name = None
-    dm.setup(stage='test')
+    dm.setup(stage=stage)
     for dst in dm.dms:
-        idx_2_name = dst.test_dataset.idx_2_name
+        if stage == 'test':
+            idx_2_name = dst.test_dataset.idx_2_name
+        else:
+            idx_2_name = dst.predict_dataset.idx_2_name
         break
     print(f'idx_2_name: {idx_2_name}')
     return idx_2_name
@@ -50,8 +53,6 @@ def main(_config):
     exp_name = f'{_config["exp_name"]}'
     # model = Mu_Std(_config)
     dm = MultiDataModule(_config, kfold=k)
-
-
     logger_path = _config["log_dir"]
     rank_zero_info(f'logger_path: {logger_path}')
     os.makedirs(logger_path, exist_ok=True)
@@ -164,9 +165,14 @@ def main(_config):
     else:
         if _config['mode'] == 'pretrain':
             model = Model_Pre(_config)
+            trainer.test(model, datamodule=dm)
+        elif _config['mode'] == 'predict':
+            model = Model(_config, persub=True, _ckpt=ckpt_path,
+                          num_classes=_config['num_classes'])
+            trainer.predict(model, datamodule=dm)
         else:
             # model = Model(_config)\
             idx_2_name = get_idx2name(_config, k=k)
             model = Model(_config, persub=True, test_sub_names=idx_2_name, _ckpt=ckpt_path, num_classes=_config['num_classes'])
-        rank_zero_info(f'Using k fold: now is {k}, now_ckpt_path: {ckpt_path}')
-        trainer.test(model, datamodule=dm)
+            rank_zero_info(f'Using k fold: now is {k}, now_ckpt_path: {ckpt_path}')
+            trainer.test(model, datamodule=dm)

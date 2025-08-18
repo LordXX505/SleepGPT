@@ -18,6 +18,7 @@ class BaseDataModule(LightningModule):
         self.test_dataset = None
         self.train_dataset = None
         self.val_dataset = None
+        self.predict_dataset = None
         self.config = _config
         self.data_dir = _config['data_dir'][idx]
         print(f"BaseDataModule data_dir : {self.data_dir}")
@@ -199,10 +200,43 @@ class BaseDataModule(LightningModule):
 
         )
 
+    def set_predict_dataset(self, *args, **kwargs):
+        if "settings" in kwargs.keys():
+            settings = kwargs['settings']
+            kwargs.pop('settings')
+        else:
+            settings = None
+        if 'kfold' in kwargs.keys():
+            kfold = kwargs['kfold']
+            kwargs.pop('kfold')
+        else:
+            kfold = None
+
+        self.test_dataset = self.dataset_cls(
+            patch_size=self.config['patch_size'],
+            transform_keys=self.val_transform_keys,
+            data_dir=self.data_dir,
+            column_names=self.column_names,
+            split='test',
+            stage=self.stage,
+            spindle=self.spindle,
+            pathology=self.pathology,
+            ods=self.ods,
+            random_choose_channels=self.config['random_choose_channels'],
+            settings=settings,
+            mask_ratio=self.config['mask_ratio'],
+            all_time=self.config['all_time'],
+            time_size=self.config['time_size'],
+            pool_all=self.config['use_all_label'] == 'all',
+            kfold=kfold,
+            split_len=self.config['split_len'],
+            **kwargs
+        )
+
     def setup(self, stage, **kwargs):
         if not self.setup_flag:
             if stage == 'predict':
-                self.set_val_dataset(**kwargs)
+                self.set_predict_dataset(**kwargs)
             else:
                 self.set_train_dataset(**kwargs)
                 self.set_test_dataset(**kwargs)
@@ -240,5 +274,16 @@ class BaseDataModule(LightningModule):
             num_workers=self.num_workers,
             pin_memory=True,
             collate_fn=self.test_dataset.collate
+        )
+        return loader
+
+    def predict_dataloader(self):
+        loader = DataLoader(
+            self.predict_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            collate_fn=self.predict_dataset.collate
         )
         return loader
