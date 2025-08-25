@@ -470,12 +470,12 @@ class AnalysisManager:
         return reducer.fit_transform(Xp)
 
 if __name__ == '__main__':
-    am = AnalysisManager(features_dir="./features_all_subjects", pattern="*.h5", order="patch_channel")
+    am = AnalysisManager(features_dir="/home/user/Sleep/result/no_ckpt", pattern="*.h5", order="patch_channel")
 
     # 1) 选择模式并运行（会自动保存模型与结果）
     #   'mean768' | 'concat1536' | 'multiview' | 'patch_vote'
     labels = am.run(mode="concat1536",
-                    save_dir="./out_concat1536",
+                    save_dir="/home/user/Sleep/result/out_concat1536",
                     k=2,
                     pca_dim=128,
                     batch_rows=200_000,

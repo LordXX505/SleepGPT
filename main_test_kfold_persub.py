@@ -166,8 +166,8 @@ def main(_config):
         if _config['mode'] == 'pretrain':
             model = Model_Pre(_config)
             trainer.test(model, datamodule=dm)
-        elif _config['mode'] == 'predict':
-            model = Model(_config, persub=True, _ckpt=ckpt_path,
+        elif 'predict' in _config['mode']:
+            model = Model(_config, _ckpt=ckpt_path,
                           num_classes=_config['num_classes'])
             trainer.predict(model, datamodule=dm)
         else:

@@ -1518,9 +1518,11 @@ def visualization_umap_CAP():
 
 @ex.named_config
 def visualization_rem_shhs():
-    visual_setting = {'mask_same': False, 'mode': 'rem_feat', 'save_extra_name': 'shhs1_train_new_c2_umap'}
+    visual_setting = {'mask_same': False, 'mode': 'rem_feat', 'save_extra_name': 'shhs1_rem_feats'}
     visual = True
     mode = 'predict_rem'
+    device = 'cuda'
+    dist_on_itp = True
 
 @ex.named_config
 def visualization_umap_shhs():
@@ -1972,6 +1974,10 @@ def all_A800_datasets():
                 "/root/Sleep/DATA/Young",
                 "/root/Sleep/DATA/MGH_NEW"
                 ]
+@ex.named_config
+def l40_SHHS1_datasets():
+    datasets = ['SHHS1']
+    data_dir = ['/data/shhs_new/shhs_new']
 
 @ex.named_config
 def visualization_test():
