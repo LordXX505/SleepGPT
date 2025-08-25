@@ -521,6 +521,12 @@ def ums_bjnz_spo2_ods_F3_new_dataset():
     stage1_epoch = 5,  # 前5个 epoch 只训练stage
     stage2_epoch = 10,  # 接下来5个epoch 开启 cross-attn 和 ODS
     freeze_stage = False  # 是否冻结 stage 模块（可选）
+@ex.named_config
+def ums_l40_spo2_ods_F3_new_dataset():
+    datasets = ['UMS']
+    data_dir = ["/data/UMS_5stage_F3"]
+    num_classes = 5
+    actual_channels = 'F3'
 
 @ex.named_config
 def fusion_12_layes():
@@ -1509,6 +1515,12 @@ def visualization_umap():
 def visualization_umap_CAP():
     visual_setting = {'mask_same': False, 'mode': 'UMAP', 'save_extra_name': 'CAP_umap'}
     visual = True
+
+@ex.named_config
+def visualization_rem_shhs():
+    visual_setting = {'mask_same': False, 'mode': 'rem_feat', 'save_extra_name': 'shhs1_train_new_c2_umap'}
+    visual = True
+    mode = 'predict_rem'
 
 @ex.named_config
 def visualization_umap_shhs():
