@@ -745,7 +745,17 @@ class AnalysisManager:
     # ---------- run ----------
     def run(self, save_dir: str, mode: str, k: int = 2, pca_dim: int = 128,
             batch_rows: int = 200_000, vote_threshold: float = 0.5,
-            umap_sample: int = 0, normalize: bool = True, auto_plot: bool = True):
+            umap_sample: int = 0, normalize: bool = True, auto_plot: bool = True, visual_only: str = "None"):
+        if visual_only != 'None':
+            if visual_only == 'umap':
+                self.log(f"Start run: mode={mode}, k={k}, pca_dim={pca_dim}, normalize={normalize}, seed={self.seed}")
+                self.visualize_umap(save_dir=save_dir, mode=mode,
+                                    sample_n=min(umap_sample, 200_000),
+                                    pca_dim=pca_dim,
+                                    use_training_space=True)
+            else:
+                raise NotImplemented
+            return
         self._init_logger(save_dir)
         t0 = time.time()
         self.log(f"Start run: mode={mode}, k={k}, pca_dim={pca_dim}, normalize={normalize}, seed={self.seed}")
@@ -820,12 +830,16 @@ def build_argparser():
 
     ap.add_argument("--auto_plot", action="store_true")
     ap.add_argument("--umap_sample", type=int, default=0)
+    ap.add_argument("--visual_only", type=str, default="None")
+
     return ap
 
 
 if __name__ == "__main__":
     args = build_argparser().parse_args()
     am = AnalysisManager(features_dir=args.features_dir, pattern=args.pattern, order=args.order)
+    args.save_dir = os.path.join(args.save_dir, args.mode)
+
     am.run(save_dir=args.save_dir,
            mode=args.mode,
            k=args.k,
@@ -834,4 +848,5 @@ if __name__ == "__main__":
            vote_threshold=args.vote_threshold,
            umap_sample=args.umap_sample,
            normalize=args.normalize,
-           auto_plot=args.auto_plot)
+           auto_plot=args.auto_plot,
+           visual_only=args.visual_only)
