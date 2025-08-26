@@ -656,13 +656,13 @@ class AnalysisManager:
 
 
 if __name__ == '__main__':
-    am = AnalysisManager(features_dir="./features_all_subjects", pattern="*.h5", order="patch_channel")
+    am = AnalysisManager(features_dir="/home/user/Sleep/result/no_ckpt", pattern="*.h5", order="patch_channel")
     labels = am.run(mode="concat1536",
-                    save_dir="./out_concat1536",
+                    save_dir="/data/rem_feat_cluster/out_concat1536",
                     k=2,
                     pca_dim=128,
                     batch_rows=200_000,
                     umap_sample=100_000,
                     normalize=True,
                     auto_plot=True)
-    am.summarize("./out_concat1536", subject_to_group=None)
+    am.summarize("/data/rem_feat_cluster/out_concat1536", subject_to_group=None)
