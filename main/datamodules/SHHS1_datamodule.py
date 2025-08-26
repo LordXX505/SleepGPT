@@ -152,8 +152,10 @@ class SHHS1DataModule(BaseDataModule):
         else:
             settings = None
         kwargs.pop('settings')
-        split = 'Test'
-        self.train_dataset = self.dataset_cls(
+        split = 'train11'
+        kwargs.pop('umap_dataset')
+
+        self.predict_dataset = self.dataset_cls(
             patch_size=self.config['patch_size'],
             transform_keys=self.train_transform_keys,
             data_dir=self.data_dir,

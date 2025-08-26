@@ -1,15 +1,13 @@
-# analysis_manager_mode.py
-# 统一版：epoch(cls/patch_mean) / patch_vote / multiview
-# 抽取公共逻辑：CPU/GPU 拟合 & 分批预测；显式顺序保存；tqdm & logging；可视化
-import os, re, glob, h5py, json, time, logging, random, argparse
+# analysis_manager_mode.py  (order_index + tqdm + logging)
+import os, re, glob, h5py, json, time, logging, random
 import numpy as np
-from typing import List, Tuple, Dict, Optional, Iterable, Callable
+from typing import List, Tuple, Dict, Optional
 
-from tqdm import tqdm
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import IncrementalPCA, PCA
 from sklearn.cluster import MiniBatchKMeans
 import joblib
+from tqdm import tqdm
 
 try:
     import umap
@@ -18,54 +16,27 @@ except Exception:
     HAS_UMAP = False
 
 
-# --------------------------- 工具：日志/环境 ---------------------------
-def setup_logger(save_dir: str) -> logging.Logger:
-    os.makedirs(save_dir, exist_ok=True)
-    logger = logging.getLogger("AnalysisManager")
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", "%H:%M:%S"))
-    fh = logging.FileHandler(os.path.join(save_dir, "run.log"), encoding="utf-8")
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
-    logger.addHandler(ch); logger.addHandler(fh)
-    return logger
-
-
-def detect_gpu_backend(use_gpu_flag: bool, logger: logging.Logger):
-    if use_gpu_flag:
-        try:
-            import cupy as cp
-            from cuml.decomposition import PCA as cuPCA
-            from cuml.cluster import KMeans as cuKMeans
-            logger.info("[backend] Using GPU (RAPIDS cuML).")
-            return dict(kind="gpu", cp=cp, cuPCA=cuPCA, cuKMeans=cuKMeans)
-        except Exception as e:
-            logger.info(f"[backend] GPU requested but cuML not available: {e}. Fallback to CPU.")
-    logger.info("[backend] Using CPU (scikit-learn).")
-    return dict(kind="cpu", cp=None, cuPCA=None, cuKMeans=None)
-
-
-# --------------------------- 主类 ---------------------------
 class AnalysisManager:
     """
-    输入 epoch 形状：
-      (61,1536): [0] = CLS(time+freq)，[1:] = 60 个 patch
-      (60,1536): 60 个 patch
-      (15,4,2,768): 可还原 60×1536；multiview 仅此形状可用
-    模式：
-      mode = "epoch"       + token_mode in {"cls", "patch_mean"} → 每 epoch 1×1536
-      mode = "patch_vote"  → 60×1536 patch 级聚类，epoch 投票
-      mode = "multiview"   → [15,4,2,768] → [8,768] 标准化+方差加权 → 768
+    REM 聚类分析（流式 + tqdm + logging + 显式顺序记录）：
+
+    - 输入：每 subject 一个 .h5；每 epoch dataset 形如 (60,1536) 或 [15,4,2,768]
+    - mode:
+        - 'mean768'     : (channel,domain)均值→patch均值→[768]→IPCA→MiniBatchKMeans
+        - 'concat1536'  : 保留time/freq concat→[1536]→IPCA→MiniBatchKMeans
+        - 'multiview'   : 8视图(4通道×2域)标准化+方差加权→[768]→IPCA→MiniBatchKMeans
+        - 'patch_vote'  : patch级聚类(15×[768])→epoch投票
+    - 所有 pipeline 的预测阶段都会同步记录 order_index=[(sid,eid), ...]
+      保存时用 order_index 与 labels 逐项对齐，彻底避免顺序假设。
     """
-    def __init__(self, features_dir: str, pattern: str, order: str, seed: int = 42):
+
+    def __init__(self, features_dir: str, pattern: str = "*.h5",
+                 order: str = "patch_channel", seed: int = 42):
         self.features_dir = features_dir
         self.pattern = pattern
         self.order = order
-        self.seed = seed
         self.rng = random.Random(seed)
+        self.seed = seed
 
         self.paths: List[str] = sorted(glob.glob(os.path.join(features_dir, pattern)))
         if not self.paths:
@@ -73,13 +44,70 @@ class AnalysisManager:
         self._epoch_pat = re.compile(r"^epoch_(\d+)$")
         self._total_epochs = None
 
-        self.logger: Optional[logging.Logger] = None
-        self.backend: Dict = dict(kind="cpu", cp=None, cuPCA=None, cuKMeans=None)
-
-        # reservoir counter for sampling
+        # 蓄水池采样计数器（给可视化抽样用）
         self._rs_count = 0
 
-    # ---------- 基础迭代 ----------
+        # logger 占位
+        self.logger: Optional[logging.Logger] = None
+
+    # ---------- 日志 ----------
+    def _init_logger(self, save_dir: str):
+        os.makedirs(save_dir, exist_ok=True)
+        logger = logging.getLogger("AnalysisManager")
+        logger.setLevel(logging.INFO)
+        logger.handlers.clear()
+
+        # 控制台
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        ch.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", "%H:%M:%S"))
+
+        # 文件
+        fh = logging.FileHandler(os.path.join(save_dir, "run.log"), encoding="utf-8")
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(logging.Formatter(
+            "[%(asctime)s] %(levelname)s: %(message)s", "%Y-%m-%d %H:%M:%S"
+        ))
+
+        logger.addHandler(ch)
+        logger.addHandler(fh)
+        self.logger = logger
+
+    def log(self, msg: str):
+        print(msg)  # 兜底
+        if self.logger:
+            self.logger.info(msg)
+
+    # ---------- 基础 I/O ----------
+    def _decode_epoch(self, arr: np.ndarray) -> np.ndarray:
+        """ (60,1536) or [15,4,2,768] -> [15,4,2,768] """
+        if arr.shape == (60, 1536):
+            if self.order == "patch_channel":
+                x = arr.reshape(15, 4, 1536)
+            elif self.order == "channel_patch":
+                x = arr.reshape(4, 15, 1536).transpose(1, 0, 2)
+            else:
+                raise ValueError("order must be 'patch_channel' or 'channel_patch'")
+            return x.reshape(15, 4, 2, 768)
+        if arr.shape == (15, 4, 2, 768):
+            return arr
+        raise ValueError(f"Unknown epoch shape: {arr.shape}")
+
+    def iter_epochs(self):
+        """ yield (subject_id, epoch_id, epoch_array[15,4,2,768]) in a deterministic order """
+        for p in self.paths:
+            sid = os.path.splitext(os.path.basename(p))[0]
+            with h5py.File(p, "r") as f:
+                # 只取匹配 epoch_ 的 key，并按数字排序，保证确定性
+                ekeys = []
+                for k in f.keys():
+                    m = self._epoch_pat.match(k)
+                    if m: ekeys.append((int(m.group(1)), k))
+                ekeys.sort(key=lambda t: t[0])
+                for eid, kk in ekeys:
+                    arr = f[kk][()]
+                    yield sid, eid, self._decode_epoch(arr)
+
     def count_epochs(self) -> int:
         if self._total_epochs is not None:
             return self._total_epochs
@@ -90,42 +118,26 @@ class AnalysisManager:
         self._total_epochs = total
         return total
 
-    def iter_epochs_raw(self):
-        """yield (sid, eid, arr_raw) 按确定顺序"""
-        for p in self.paths:
-            sid = os.path.splitext(os.path.basename(p))[0]
-            with h5py.File(p, "r") as f:
-                ekeys = []
-                for k in f.keys():
-                    m = self._epoch_pat.match(k)
-                    if m: ekeys.append((int(m.group(1)), k))
-                ekeys.sort(key=lambda t: t[0])
-                for eid, kk in ekeys:
-                    yield sid, eid, f[kk][()]
+    # ---------- 特征构造 ----------
+    @staticmethod
+    def epoch_mean768(x1542: np.ndarray) -> np.ndarray:
+        return x1542.mean(axis=(1, 2)).mean(axis=0)  # [768]
 
-    # ---------- 各种形状转换 ----------
-    def _1542_to_60x1536(self, arr1542: np.ndarray) -> np.ndarray:
-        # [15,4,2,768] → [15,4,1536] → [60,1536]
-        v = np.concatenate([arr1542[...,0,:], arr1542[...,1,:]], axis=-1)
-        return v.reshape(15*4, 1536)
+    @staticmethod
+    def epoch_concat1536(x1542: np.ndarray) -> np.ndarray:
+        dom = x1542.mean(axis=(0, 1))               # [2,768]
+        return dom.reshape(-1)                       # [1536]
 
-    def _extract_cls_and_patches(self, arr: np.ndarray) -> Tuple[Optional[np.ndarray], np.ndarray]:
-        if arr.shape == (61, 1536):
-            return arr[0], arr[1:]
-        if arr.shape == (60, 1536):
-            return None, arr
-        if arr.shape == (15, 4, 2, 768):
-            return None, self._1542_to_60x1536(arr)
-        raise ValueError(f"Unknown epoch shape: {arr.shape}")
-
-    def _to_multiview8(self, arr: np.ndarray) -> Optional[np.ndarray]:
-        """返回 [8,768]（仅 arr 为 [15,4,2,768] 时可用），否则 None"""
-        if arr.shape != (15,4,2,768):
-            return None
-        v = arr.mean(axis=0)  # [4,2,768]
+    @staticmethod
+    def epoch_multiview8(x1542: np.ndarray) -> np.ndarray:
+        v = x1542.mean(axis=0)                       # [4,2,768]
         return v.reshape(8, 768)
 
-    # ---------- 公共：蓄水池抽样 ----------
+    @staticmethod
+    def patch_mean768(x1542: np.ndarray) -> np.ndarray:
+        return x1542.mean(axis=(1, 2))               # [15,768]
+
+    # ---------- 蓄水池采样（可视化） ----------
     def _reservoir_append(self, feats: list, idxs: list, vec, idx: int, cap: int):
         self._rs_count += 1
         if len(feats) < cap:
@@ -135,639 +147,522 @@ class AnalysisManager:
             if j < cap:
                 feats[j] = vec; idxs[j] = idx
 
-    # ---------- 公共：顺序安全保存 ----------
-    def _save_labels_index(self, save_dir: str, labels: np.ndarray, order_index: List[Tuple[str,int]]):
+    # ---------- 保存（labels + index） ----------
+    def _save_labels_and_index(self, save_dir: str, labels: np.ndarray, order_index: List[Tuple[str, int]]) -> None:
         if len(labels) != len(order_index):
-            raise ValueError("labels length != order_index length")
+            raise ValueError(f"labels({len(labels)}) 与 order_index({len(order_index)}) 长度不一致")
         np.save(os.path.join(save_dir, "labels.npy"), labels)
         with open(os.path.join(save_dir, "index.csv"), "w", encoding="utf-8") as fw:
             fw.write("subject,epoch\n")
             for sid, eid in order_index:
                 fw.write(f"{sid},{eid}\n")
-        np.save(os.path.join(save_dir, "subject.npy"), np.array([s for s,_ in order_index], dtype=object))
-        np.save(os.path.join(save_dir, "epoch.npy"),   np.array([e for _,e in order_index], dtype=np.int32))
+        # 额外方便载入
+        np.save(os.path.join(save_dir, "subject.npy"), np.array([s for s, _ in order_index], dtype=object))
+        np.save(os.path.join(save_dir, "epoch.npy"),   np.array([e for _, e in order_index], dtype=np.int32))
 
-    # --------------------------- 抽象：特征生成器 ---------------------------
-    def gen_epoch_vector(self, token_mode: str) -> Iterable[Tuple[str,int,np.ndarray]]:
-        """
-        根据 token_mode 生成 (sid, eid, vec1536)
-        - cls        : 需要 (61,1536)，否则抛错
-        - patch_mean : 60×1536 平均
-        """
-        for sid, eid, raw in self.iter_epochs_raw():
-            cls, patches = self._extract_cls_and_patches(raw)
-            if token_mode == "cls":
-                if cls is None:
-                    raise ValueError("token_mode='cls' but no CLS in this epoch.")
-                yield sid, eid, cls
-            elif token_mode == "patch_mean":
-                yield sid, eid, patches.mean(axis=0)
-            else:
-                raise ValueError(f"unknown token_mode {token_mode}")
-
-    def gen_patch_matrix(self) -> Iterable[Tuple[str,int,np.ndarray]]:
-        """生成 patch 矩阵 (sid, eid, X[60,1536]) 供 patch_vote 使用"""
-        for sid, eid, raw in self.iter_epochs_raw():
-            yield sid, eid, self._extract_cls_and_patches(raw)[1]
-
-    def gen_multiview_vec(self, logger: logging.Logger) -> Iterable[Tuple[str,int,np.ndarray]]:
-        """
-        multiview：仅当 raw 为 [15,4,2,768] 时生效。
-        步骤：
-          1) 先做 8 视图：V=[8,768]，为减少重复计算，标准化/权重估计写在外部 fit 函数里
-          2) 返回 V（不加权），由上层 fit 里做：标准化→估权→加权求和→768
-        """
-        skipped = 0
-        for sid, eid, raw in self.iter_epochs_raw():
-            if raw.shape == (15,4,2,768):
-                V = raw.mean(axis=0).reshape(8,768)  # [8,768]
-                yield sid, eid, V
-            else:
-                skipped += 1
-        if skipped:
-            logger.info(f"[multiview] skipped {skipped} epochs (not [15,4,2,768])")
-
-    # --------------------------- 公共：CPU 流式拟合/预测 ---------------------------
-    def cpu_fit_epoch_stream(self,
-                             vec_iter: Iterable[Tuple[str,int,np.ndarray]],
-                             total: int,
-                             pca_dim: int,
-                             batch_rows: int,
-                             normalize: bool,
-                             logger: logging.Logger):
+    # ---------- 各 Pipeline ----------
+    def _pipeline_mean768(self, k=2, pca_dim=64, batch_rows=200_000,
+                          return_labels=True, normalize=True):
+        total = self.count_epochs()
         scaler = StandardScaler() if normalize else None
+
+        # pass1: scaler
         if scaler is not None:
             buf = []
-            logger.info("[CPU] Pass1: StandardScaler")
-            for _sid,_eid,v in tqdm(vec_iter, total=total, desc="Scaler", ncols=100):
-                buf.append(v)
+            self.log("\n[Pass1] Fitting StandardScaler (mean768)")
+            for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="Scaler", ncols=100):
+                buf.append(self.epoch_mean768(x))
                 if len(buf) >= batch_rows:
-                    scaler.partial_fit(np.stack(buf,0)); buf=[]
-            if buf: scaler.partial_fit(np.stack(buf,0)); buf=[]
+                    scaler.partial_fit(np.stack(buf, 0)); buf = []
+            if buf: scaler.partial_fit(np.stack(buf, 0)); buf = []
 
-        ipca = IncrementalPCA(n_components=min(pca_dim, 1536))
-        # 重新遍历
-        logger.info("[CPU] Pass2: IncrementalPCA")
-        for _sid,_eid,v in tqdm(self.gen_epoch_vector(token_mode="patch_mean") if False else self.gen_epoch_vector, total=0):
-            pass  # 只是避免静态检查，这行不会执行
-
-        # 需要再来一遍 vec_iter，因此把其实现传进来时要传“函数”，这里再取一次
-        # 我们改成传函数而不是迭代器本身：
-        pass
-
-    # 为了简洁，我们把 CPU/GPU 公共逻辑做成“高阶函数”，由外层传入“如何取向量”的函数。
-    # --------------------------- 核心：统一训练/预测（CPU） ---------------------------
-    def cpu_fit_predict(self,
-                        vec_fn: Callable[[], Iterable[Tuple[str,int,np.ndarray]]],
-                        total: int,
-                        pca_dim: int,
-                        k: int,
-                        batch_rows: int,
-                        normalize: bool,
-                        logger: logging.Logger):
-        scaler = StandardScaler() if normalize else None
-        # Pass1 Scaler
-        if scaler is not None:
-            buf = []
-            logger.info("[CPU] Pass1: StandardScaler")
-            for _sid,_eid,v in tqdm(vec_fn(), total=total, desc="Scaler", ncols=100):
-                buf.append(v)
-                if len(buf) >= batch_rows:
-                    scaler.partial_fit(np.stack(buf,0)); buf=[]
-            if buf: scaler.partial_fit(np.stack(buf,0)); buf=[]
-
-        # Pass2 IPCA
-        ipca = IncrementalPCA(n_components=min(pca_dim, 1536))
+        # pass2: ipca
+        ipca = IncrementalPCA(n_components=pca_dim)
         buf = []
-        logger.info("[CPU] Pass2: IncrementalPCA")
-        for _sid,_eid,v in tqdm(vec_fn(), total=total, desc="PCA", ncols=100):
-            buf.append(v)
+        self.log("[Pass2] Fitting IncrementalPCA")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="PCA", ncols=100):
+            buf.append(self.epoch_mean768(x))
             if len(buf) >= batch_rows:
-                X = np.stack(buf,0)
+                X = np.stack(buf, 0)
                 if scaler is not None: X = scaler.transform(X)
-                ipca.partial_fit(X); buf=[]
+                ipca.partial_fit(X); buf = []
         if buf:
-            X = np.stack(buf,0)
+            X = np.stack(buf, 0)
             if scaler is not None: X = scaler.transform(X)
-            ipca.partial_fit(X); buf=[]
+            ipca.partial_fit(X); buf = []
 
-        # Pass3 KMeans
+        # pass3: kmeans
         km = MiniBatchKMeans(n_clusters=k, batch_size=4096, random_state=self.seed)
         buf = []
-        logger.info("[CPU] Pass3: MiniBatchKMeans")
-        for _sid,_eid,v in tqdm(vec_fn(), total=total, desc="KMeans", ncols=100):
-            buf.append(v)
+        self.log("[Pass3] Fitting MiniBatchKMeans")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="KMeans", ncols=100):
+            buf.append(self.epoch_mean768(x))
             if len(buf) >= batch_rows:
-                X = np.stack(buf,0)
+                X = np.stack(buf, 0)
                 if scaler is not None: X = scaler.transform(X)
-                Xp = ipca.transform(X)
-                km.partial_fit(Xp); buf=[]
+                Xp = ipca.transform(X); km.partial_fit(Xp); buf = []
         if buf:
-            X = np.stack(buf,0)
+            X = np.stack(buf, 0)
             if scaler is not None: X = scaler.transform(X)
             Xp = ipca.transform(X); km.partial_fit(Xp)
 
-        # Predict
-        labels = np.empty(total, np.int8)
-        order_index: List[Tuple[str,int]] = []
-        buf, buf_idx, i = [], [], 0
-        logger.info("[CPU] Predict & record order_index")
-        for sid,eid,v in tqdm(vec_fn(), total=total, desc="Predict", ncols=100):
-            buf.append(v); buf_idx.append((sid,eid))
+        if not return_labels:
+            return scaler, ipca, km, None, None
+
+        # pass4: predict + order_index
+        N = total
+        labels, i, buf = np.empty(N, np.int8), 0, []
+        order_index: List[Tuple[str, int]] = []
+        self.log("[Pass4] Predicting labels & recording order_index")
+        for sid, eid, x in tqdm(self.iter_epochs(), total=total, desc="Predict", ncols=100):
+            buf.append(self.epoch_mean768(x))
+            order_index.append((sid, eid))
             if len(buf) >= batch_rows:
-                X = np.stack(buf,0)
+                X = np.stack(buf, 0)
                 if scaler is not None: X = scaler.transform(X)
                 Xp = ipca.transform(X)
-                labels[i:i+len(buf)] = km.predict(Xp)
-                i += len(buf)
-                order_index.extend(buf_idx)
-                buf=[]; buf_idx=[]
+                labels[i:i+len(buf)] = km.predict(Xp); i += len(buf); buf = []
         if buf:
-            X = np.stack(buf,0)
+            X = np.stack(buf, 0)
             if scaler is not None: X = scaler.transform(X)
             Xp = ipca.transform(X)
             labels[i:i+len(buf)] = km.predict(Xp)
-            order_index.extend(buf_idx)
-
         return scaler, ipca, km, labels, order_index
 
-    # --------------------------- 核心：统一训练/预测（GPU） ---------------------------
-    def gpu_fit_predict(self,
-                        vec_fn: Callable[[], Iterable[Tuple[str,int,np.ndarray]]],
-                        total: int,
-                        pca_dim: int,
-                        k: int,
-                        batch_rows: int,
-                        normalize: bool,
-                        logger: logging.Logger,
-                        gpu_fit_samples: int):
-        cp = self.backend["cp"]
-        cuPCA = self.backend["cuPCA"]
-        cuKMeans = self.backend["cuKMeans"]
+    def _pipeline_concat1536(self, k=2, pca_dim=128, batch_rows=200_000,
+                             return_labels=True, normalize=True):
+        total = self.count_epochs()
+        scaler = StandardScaler() if normalize else None
 
-        # collect sample for fit
-        logger.info(f"[GPU] Collecting up to {gpu_fit_samples} samples for PCA/KMeans fit")
-        feats = []
-        for _sid,_eid,v in tqdm(vec_fn(), total=total, desc="Collect(Fit)", ncols=100):
-            feats.append(v.astype(np.float32, copy=False))
-            if len(feats) >= gpu_fit_samples:
-                break
-        X_fit = np.stack(feats,0).astype(np.float32)
+        # pass1
+        if scaler is not None:
+            buf = []
+            self.log("\n[Pass1] Fitting StandardScaler (concat1536)")
+            for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="Scaler", ncols=100):
+                buf.append(self.epoch_concat1536(x))
+                if len(buf) >= batch_rows:
+                    scaler.partial_fit(np.stack(buf, 0)); buf = []
+            if buf: scaler.partial_fit(np.stack(buf, 0)); buf = []
 
-        scaler_mean_std = None
-        if normalize:
-            m = X_fit.mean(axis=0)
-            s = X_fit.std(axis=0) + 1e-8
-            scaler_mean_std = (m, s)
-            X_fit = (X_fit - m) / s
-
-        X_fit_gpu = cp.asarray(X_fit)
-        pca = cuPCA(n_components=min(pca_dim, X_fit.shape[1]), random_state=self.seed)
-        X_fit_pca = pca.fit_transform(X_fit_gpu)
-
-        km = cuKMeans(n_clusters=k, random_state=self.seed)
-        km.fit(X_fit_pca)
-
-        # predict in batches
-        labels = np.empty(total, np.int32)
-        order_index: List[Tuple[str,int]] = []
-        logger.info("[GPU] Predicting in batches")
-        buf, buf_idx, i = [], [], 0
-        for sid,eid,v in tqdm(vec_fn(), total=total, desc="Predict", ncols=100):
-            buf.append(v.astype(np.float32, copy=False)); buf_idx.append((sid,eid))
+        # pass2
+        ipca = IncrementalPCA(n_components=pca_dim)
+        buf = []
+        self.log("[Pass2] Fitting IncrementalPCA")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="PCA", ncols=100):
+            buf.append(self.epoch_concat1536(x))
             if len(buf) >= batch_rows:
-                Xb = np.stack(buf,0).astype(np.float32)
-                if normalize and scaler_mean_std is not None:
-                    m,s = scaler_mean_std
-                    Xb = (Xb - m) / s
-                Xb_gpu = cp.asarray(Xb)
-                Xbp = pca.transform(Xb_gpu)
-                pred = km.predict(Xbp).get()
-                labels[i:i+len(pred)] = pred
-                order_index.extend(buf_idx)
-                i += len(pred); buf=[]; buf_idx=[]
+                X = np.stack(buf, 0)
+                if scaler is not None: X = scaler.transform(X)
+                ipca.partial_fit(X); buf = []
         if buf:
-            Xb = np.stack(buf,0).astype(np.float32)
-            if normalize and scaler_mean_std is not None:
-                m,s = scaler_mean_std
-                Xb = (Xb - m) / s
-            Xb_gpu = cp.asarray(Xb)
-            Xbp = pca.transform(Xb_gpu)
-            pred = km.predict(Xbp).get()
-            labels[i:i+len(pred)] = pred
-            order_index.extend(buf_idx)
+            X = np.stack(buf, 0)
+            if scaler is not None: X = scaler.transform(X)
+            ipca.partial_fit(X); buf = []
 
-        return None, pca, km, labels.astype(np.int8), order_index, scaler_mean_std
+        # pass3
+        km = MiniBatchKMeans(n_clusters=k, batch_size=4096, random_state=self.seed)
+        buf = []
+        self.log("[Pass3] Fitting MiniBatchKMeans")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="KMeans", ncols=100):
+            buf.append(self.epoch_concat1536(x))
+            if len(buf) >= batch_rows:
+                X = np.stack(buf, 0)
+                if scaler is not None: X = scaler.transform(X)
+                Xp = ipca.transform(X); km.partial_fit(Xp); buf = []
+        if buf:
+            X = np.stack(buf, 0)
+            if scaler is not None: X = scaler.transform(X)
+            Xp = ipca.transform(X); km.partial_fit(Xp)
 
-    # --------------------------- multiview 专用：权重估计与向量生成 ---------------------------
-    @staticmethod
-    def _multiview_fit_weights(vec_fn_mv: Callable[[], Iterable[Tuple[str,int,np.ndarray]]],
-                               total: int,
-                               batch_rows: int,
-                               normalize: bool,
-                               logger: logging.Logger):
-        """
-        输入 V=[8,768] 多视图，不做加权；这里做两件事：
-         1) 为每个视图拟合 scaler（可选）
-         2) 基于标准化后的方差估权重 w[8]
-        返回：scalers(list 或 None[8]), weights(np.ndarray[8])
-        """
+        if not return_labels:
+            return scaler, ipca, km, None, None
+
+        # pass4
+        N = total
+        labels, i, buf = np.empty(N, np.int8), 0, []
+        order_index: List[Tuple[str, int]] = []
+        self.log("[Pass4] Predicting labels & recording order_index")
+        for sid, eid, x in tqdm(self.iter_epochs(), total=total, desc="Predict", ncols=100):
+            buf.append(self.epoch_concat1536(x))
+            order_index.append((sid, eid))
+            if len(buf) >= batch_rows:
+                X = np.stack(buf, 0)
+                if scaler is not None: X = scaler.transform(X)
+                Xp = ipca.transform(X)
+                labels[i:i+len(buf)] = km.predict(Xp); i += len(buf); buf = []
+        if buf:
+            X = np.stack(buf, 0)
+            if scaler is not None: X = scaler.transform(X)
+            Xp = ipca.transform(X)
+            labels[i:i+len(buf)] = km.predict(Xp)
+        return scaler, ipca, km, labels, order_index
+
+    def _pipeline_multiview(self, k=2, pca_dim=64, batch_rows=100_000,
+                            return_labels=True, normalize=True):
+        total = self.count_epochs()
         scalers = [StandardScaler() if normalize else None for _ in range(8)]
-        caches = [[] for _ in range(8)]
+        cache = [[] for _ in range(8)]
 
-        logger.info("[multiview] Pass1: fit 8 scalers (optional)")
-        cnt = 0
-        for _sid,_eid,V in tqdm(vec_fn_mv(), total=total, desc="MV-Scaler", ncols=100):
-            for i in range(8): caches[i].append(V[i])
-            cnt += 1
-            if len(caches[0]) * 8 >= batch_rows:
+        # pass1: scaler(8)
+        self.log("\n[Pass1] Fitting 8-view StandardScaler (multiview)")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="Scaler(8 views)", ncols=100):
+            V = self.epoch_multiview8(x)  # [8,768]
+            for i in range(8): cache[i].append(V[i])
+            if len(cache[0]) >= batch_rows:
                 for i in range(8):
                     if scalers[i] is not None:
-                        scalers[i].partial_fit(np.stack(caches[i],0))
-                    caches[i] = []
-        if len(caches[0]):
+                        scalers[i].partial_fit(np.stack(cache[i], 0))
+                cache = [[] for _ in range(8)]
+        if len(cache[0]):
             for i in range(8):
                 if scalers[i] is not None:
-                    scalers[i].partial_fit(np.stack(caches[i],0))
-                caches[i] = []
+                    scalers[i].partial_fit(np.stack(cache[i], 0))
+            cache = [[] for _ in range(8)]
 
-        logger.info("[multiview] Pass1b: estimate variance weights")
-        var_sum = np.zeros(8, dtype=np.float64)
-        caches = [[] for _ in range(8)]
-        for _sid,_eid,V in tqdm(vec_fn_mv(), total=total, desc="MV-Var", ncols=100):
-            for i in range(8): caches[i].append(V[i])
-            if len(caches[0]) * 8 >= batch_rows:
+        # pass1b: 方差权重
+        self.log("[Pass1b] Estimating variance weights")
+        var_sum = np.zeros(8)
+        cache = [[] for _ in range(8)]
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="Var(8 views)", ncols=100):
+            V = self.epoch_multiview8(x)
+            for i in range(8): cache[i].append(V[i])
+            if len(cache[0]) >= batch_rows:
                 for i in range(8):
-                    arr = np.stack(caches[i],0)
-                    if scalers[i] is not None:
-                        arr = scalers[i].transform(arr)
+                    arr = np.stack(cache[i], 0)
+                    if scalers[i] is not None: arr = scalers[i].transform(arr)
                     var_sum[i] += arr.var()
-                    caches[i] = []
-        if len(caches[0]):
+                cache = [[] for _ in range(8)]
+        if len(cache[0]):
             for i in range(8):
-                arr = np.stack(caches[i],0)
-                if scalers[i] is not None:
-                    arr = scalers[i].transform(arr)
+                arr = np.stack(cache[i], 0)
+                if scalers[i] is not None: arr = scalers[i].transform(arr)
                 var_sum[i] += arr.var()
-                caches[i] = []
+            cache = [[] for _ in range(8)]
+        w = var_sum / (var_sum.sum() + 1e-8)
 
-        w = var_sum / (var_sum.sum() + 1e-12)
-        return scalers, w
-
-    def _multiview_epoch_vec_fn(self,
-                                scalers: List[Optional[StandardScaler]],
-                                weights: np.ndarray) -> Callable[[], Iterable[Tuple[str,int,np.ndarray]]]:
-        """返回一个 vec_fn：将 V[8,768] → 标准化 → 加权求和 → 768"""
-        def _fn():
-            for sid, eid, raw in self.iter_epochs_raw():
-                if raw.shape != (15,4,2,768):
-                    continue
-                V = raw.mean(axis=0).reshape(8,768)  # [8,768]
-                if any(scalers):
-                    Vn = []
-                    for i in range(8):
-                        v = V[i][None]
-                        if scalers[i] is not None:
-                            v = scalers[i].transform(v)
-                        Vn.append(v[0])
-                    V = np.stack(Vn,0)
-                emb = (V * weights[:,None]).sum(0)  # [768]
-                yield sid, eid, emb
-        return _fn
-
-    # --------------------------- 可视化 ---------------------------
-    def _load_saved_scaler(self, save_dir: str):
-        sp = os.path.join(save_dir, "scaler.pkl")
-        if os.path.exists(sp):
-            try:
-                return ("cpu", joblib.load(sp))
-            except Exception:
-                pass
-        mp = os.path.join(save_dir, "gpu_scaler_mean.npy")
-        sp2 = os.path.join(save_dir, "gpu_scaler_std.npy")
-        if os.path.exists(mp) and os.path.exists(sp2):
-            return ("gpu", {"mean": np.load(mp), "std": np.load(sp2)})
-        return (None, None)
-
-    def _pca_transform_saved(self, save_dir: str, X: np.ndarray) -> np.ndarray:
-        pp = os.path.join(save_dir, "pca.pkl")
-        if os.path.exists(pp):
-            try:
-                pca = joblib.load(pp); return pca.transform(X)
-            except Exception: pass
-        cp = os.path.join(save_dir, "pca_components.npy")
-        mp = os.path.join(save_dir, "pca_mean.npy")
-        if os.path.exists(cp) and os.path.exists(mp):
-            comp = np.load(cp); mean = np.load(mp)
-            return (X - mean) @ comp.T
-        raise FileNotFoundError("No saved PCA (pca.pkl or pca_components.npy+pca_mean.npy)")
-
-    def _kmeans_predict_saved(self, save_dir: str, Xp: np.ndarray) -> np.ndarray:
-        kp = os.path.join(save_dir, "kmeans.pkl")
-        if os.path.exists(kp):
-            try:
-                km = joblib.load(kp); return km.predict(Xp)
-            except Exception: pass
-        cp = os.path.join(save_dir, "kmeans_centers.npy")
-        if os.path.exists(cp):
-            centers = np.load(cp)
-            diff = Xp[:,None,:] - centers[None,:,:]
-            dist2 = np.sum(diff*diff, axis=2)
-            return np.argmin(dist2, axis=1)
-        raise FileNotFoundError("No saved KMeans (kmeans.pkl or kmeans_centers.npy).")
-
-    def _save_gpu_models(self, save_dir: str, pca, km, scaler_mean_std: Optional[Tuple[np.ndarray,np.ndarray]], logger: logging.Logger):
-        try:
-            comp = pca.components_.get() if hasattr(pca.components_, "get") else np.asarray(pca.components_)
-            mean = pca.mean_.get()       if hasattr(pca.mean_, "get")       else np.asarray(pca.mean_)
-            np.save(os.path.join(save_dir, "pca_components.npy"), comp)
-            np.save(os.path.join(save_dir, "pca_mean.npy"), mean)
-            logger.info("[GPU] Saved pca_components.npy & pca_mean.npy")
-        except Exception as e:
-            logger.info(f"[warn] cannot save PCA arrays: {e}")
-        try:
-            centers = km.cluster_centers_.get() if hasattr(km.cluster_centers_, "get") else np.asarray(km.cluster_centers_)
-            np.save(os.path.join(save_dir, "kmeans_centers.npy"), centers)
-            logger.info("[GPU] Saved kmeans_centers.npy")
-        except Exception as e:
-            logger.info(f"[warn] cannot save KMeans centers: {e}")
-        if scaler_mean_std is not None:
-            m,s = scaler_mean_std
-            np.save(os.path.join(save_dir, "gpu_scaler_mean.npy"), m)
-            np.save(os.path.join(save_dir, "gpu_scaler_std.npy"),  s)
-            logger.info("[GPU] Saved gpu_scaler_mean/std.npy")
-
-    def visualize_kmeans_pca2d(self, save_dir: str, mode: str, token_mode: str, sample_n: int = 200_000):
-        import matplotlib.pyplot as plt
-        feats, idxs = [], []
-        self._rs_count = 0
-        self.logger.info("\n[Plot] KMeans@PCA 2D")
-        total = self.count_epochs()
-
-        if mode == "epoch":
-            src_iter = self.gen_epoch_vector(token_mode=token_mode)
-            getter = lambda: self.gen_epoch_vector(token_mode=token_mode)
-        elif mode == "patch_vote":
-            # 展示用 patch_mean
-            getter = lambda: self.gen_epoch_vector(token_mode="patch_mean")
-            src_iter = getter()
-        elif mode == "multiview":
-            # 展示用 multiview 的加权向量（需要读取权重&scaler；这里退化为未加权的简展示）
-            src_iter = ( (sid,eid, raw.mean(axis=0).reshape(8,768).mean(0))
-                         for sid,eid,raw in self.iter_epochs_raw() if raw.shape==(15,4,2,768) )
-            getter = lambda: src_iter  # 简化
-        else:
-            raise ValueError(mode)
-
-        for i,(sid,eid,v) in enumerate(tqdm(src_iter, total=total, desc="Sampling", ncols=100)):
-            self._reservoir_append(feats, idxs, v, i, cap=sample_n)
-        if not feats:
-            self.logger.info("[Plot] No samples for plotting."); return
-
-        X = np.stack(feats,0)
-        kind, scaler_obj = self._load_saved_scaler(save_dir)
-        if kind=="cpu" and scaler_obj is not None:
-            Xs = scaler_obj.transform(X)
-        elif kind=="gpu" and scaler_obj is not None:
-            m,s = scaler_obj["mean"], scaler_obj["std"]; Xs = (X-m)/(s+1e-8)
-        else:
-            Xs = X
-
-        Xp = self._pca_transform_saved(save_dir, Xs)
-        X2 = Xp[:, :2]
-        labels = np.load(os.path.join(save_dir, "labels.npy"))
-        y = labels[np.array(idxs, dtype=int)]
-        plt.figure(figsize=(8,8))
-        plt.scatter(X2[:,0], X2[:,1], c=y, s=3, alpha=0.7, cmap="tab10")
-        plt.title(f"KMeans@PCA · {mode}:{token_mode} · n={len(y)}")
-        plt.tight_layout()
-        out = os.path.join(save_dir, f"kmeans_pca2d_{mode}_{token_mode}.png")
-        plt.savefig(out, dpi=300); plt.close()
-        self.logger.info(f"[plot] Saved: {out}")
-
-    def visualize_umap(self, save_dir: str, mode: str, token_mode: str, sample_n: int = 100_000, pca_dim: int = 64):
-        if not HAS_UMAP:
-            self.logger.info("[warn] umap-learn not installed; skip UMAP."); return
-        import matplotlib.pyplot as plt
-        feats, idxs = [], []
-        self._rs_count = 0
-        self.logger.info("\n[Plot] UMAP 2D (viz only)")
-        total = self.count_epochs()
-        if mode == "epoch":
-            src_iter = self.gen_epoch_vector(token_mode=token_mode)
-        elif mode == "patch_vote":
-            src_iter = self.gen_epoch_vector(token_mode="patch_mean")
-        elif mode == "multiview":
-            src_iter = ( (sid,eid, raw.mean(axis=0).reshape(8,768).mean(0))
-                         for sid,eid,raw in self.iter_epochs_raw() if raw.shape==(15,4,2,768) )
-        else:
-            raise ValueError(mode)
-
-        n = 0
-        for (sid,eid,v) in tqdm(src_iter, total=total, desc="Sampling", ncols=100):
-            n += 1
-            if len(feats) < sample_n:
-                feats.append(v); idxs.append(n-1)
+        # pass2a: ipca
+        ipca = IncrementalPCA(n_components=pca_dim)
+        buf = []
+        self.log("[Pass2a] Fitting IncrementalPCA")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="PCA", ncols=100):
+            V = self.epoch_multiview8(x)
+            if any(scalers):
+                Vs = []
+                for i in range(8):
+                    v = V[i][None]
+                    if scalers[i] is not None: v = scalers[i].transform(v)
+                    Vs.append(v[0])
+                Vs = np.stack(Vs, 0)
             else:
-                j = self.rng.randint(0, n-1)
-                if j < sample_n:
-                    feats[j] = v; idxs[j] = n-1
-        if not feats:
-            self.logger.info("[Plot] No samples for UMAP."); return
+                Vs = V
+            emb = (Vs * w[:, None]).sum(0)  # [768]
+            buf.append(emb)
+            if len(buf) >= batch_rows:
+                ipca.partial_fit(np.stack(buf, 0)); buf = []
+        if buf: ipca.partial_fit(np.stack(buf, 0)); buf = []
 
-        X = np.stack(feats,0)
+        # pass2b: kmeans
+        km = MiniBatchKMeans(n_clusters=k, batch_size=4096, random_state=self.seed)
+        buf = []
+        self.log("[Pass2b] Fitting MiniBatchKMeans")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="KMeans", ncols=100):
+            V = self.epoch_multiview8(x)
+            if any(scalers):
+                Vs = []
+                for i in range(8):
+                    v = V[i][None]
+                    if scalers[i] is not None: v = scalers[i].transform(v)
+                    Vs.append(v[0])
+                Vs = np.stack(Vs, 0)
+            else:
+                Vs = V
+            emb = (Vs * w[:, None]).sum(0)
+            buf.append(emb)
+            if len(buf) >= batch_rows:
+                xp = ipca.transform(np.stack(buf, 0)); km.partial_fit(xp); buf = []
+        if buf:
+            xp = ipca.transform(np.stack(buf, 0)); km.partial_fit(xp)
+
+        if not return_labels:
+            return (scalers, w), ipca, km, None, None
+
+        # pass3: predict + order_index
+        N = total
+        labels, i, buf = np.empty(N, np.int8), 0, []
+        order_index: List[Tuple[str, int]] = []
+        self.log("[Pass3] Predicting labels & recording order_index")
+        for sid, eid, x in tqdm(self.iter_epochs(), total=total, desc="Predict", ncols=100):
+            V = self.epoch_multiview8(x)
+            if any(scalers):
+                Vs = []
+                for j in range(8):
+                    v = V[j][None]
+                    if scalers[j] is not None: v = scalers[j].transform(v)
+                    Vs.append(v[0])
+                Vs = np.stack(Vs, 0)
+            else:
+                Vs = V
+            emb = (Vs * w[:, None]).sum(0)
+            buf.append(emb)
+            order_index.append((sid, eid))
+            if len(buf) >= batch_rows:
+                xp = ipca.transform(np.stack(buf, 0))
+                labels[i:i+len(buf)] = km.predict(xp); i += len(buf); buf = []
+        if buf:
+            xp = ipca.transform(np.stack(buf, 0))
+            labels[i:i+len(buf)] = km.predict(xp)
+        return (scalers, w), ipca, km, labels, order_index
+
+    def _pipeline_patch_vote(self, k=2, pca_dim=64, batch_patches=300_000,
+                             vote_threshold=0.5, return_labels=True, normalize=True):
+        total = self.count_epochs()
+        scaler = StandardScaler() if normalize else None
+        ipca = IncrementalPCA(n_components=pca_dim)
+        km = MiniBatchKMeans(n_clusters=k, batch_size=4096, random_state=self.seed)
+
+        # 1a scaler (patch)
+        if scaler is not None:
+            cur, rows = [], 0
+            self.log("\n[Pass1] Fitting StandardScaler (patchx15)")
+            for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="Scaler(P)", ncols=100):
+                pm = self.patch_mean768(x)  # [15,768]
+                cur.append(pm); rows += 15
+                if rows >= batch_patches:
+                    X = np.concatenate(cur, 0); scaler.partial_fit(X); cur = []; rows = 0
+            if rows > 0:
+                X = np.concatenate(cur, 0); scaler.partial_fit(X); cur = []; rows = 0
+
+        # 1b ipca
+        self.log("[Pass2] Fitting IncrementalPCA (patch)")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="PCA(P)", ncols=100):
+            X = self.patch_mean768(x)
+            if scaler is not None: X = scaler.transform(X)
+            ipca.partial_fit(X)
+
+        # 1c kmeans
+        self.log("[Pass3] Fitting MiniBatchKMeans (patch)")
+        for _sid, _eid, x in tqdm(self.iter_epochs(), total=total, desc="KMeans(P)", ncols=100):
+            X = self.patch_mean768(x)
+            if scaler is not None: X = scaler.transform(X)
+            Xp = ipca.transform(X)
+            km.partial_fit(Xp)
+
+        if not return_labels:
+            return scaler, ipca, km, None, None
+
+        # 2 predict + vote + order_index
+        N = total
+        epoch_labels, i = np.empty(N, np.int8), 0
+        order_index: List[Tuple[str, int]] = []
+        self.log("[Pass4] Predicting epoch labels (vote) & recording order_index")
+        for sid, eid, x in tqdm(self.iter_epochs(), total=total, desc="Predict(P)", ncols=100):
+            X = self.patch_mean768(x)
+            if scaler is not None: X = scaler.transform(X)
+            Xp = ipca.transform(X)
+            pl = km.predict(Xp)
+            epoch_labels[i] = 1 if (pl.mean() >= vote_threshold) else 0
+            order_index.append((sid, eid))
+            i += 1
+        return scaler, ipca, km, epoch_labels, order_index
+
+    # ---------- 统一入口 ----------
+    def run(self, mode: str, save_dir: str, k: int = 2, pca_dim: int = 128,
+            batch_rows: int = 200_000, vote_threshold: float = 0.5,
+            umap_sample: int = 0, normalize: bool = True, auto_plot: bool = True):
+        self._init_logger(save_dir)
+        t0 = time.time()
+        self.log(f"Start run: mode={mode}, k={k}, pca_dim={pca_dim}, normalize={normalize}, seed={self.seed}")
+        self.log(f"features_dir={self.features_dir}, files={len(self.paths)}, total_epochs={self.count_epochs()}")
+
+        if mode == "mean768":
+            scaler, ipca, km, labels, order_index = self._pipeline_mean768(
+                k=k, pca_dim=min(64, pca_dim), batch_rows=batch_rows,
+                return_labels=True, normalize=normalize)
+
+        elif mode == "concat1536":
+            scaler, ipca, km, labels, order_index = self._pipeline_concat1536(
+                k=k, pca_dim=pca_dim, batch_rows=batch_rows,
+                return_labels=True, normalize=normalize)
+
+        elif mode == "multiview":
+            (scalers, w), ipca, km, labels, order_index = self._pipeline_multiview(
+                k=k, pca_dim=min(64, pca_dim), batch_rows=min(100_000, batch_rows),
+                return_labels=True, normalize=normalize)
+            joblib.dump(scalers, os.path.join(save_dir, "multiview_scalers.pkl"))
+            np.save(os.path.join(save_dir, "multiview_weights.npy"), w)
+            scaler = None  # multiview 单独保存
+
+        elif mode == "patch_vote":
+            scaler, ipca, km, labels, order_index = self._pipeline_patch_vote(
+                k=k, pca_dim=min(64, pca_dim), batch_patches=15_000 * 20,
+                vote_threshold=vote_threshold, return_labels=True, normalize=normalize)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+        # 保存模型
+        if scaler is not None:
+            joblib.dump(scaler, os.path.join(save_dir, "scaler.pkl"))
+        joblib.dump(ipca,   os.path.join(save_dir, "pca.pkl"))
+        joblib.dump(km,     os.path.join(save_dir, "kmeans.pkl"))
+
+        # 保存标签与顺序索引（严格同序）
+        self._save_labels_and_index(save_dir, labels, order_index)
+
+        # 保存配置
+        cfg = dict(mode=mode, k=k, pca_dim=pca_dim, batch_rows=batch_rows,
+                   vote_threshold=vote_threshold, features_dir=self.features_dir,
+                   pattern=self.pattern, order=self.order, normalize=normalize, seed=self.seed)
+        with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+
+        # UMAP 抽样（可选）
+        if umap_sample > 0 and HAS_UMAP:
+            self.log("\n[UMAP] Sampling & projecting (for visualization only)")
+            emb2d = self._umap_sample(mode=mode, sample_epochs=umap_sample, pca_dim=pca_dim)
+            np.save(os.path.join(save_dir, "umap_sample.npy"), emb2d)
+
+        # 自动画图（可选）
+        if auto_plot:
+            try:
+                self.visualize_kmeans_pca2d(save_dir=save_dir, mode=mode,
+                                            sample_n=min(200_000, self.count_epochs()))
+            except Exception as e:
+                self.log(f"[warn] PCA plot failed: {e}")
+            if umap_sample > 0 and HAS_UMAP:
+                try:
+                    self.visualize_umap(save_dir=save_dir, mode=mode,
+                                        sample_n=min(umap_sample, 200_000))
+                except Exception as e:
+                    self.log(f"[warn] UMAP plot failed: {e}")
+
+        self.log(f"[Done] Total time: {time.time() - t0:.1f}s")
+        return labels
+
+    # ---------- 汇总 ----------
+    def summarize(self, save_dir: str, subject_to_group: Optional[Dict[str, str]] = None):
+        labels = np.load(os.path.join(save_dir, "labels.npy"))
+        subs = np.load(os.path.join(save_dir, "subject.npy"), allow_pickle=True).tolist()
+        assert len(labels) == len(subs), "labels and subject length mismatch"
+
+        vals, cnts = np.unique(labels, return_counts=True)
+        self.log("== Cluster counts (overall) ==")
+        for v, c in zip(vals, cnts):
+            self.log(f"  cluster {v}: {c}")
+
+        if subject_to_group:
+            stat: Dict[str, Dict[int, int]] = {}
+            for lab, sid in zip(labels, subs):
+                grp = subject_to_group.get(sid, "Unknown")
+                stat.setdefault(grp, {}).setdefault(int(lab), 0)
+                stat[grp][int(lab)] += 1
+            self.log("== Cluster counts by group ==")
+            for grp, d in stat.items():
+                total = sum(d.values())
+                frac = {k: f"{v} ({v/total:.1%})" for k, v in d.items()}
+                self.log(f"  {grp}: {frac}")
+
+    # ---------- KMeans@PCA 可视化（同空间） ----------
+    def visualize_kmeans_pca2d(self, save_dir: str, mode: str = "concat1536", sample_n: int = 200_000):
+        import matplotlib.pyplot as plt
+        scaler_path = os.path.join(save_dir, "scaler.pkl")
+        pca = joblib.load(os.path.join(save_dir, "pca.pkl"))
+        labels = np.load(os.path.join(save_dir, "labels.npy"))
+        scaler = joblib.load(scaler_path) if os.path.exists(scaler_path) else None
+
+        feats, idxs = [], []
+        self._rs_count = 0
+        self.log("\n[Plot] PCA 2D (same space as KMeans)")
+        for i, (_sid, _eid, x) in enumerate(tqdm(self.iter_epochs(), total=self.count_epochs(),
+                                                 desc="Sampling", ncols=100)):
+            if   mode=="mean768":      v = self.epoch_mean768(x)
+            elif mode=="concat1536":   v = self.epoch_concat1536(x)
+            elif mode=="multiview":    v = self.epoch_mean768(x)   # 近似可视化即可
+            elif mode=="patch_vote":   v = self.epoch_mean768(x)
+            else: raise ValueError(mode)
+            self._reservoir_append(feats, idxs, v, i, cap=sample_n)
+
+        X = np.stack(feats, 0)
+        if scaler is not None: X = scaler.transform(X)
+        Xp = pca.transform(X)[:, :2]
+        y  = labels[np.array(idxs, dtype=int)]
+
+        plt.figure(figsize=(8,8))
+        plt.scatter(Xp[:,0], Xp[:,1], c=y, s=3, alpha=0.7, cmap="tab10")
+        plt.title(f"KMeans@PCA · {mode} · n={len(y)}")
+        plt.tight_layout()
+        out = os.path.join(save_dir, f"kmeans_pca2d_{mode}.png")
+        plt.savefig(out, dpi=300); plt.close()
+        self.log(f"[plot] Saved: {out}")
+
+    # ---------- UMAP 可视化（仅展示） ----------
+    def visualize_umap(self, save_dir: str, mode: str = "concat1536", sample_n: int = 100_000, pca_dim: int = 64):
+        if not HAS_UMAP:
+            self.log("[warn] umap-learn is not installed; skip UMAP plot.")
+            return
+        import matplotlib.pyplot as plt
+
+        feats, idxs = [], []
+        self._rs_count = 0
+        self.log("\n[Plot] UMAP 2D (visualization only)")
+        for i, (_sid, _eid, x) in enumerate(tqdm(self.iter_epochs(), total=self.count_epochs(),
+                                                 desc="Sampling", ncols=100)):
+            if   mode=="mean768":      v = self.epoch_mean768(x)
+            elif mode=="concat1536":   v = self.epoch_concat1536(x)
+            elif mode=="multiview":    v = self.epoch_mean768(x)
+            elif mode=="patch_vote":   v = self.epoch_mean768(x)
+            else: raise ValueError(mode)
+            self._reservoir_append(feats, idxs, v, i, cap=sample_n)
+
+        X = np.stack(feats, 0)
         Xs = StandardScaler().fit_transform(X)
         if pca_dim and pca_dim < Xs.shape[1]:
             Xs = PCA(n_components=pca_dim, random_state=self.seed).fit_transform(Xs)
         reducer = umap.UMAP(n_neighbors=25, min_dist=0.1, random_state=self.seed)
         emb = reducer.fit_transform(Xs)
-        import matplotlib.pyplot as plt
+
         plt.figure(figsize=(8,8))
         plt.scatter(emb[:,0], emb[:,1], s=3, alpha=0.7)
-        plt.title(f"UMAP 2D · {mode}:{token_mode} · n={emb.shape[0]}")
+        plt.title(f"UMAP 2D · {mode} · n={emb.shape[0]}")
         plt.tight_layout()
-        out = os.path.join(save_dir, f"umap2d_{mode}_{token_mode}.png")
+        out = os.path.join(save_dir, f"umap2d_{mode}.png")
         plt.savefig(out, dpi=300); plt.close()
-        self.logger.info(f"[plot] Saved: {out}")
+        self.log(f"[plot] Saved: {out}")
 
-    # --------------------------- 入口 ---------------------------
-    def run(self,
-            save_dir: str,
-            mode: str,                # "epoch" | "patch_vote" | "multiview"
-            token_mode: str,          # "cls" | "patch_mean" (仅 mode="epoch")
-            k: int,
-            pca_dim: int,
-            batch_rows: int,
-            normalize: bool,
-            vote_threshold: float,
-            auto_plot: bool,
-            umap_sample: int,
-            use_gpu: bool,
-            gpu_fit_samples: int):
-        self.logger = setup_logger(save_dir)
-        self.backend = detect_gpu_backend(use_gpu, self.logger)
-
-        total = self.count_epochs()
-        self.logger.info(f"Start run: mode={mode}, token_mode={token_mode}, k={k}, pca_dim={pca_dim}, normalize={normalize}, seed={self.seed}")
-        self.logger.info(f"features_dir={self.features_dir}, files={len(self.paths)}, total_epochs={total}")
-
-        if mode == "epoch":
-            vec_fn = lambda: self.gen_epoch_vector(token_mode=token_mode)
-            if self.backend["kind"] == "gpu":
-                scaler, pca, km, labels, order_index, gpu_scaler = self.gpu_fit_predict(
-                    vec_fn, total, pca_dim, k, batch_rows, normalize, self.logger, gpu_fit_samples
-                )
-                # 保存 GPU 模型
-                self._save_gpu_models(save_dir, pca, km, gpu_scaler, self.logger)
+    # ---------- UMAP 抽样（仅保存坐标，非必需） ----------
+    def _umap_sample(self, mode: str, sample_epochs: int = 100_000, pca_dim: int = 128):
+        assert HAS_UMAP, "pip install umap-learn"
+        sample = []
+        n = 0
+        for _, _, x in self.iter_epochs():
+            if mode == "mean768":      v = self.epoch_mean768(x)
+            elif mode == "concat1536": v = self.epoch_concat1536(x)
+            elif mode == "multiview":  v = self.epoch_mean768(x)   # 简化
+            elif mode == "patch_vote": v = self.epoch_mean768(x)
+            else: raise ValueError(mode)
+            n += 1
+            if len(sample) < sample_epochs:
+                sample.append(v)
             else:
-                scaler, pca, km, labels, order_index = self.cpu_fit_predict(
-                    vec_fn, total, pca_dim, k, batch_rows, normalize, self.logger
-                )
-                if scaler is not None:
-                    joblib.dump(scaler, os.path.join(save_dir, "scaler.pkl"))
-                joblib.dump(pca, os.path.join(save_dir, "pca.pkl"))
-                joblib.dump(km, os.path.join(save_dir, "kmeans.pkl"))
+                j = self.rng.randint(0, n - 1)
+                if j < sample_epochs:
+                    sample[j] = v
+        X = np.stack(sample, 0)
 
-        elif mode == "patch_vote":
-            # 直接用 CPU 流式（partial_fit 完整）
-            scaler = StandardScaler() if normalize else None
-            ipca = IncrementalPCA(n_components=min(pca_dim, 1536))
-            km = MiniBatchKMeans(n_clusters=k, batch_size=4096, random_state=self.seed)
-
-            # 1 scaler
-            if scaler is not None:
-                cur, rows = [], 0
-                self.logger.info("[PV] Pass1: Scaler(patch)")
-                for _sid,_eid,P in tqdm(self.gen_patch_matrix(), total=total, desc="Scaler(P)", ncols=100):
-                    cur.append(P); rows += P.shape[0]
-                    if rows >= batch_rows:
-                        X = np.vstack(cur); scaler.partial_fit(X); cur=[]; rows=0
-                if rows>0:
-                    X = np.vstack(cur); scaler.partial_fit(X)
-
-            # 2 ipca
-            self.logger.info("[PV] Pass2: IPCA(patch)")
-            for _sid,_eid,P in tqdm(self.gen_patch_matrix(), total=total, desc="PCA(P)", ncols=100):
-                X = P
-                if scaler is not None: X = scaler.transform(X)
-                ipca.partial_fit(X)
-
-            # 3 kmeans
-            self.logger.info("[PV] Pass3: KMeans(patch)")
-            for _sid,_eid,P in tqdm(self.gen_patch_matrix(), total=total, desc="KMeans(P)", ncols=100):
-                X = P
-                if scaler is not None: X = scaler.transform(X)
-                Xp = ipca.transform(X)
-                km.partial_fit(Xp)
-
-            # 4 predict + vote
-            labels = np.empty(total, np.int8)
-            order_index = []
-            self.logger.info("[PV] Pass4: Predict+Vote")
-            i=0
-            for sid,eid,P in tqdm(self.gen_patch_matrix(), total=total, desc="Predict(P)", ncols=100):
-                X = P
-                if scaler is not None: X = scaler.transform(X)
-                Xp = ipca.transform(X)
-                pl = km.predict(Xp)
-                labels[i] = 1 if (pl.mean() >= vote_threshold) else 0
-                order_index.append((sid, eid))
-                i += 1
-
-            if scaler is not None:
-                joblib.dump(scaler, os.path.join(save_dir, "scaler.pkl"))
-            joblib.dump(ipca, os.path.join(save_dir, "pca.pkl"))
-            joblib.dump(km, os.path.join(save_dir, "kmeans.pkl"))
-
-        elif mode == "multiview":
-            # 仅 [15,4,2,768] 可用
-            # 先拟合 8 个视图的 scaler + 方差权重
-            vec_mv = lambda: self.gen_multiview_vec(self.logger)
-            scalers, w = self._multiview_fit_weights(vec_mv, total, batch_rows, normalize, self.logger)
-            np.save(os.path.join(save_dir, "multiview_weights.npy"), w)
-            joblib.dump(scalers, os.path.join(save_dir, "multiview_scalers.pkl"))
-
-            # 将多视图映射到 768 作为统一向量，再复用 CPU/GPU 统一训练/预测
-            vec_fn = self._multiview_epoch_vec_fn(scalers, w)
-            if self.backend["kind"] == "gpu":
-                scaler, pca, km, labels, order_index, gpu_scaler = self.gpu_fit_predict(
-                    vec_fn, total, min(pca_dim, 768), k, batch_rows, False, self.logger, gpu_fit_samples
-                )
-                # multiview 模式我们已经做过标准化，故此处 normalize=False
-                self._save_gpu_models(save_dir, pca, km, None, self.logger)
-            else:
-                scaler, pca, km, labels, order_index = self.cpu_fit_predict(
-                    vec_fn, total, min(pca_dim, 768), k, batch_rows, False, self.logger
-                )
-                joblib.dump(pca, os.path.join(save_dir, "pca.pkl"))
-                joblib.dump(km,  os.path.join(save_dir, "kmeans.pkl"))
-
-        else:
-            raise ValueError(f"Unknown mode: {mode}")
-
-        # 保存标签与顺序索引
-        self._save_labels_index(save_dir, labels, order_index)
-
-        # 保存配置
-        cfg = dict(mode=mode, token_mode=token_mode, k=k, pca_dim=pca_dim, batch_rows=batch_rows,
-                   normalize=normalize, vote_threshold=vote_threshold, features_dir=self.features_dir,
-                   pattern=self.pattern, order=self.order, seed=self.seed,
-                   backend=self.backend["kind"], gpu_fit_samples=gpu_fit_samples)
-        with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
-
-        # 可视化
-        if auto_plot:
-            try:
-                self.visualize_kmeans_pca2d(save_dir, mode=mode, token_mode=token_mode, sample_n=min(200_000, self.count_epochs()))
-            except Exception as e:
-                self.logger.info(f"[warn] PCA plot failed: {e}")
-        if umap_sample>0 and HAS_UMAP:
-            try:
-                self.visualize_umap(save_dir, mode=mode, token_mode=token_mode, sample_n=min(umap_sample, 200_000))
-            except Exception as e:
-                self.logger.info(f"[warn] UMAP plot failed: {e}")
-
-        self.logger.info(f"[Done] Total time: {time.time()-t0:.1f}s")
+        Xs = StandardScaler().fit_transform(X)
+        pca = PCA(n_components=min(pca_dim, Xs.shape[1]), random_state=self.seed).fit(Xs)
+        Xp = pca.transform(Xs)
+        reducer = umap.UMAP(n_neighbors=25, min_dist=0.1, random_state=self.seed)
+        return reducer.fit_transform(Xp)
 
 
-# --------------------------- CLI ---------------------------
-def build_argparser():
-    ap = argparse.ArgumentParser(description="REM clustering: epoch/patch_vote/multiview; CPU/GPU; streaming.")
-    ap.add_argument("--features_dir", type=str, required=True)
-    ap.add_argument("--pattern", type=str, default="*.h5")
-    ap.add_argument("--order", type=str, default="patch_channel", choices=["patch_channel","channel_patch"])
-    ap.add_argument("--save_dir", type=str, required=True)
-
-    ap.add_argument("--mode", type=str, default="epoch", choices=["epoch","patch_vote","multiview"])
-    ap.add_argument("--token_mode", type=str, default="cls", choices=["cls","patch_mean"], help="only for mode=epoch")
-
-    ap.add_argument("--k", type=int, default=2)
-    ap.add_argument("--pca_dim", type=int, default=128)
-    ap.add_argument("--batch_rows", type=int, default=200_000)
-    ap.add_argument("--normalize", action="store_true"); ap.add_argument("--no-normalize", dest="normalize", action="store_false"); ap.set_defaults(normalize=True)
-    ap.add_argument("--vote_threshold", type=float, default=0.5)
-
-    ap.add_argument("--gpu", action="store_true")
-    ap.add_argument("--gpu_fit_samples", type=int, default=1_000_000)
-
-    ap.add_argument("--auto_plot", action="store_true")
-    ap.add_argument("--umap_sample", type=int, default=0)
-    return ap
-
-
-if __name__ == "__main__":
-    args = build_argparser().parse_args()
-    am = AnalysisManager(features_dir=args.features_dir, pattern=args.pattern, order=args.order)
-    am.run(save_dir=args.save_dir,
-           mode=args.mode,
-           token_mode=args.token_mode,
-           k=args.k,
-           pca_dim=args.pca_dim,
-           batch_rows=args.batch_rows,
-           normalize=args.normalize,
-           vote_threshold=args.vote_threshold,
-           auto_plot=args.auto_plot,
-           umap_sample=args.umap_sample,
-           use_gpu=args.gpu,
-           gpu_fit_samples=args.gpu_fit_samples)
+if __name__ == '__main__':
+    am = AnalysisManager(features_dir="/home/user/Sleep/result/no_ckpt", pattern="*.h5", order="patch_channel")
+    labels = am.run(mode="concat1536",
+                    save_dir="/data/rem_feat_cluster/out_concat1536",
+                    k=2,
+                    pca_dim=128,
+                    batch_rows=200_000,
+                    umap_sample=100_000,
+                    normalize=True,
+                    auto_plot=True)
+    am.summarize("/data/rem_feat_cluster/out_concat1536", subject_to_group=None)

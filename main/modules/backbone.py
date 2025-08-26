@@ -669,7 +669,8 @@ class Model(LightningModule):
             else:
                 spo2_cls_feats = self.ods_head(concat_feats_ods)
             cls_feats.update({'spo2_cls_feats': spo2_cls_feats})
-
+        if len(self.current_tasks) == 0:
+            self.current_tasks = ['Forward_only']
         if self.current_tasks[0] == 'CrossEntropy':
             time_feats, fft_feats = (
                 x[:, :time_max_len] * attention_mask[:, :time_max_len].unsqueeze(-1),
@@ -1583,6 +1584,8 @@ class Model(LightningModule):
                         sub_loss2 = getattr(self, f"test_{_tn}_loss2").compute()
                         persubject_loss[_tn] = {'loss1': sub_loss, 'loss2': sub_loss2}
                     self.save(path=f'{mode}/{kfold}', dict=persubject_loss)
+            elif 'rem' in self.visual_mode:
+                pass
             else:
                 for idx, name in enumerate(self.test_names.values()):
                     base_name = os.path.basename(name)
