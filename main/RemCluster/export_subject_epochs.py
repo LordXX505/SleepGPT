@@ -103,5 +103,6 @@ def main():
         plot_epoch_signal(mat, args.fs, title, out_path)
         print(f"[saved] {out_path}")
 
+
 if __name__ == "__main__":
     main()
