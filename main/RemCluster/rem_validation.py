@@ -40,25 +40,23 @@ def _fix_len_1d(x: np.ndarray, T: int = 3000, pad_value: float = np.nan):
 
 def read_arrow_matrix(path: str, T: int = 3000) -> np.ndarray:
     try:
-        table = feather.read_table(path)
-    except Exception:
-        with pa.memory_map(path, "r") as source:
-            table = ipc.open_file(source).read_all()
-    if "x" in table.schema.names:
-        col = table["x"]
-        arr = _to_1d_numpy_from_col(col)
-        arr = np.asarray(arr)
-        if arr.ndim == 2:
-            rows = [_fix_len_1d(arr[i], T=T) for i in range(arr.shape[0])]
-            return np.stack(rows, axis=0)
-        return _fix_len_1d(arr, T=T)[None, :]
-    # 多列即多通道
-    rows = []
-    for i in range(table.num_columns):
-        col = table.column(i)
-        one = _to_1d_numpy_from_col(col)
-        rows.append(_fix_len_1d(one, T=T))
-    return np.stack(rows, axis=0)
+        tables = pa.ipc.RecordBatchFileReader(
+            pa.memory_map(path, "r")
+        ).read_all()
+    except Exception as e:
+        raise RuntimeError(f"Error reading PyArrow file {file_path}: {e}")
+    data = tables['x'][0]
+
+    if isinstance(data, pa.ChunkedArray):
+        x = np.array(data.to_pylist())
+    elif isinstance(data, pa.Array) or isinstance(data, pa.ListScalar):
+        x = np.array(data.as_py())
+    else:
+        x = np.array(data)
+    x = x.astype(np.float32)
+    x = x*1e6
+    return x[[0,1,3,4]]
+
 
 
 # -----------------------------
