@@ -151,8 +151,8 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     # 读取 labels / index
-    labels = np.load(os.path.join(args.result_dir, "labels.npy"))
-    df = pd.read_csv(os.path.join(args.result_dir, "index.csv"))
+    labels = np.load(os.path.join(args.result_dir, "patch_labels.npy"))
+    df = pd.read_csv(os.path.join(args.result_dir, "patch_index.csv"))
 
     # 支持 patch 粒度或 epoch 粒度
     has_patch = "patch" in df.columns

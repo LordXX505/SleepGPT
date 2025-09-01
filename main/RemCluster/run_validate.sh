@@ -6,11 +6,11 @@
 #  --save_dir /home/user/Sleep/result/concat1536/validation_all \
 #  --eog_ch 3
 
-python psd_cluster_compare.py \
-  --result_dir /path/to/your/run_dir                 \
+python verify_phasic_like.py \
+  --result_dir /home/user/Sleep/result/out_epoch_concat              \
   --data_root  /data/shhs_new/shhs_new               \
   --fs 100 --epoch_sec 30 --patch_sec 2              \
-  --eeg_idx 0,1,2,3 --eog_idx 4,5 --emg_idx 6       \
-  --max_per_cluster 5000                              \
-  --out_dir /path/to/your/run_dir/psd_eval           \
+  --eeg_idx 0,1 --eog_idx 3 --emg_idx 4      \
+  --max_per_cluster 500000                              \
+  --out_dir /home/user/Sleep/result/out_epoch_concat/psd_eval           \
   --db_scale
