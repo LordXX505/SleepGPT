@@ -1,837 +1,396 @@
-# AnalysisManager.py
-# CPU streaming clustering for REM features (epoch-level & patch-level)
-# - Handles shapes:
-#   (61,1536): row0 is CLS (time+freq), rows 1..60 are patches
-#   (60,1536): patches flattened; original order = (channel, patch, embedding)
-#   (15,4,2,768): 15 patches × 4 channels × 2 domains × 768
-# - Restores to (4,15,1536) correctly (channel, patch, embedding).
-# - Provides epoch-level and patch-level pipelines, diagnostics and plots.
-
-import os, re, glob, h5py, json, time, logging, argparse, random
+# rem_patch_psd_diag.py
+import os
+import argparse
+import json
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+import pyarrow as pa
+from scipy.signal import welch
+from scipy.stats import ttest_ind
+from tqdm import tqdm
+from pathlib import Path
 from typing import List, Tuple, Dict, Optional
 
-from tqdm import tqdm
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import IncrementalPCA, PCA
-from sklearn.cluster import MiniBatchKMeans
-from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
-import joblib
 
-try:
-    import umap
-    HAS_UMAP = True
-except Exception:
-    HAS_UMAP = False
+# ----------------------------
+# I/O helpers
+# ----------------------------
+def infer_zero_width(subj_dir: str, default: int = 5) -> int:
+    """根据目录中已存在的 .arrow 文件推断 epoch 文件名的零填充宽度（如 00001.arrow → 5）"""
+    try:
+        p = Path(subj_dir)
+        cands = list(p.glob("*.arrow"))
+        if not cands:
+            return default
+        name = cands[0].stem  # e.g., "00001"
+        return len(name)
+    except Exception:
+        return default
 
 
-class AnalysisManager:
-    def __init__(self,
-                 features_dir: str,
-                 pattern: str = "*.h5",
-                 order: str = "patch_channel",   # 保留参数以兼容旧调用
-                 seed: int = 42):
-        self.features_dir = features_dir
-        self.pattern = pattern
-        self.order = order
-        self.seed = seed
-        self.rng = random.Random(seed)
+def read_arrow_matrix(path: str) -> np.ndarray:
+    """
+    读取单个 epoch 的原始矩阵，期望返回形状 (C, T)。
+    你的数据结构之前描述为 channel x 3000。
+    """
+    try:
+        reader = pa.ipc.RecordBatchFileReader(pa.memory_map(path, "r"))
+        tbl = reader.read_all()
+    except Exception as e:
+        raise RuntimeError(f"Error reading PyArrow file {path}: {e}")
 
-        self.paths: List[str] = sorted(glob.glob(os.path.join(features_dir, pattern)))
-        if not self.paths:
-            raise FileNotFoundError(f"No files matched: {features_dir}/{pattern}")
+    # 尝试列名 'x'，否则退化为第 0 列
+    try:
+        col = tbl.column("x")
+    except KeyError:
+        col = tbl.columns[0]
 
-        self._epoch_pat = re.compile(r"^epoch_(\d+)$")
-        self._total_epochs: Optional[int] = None
-        self._rs_count = 0
-        self.logger: Optional[logging.Logger] = None
-        self.save_dir = ""
+    # 转 numpy (C, T)
+    if isinstance(col, pa.ChunkedArray):
+        arrs = []
+        for chunk in col.chunks:
+            arrs.extend(chunk.to_pylist())
+        mat = np.asarray(arrs, dtype=np.float32)
+    else:
+        mat = np.asarray(col.to_pylist(), dtype=np.float32)
 
-    # ---------------- logging ----------------
-    def _init_logger(self, save_dir: str):
-        os.makedirs(save_dir, exist_ok=True)
-        logger = logging.getLogger("AnalysisManager")
-        logger.setLevel(logging.INFO)
-        logger.handlers.clear()
+    if mat.ndim == 1:
+        mat = mat.reshape(1, -1)
+    return mat  # (C, T)
 
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        ch.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", "%H:%M:%S"))
 
-        fh = logging.FileHandler(os.path.join(save_dir, "run.log"), encoding="utf-8")
-        fh.setLevel(logging.INFO)
-        fh.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
+# ----------------------------
+# 抽样策略
+# ----------------------------
+def stratified_by_label(df_idx: pd.DataFrame, per_cluster: int, seed: int = 42) -> pd.DataFrame:
+    """按 label 分层抽样，每个簇最多取 per_cluster 个 patch"""
+    rng = np.random.default_rng(seed)
+    parts = []
+    for lab, g in df_idx.groupby("label"):
+        n = min(per_cluster, len(g))
+        parts.append(g.sample(n=n, random_state=int(rng.integers(1_000_000_000))))
+    out = pd.concat(parts, ignore_index=True)
+    return out.sample(frac=1.0, random_state=seed).reset_index(drop=True)
 
-        logger.addHandler(ch)
-        logger.addHandler(fh)
-        self.logger = logger
 
-    def log(self, msg: str):
-        print(msg)
-        if self.logger:
-            self.logger.info(msg)
+def stratified_by_label_pid(df_idx: pd.DataFrame, per_bucket: int, seed: int = 42) -> pd.DataFrame:
+    """按 (label, pid) 分层抽样，每个桶最多取 per_bucket 个，覆盖 15 个 patch 位置"""
+    rng = np.random.default_rng(seed)
+    parts = []
+    for (lab, pid), g in df_idx.groupby(["label", "pid"]):
+        n = min(per_bucket, len(g))
+        parts.append(g.sample(n=n, random_state=int(rng.integers(1_000_000_000))))
+    out = pd.concat(parts, ignore_index=True)
+    return out.sample(frac=1.0, random_state=seed).reset_index(drop=True)
 
-    # ---------------- I/O ----------------
-    def iter_epochs_raw(self):
-        """Deterministic iteration: yield (subject_id, epoch_id, raw_array)."""
-        for p in self.paths:
-            sid = os.path.splitext(os.path.basename(p))[0]
-            with h5py.File(p, "r") as f:
-                keys = []
-                for k in f.keys():
-                    m = self._epoch_pat.match(k)
-                    if m:
-                        keys.append((int(m.group(1)), k))
-                keys.sort(key=lambda t: t[0])
-                for eid, kk in keys:
-                    yield sid, eid, f[kk][()]
 
-    def count_epochs(self) -> int:
-        if self._total_epochs is not None:
-            return self._total_epochs
-        total = 0
-        for p in self.paths:
-            with h5py.File(p, "r") as f:
-                total += sum(1 for k in f.keys() if self._epoch_pat.match(k))
-        self._total_epochs = total
-        return total
+# ----------------------------
+# PSD 计算
+# ----------------------------
+def slice_patch(signal_1d: np.ndarray, pid: int, fs: int, patch_sec: float = 2.0) -> np.ndarray:
+    """
+    从 30s epoch 中切出第 pid 个 patch（0-based），每个 patch = 2s。
+    假设 epoch 总长度 T=3000（fs=100）→ 15 个 patch × 200 点。
+    """
+    seg_len = int(round(patch_sec * fs))  # e.g., 200
+    start = pid * seg_len
+    end = start + seg_len
+    if end > signal_1d.shape[-1]:
+        end = signal_1d.shape[-1]
+    return signal_1d[start:end]
 
-    # ---------------- shape restore (CRITICAL) ----------------
-    def to_channels_patches1536(self, raw: np.ndarray) -> np.ndarray:
-        """
-        Restore to (4,15,1536) = (channel, patch, embedding).
-        Assumptions:
-          - During saving, 4×15×1536 was flattened to (60,1536) WITHOUT transpose.
-          - Row 0 of (61,1536) is CLS, rows 1..60 are patches in the same flattened order.
-        Supported inputs:
-          * (61,1536) -> drop CLS -> reshape(4,15,1536)
-          * (60,1536) -> reshape(4,15,1536)
-          * (15,4,2,768) -> concat domains -> (15,4,1536) -> transpose to (4,15,1536)
-        """
-        if raw.shape == (61, 1536):
-            raw = raw[1:, :]  # remove CLS -> (60,1536)
 
-        if raw.shape == (60, 1536):
-            return raw.reshape(4, 15, 1536)
-
-        if raw.shape == (15, 4, 2, 768):
-            v = np.concatenate([raw[..., 0, :], raw[..., 1, :]], axis=-1)  # (15,4,1536)
-            return v.transpose(1, 0, 2)  # (4,15,1536)
-
-        raise ValueError(f"Unsupported raw shape: {raw.shape}")
-
-    # ---------------- feature builders ----------------
-    def vec_concat1536(self, raw: np.ndarray) -> np.ndarray:
-        """
-        Epoch → 1536 vector by averaging across channel & patch, while keeping domains concatenated.
-        """
-        v = self.to_channels_patches1536(raw)  # (4,15,1536)
-        return v.mean(axis=(0, 1))            # (1536,)
-
-    def vec_mean768(self, raw: np.ndarray) -> np.ndarray:
-        """
-        Epoch → 768 vector by averaging time/freq halves after averaging channel & patch.
-        """
-        v = self.to_channels_patches1536(raw)  # (4,15,1536)
-        time = v[..., :768].mean(axis=(0, 1))  # (768,)
-        freq = v[..., 768:].mean(axis=(0, 1))  # (768,)
-        return 0.5 * (time + freq)             # (768,)
-
-    def patches_matrix(self, raw: np.ndarray, patch_feat: str = "concat1536") -> np.ndarray:
-        """
-        Return patch matrix of shape (4,15,D).
-        - patch_feat == "concat1536": D=1536 (time||freq)
-        - patch_feat == "mean768"   : D=768  (avg over time/freq)
-        """
-        v = self.to_channels_patches1536(raw)  # (4,15,1536)
-        if patch_feat == "concat1536":
-            return v  # (4,15,1536)
-        elif patch_feat == "mean768":
-            time = v[..., :768]
-            freq = v[..., 768:]
-            return 0.5 * (time + freq)  # (4,15,768)
+def compute_psd_batch(batch_signals: np.ndarray, fs: int, nperseg: int = 128) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    对一批 1D 信号（形状 [N, T]）计算 Welch PSD，返回 (freqs, psd_matrix[dB])
+    """
+    psd_list = []
+    freqs_ref = None
+    for sig in batch_signals:
+        nps = min(nperseg, len(sig))
+        if nps < 8:  # 信号太短则跳过
+            continue
+        f, Pxx = welch(sig, fs=fs, nperseg=nps, detrend="constant", scaling="density")
+        if freqs_ref is None:
+            freqs_ref = f
         else:
-            raise ValueError(f"Unknown patch_feat: {patch_feat}")
+            # 若不同（极少见），就按最短长度对齐
+            m = min(len(freqs_ref), len(f))
+            freqs_ref = freqs_ref[:m]; Pxx = Pxx[:m]
+        Pxx_db = 10.0 * np.log10(np.maximum(Pxx, 1e-20))
+        psd_list.append(Pxx_db)
+    if not psd_list:
+        return None, None
+    psd = np.stack(psd_list, axis=0)  # [N, F]
+    return freqs_ref, psd
 
-    def patches_15xD(self, raw: np.ndarray, patch_feat: str = "mean768",
-                     channel_agg: str = "mean") -> np.ndarray:
-        """
-        Patch-level vector per epoch: (15, D).
-        Build from (4,15,D) by aggregating channel.
-        channel_agg: "mean" | "none"
-          - "mean": average across channels -> (15,D)
-          - "none": return (4,15,D) (caller handles reshape/stack)
-        """
-        v = self.patches_matrix(raw, patch_feat=patch_feat)  # (4,15,D)
-        if channel_agg == "mean":
-            return v.mean(axis=0)    # (15,D)
-        elif channel_agg == "none":
-            return v                 # (4,15,D)
-        else:
-            raise ValueError(f"Unknown channel_agg: {channel_agg}")
 
-    # ---------------- reservoir sampling for plots ----------------
-    def _reservoir_append(self, feats: list, idxs: list, vec, idx: int, cap: int):
-        self._rs_count += 1
-        if len(feats) < cap:
-            feats.append(vec); idxs.append(idx)
-        else:
-            j = self.rng.randrange(0, self._rs_count)
-            if j < cap:
-                feats[j] = vec; idxs[j] = idx
+# ----------------------------
+# 聚合（只对抽样后的 df_pick）
+# ----------------------------
+def lazy_arrow_path(root: str, sid: str, eid: int, width_cache: dict) -> Optional[str]:
+    """
+    懒计算 .arrow 路径：优先使用 width_cache 中该 subject 的零填充宽度；
+    若没有则现场推断并缓存。
+    """
+    if sid not in width_cache:
+        subj_dir = os.path.join(root, sid)
+        width_cache[sid] = infer_zero_width(subj_dir, default=5)
+    width = width_cache[sid]
+    apath = os.path.join(root, sid, f"{eid:0{width}d}.arrow")
+    return apath if os.path.exists(apath) else None
 
-    # ---------------- save helpers ----------------
-    def _save_epoch_labels(self, save_dir: str, labels: np.ndarray,
-                           order_index: List[Tuple[str, int]]):
-        if len(labels) != len(order_index):
-            raise ValueError("labels length != order_index length")
-        np.save(os.path.join(save_dir, "labels.npy"), labels)
-        with open(os.path.join(save_dir, "index.csv"), "w", encoding="utf-8") as f:
-            f.write("subject,epoch\n")
-            for sid, eid in order_index:
-                f.write(f"{sid},{eid}\n")
-        np.save(os.path.join(save_dir, "subject.npy"),
-                np.array([s for s, _ in order_index], dtype=object))
-        np.save(os.path.join(save_dir, "epoch.npy"),
-                np.array([e for _, e in order_index], dtype=np.int32))
 
-    def _save_patch_labels(self, save_dir: str, labels: np.ndarray,
-                           order_index: List[Tuple[str, int, int]]):
-        """
-        Patch-level: labels aligned with [(sid, eid, pid), ...], pid in [0..14]
-        """
-        if len(labels) != len(order_index):
-            raise ValueError("labels length != order_index length (patch)")
-        np.save(os.path.join(save_dir, "patch_labels.npy"), labels)
-        with open(os.path.join(save_dir, "patch_index.csv"), "w", encoding="utf-8") as f:
-            f.write("subject,epoch,patch\n")
-            for sid, eid, pid in order_index:
-                f.write(f"{sid},{eid},{pid}\n")
+def aggregate_modal_psd(
+    root: str,
+    df_pick: pd.DataFrame,  # 仅抽样后的数据：含 columns [subject, epoch, pid, label]，可选 [arrow_path]
+    fs: int,
+    eeg_idx: List[int],
+    eog_idx: List[int],
+    emg_idx: List[int],
+    nperseg: int = 128,
+    patch_sec: float = 2.0,
+) -> Dict[str, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """
+    从抽样的 patch 列表读取原始 epoch，切出 patch，按模态求 PSD。
+    - EEG/EOG/EMG：多通道时先通道平均为 1D，再切 patch。
+    返回：{"EEG": (f, psd0, psd1), ...}
+    """
+    modal_signals = {
+        "EEG": {0: [], 1: []},
+        "EOG": {0: [], 1: []},
+        "EMG": {0: [], 1: []},
+    }
+    width_cache = {}
 
-    # ---------------- generic epoch pipeline ----------------
-    def _pipeline_generic_epoch(self, vec_fn, out_dim: int,
-                                k=2, pca_dim=128, batch_rows=200_000, normalize=True):
-        total = self.count_epochs()
-        scaler = StandardScaler() if normalize else None
+    for _, row in tqdm(df_pick.iterrows(), total=len(df_pick), desc="Load patches"):
+        sid = str(row["subject"])
+        eid = int(row["epoch"])
+        pid = int(row["pid"])
+        lab = int(row["label"])
 
-        # pass1: scaler
-        if scaler is not None:
-            buf = []
-            self.log(f"\n[Pass1] Fit StandardScaler (dim={out_dim})")
-            for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total, desc="Scaler", ncols=100):
-                buf.append(vec_fn(raw))
-                if len(buf) >= batch_rows:
-                    scaler.partial_fit(np.stack(buf, 0)); buf = []
-            if buf:
-                scaler.partial_fit(np.stack(buf, 0)); buf = []
+        apath = row["arrow_path"] if "arrow_path" in row and isinstance(row["arrow_path"], str) else None
+        if not apath or not os.path.exists(apath):
+            apath = lazy_arrow_path(root, sid, eid, width_cache)
+            if apath is None:
+                # 找不到就跳过
+                continue
 
-        # pass2: ipca
-        ipca = IncrementalPCA(n_components=min(pca_dim, out_dim))
-        buf = []
-        self.log("[Pass2] Fit IncrementalPCA")
-        for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total, desc="PCA", ncols=100):
-            buf.append(vec_fn(raw))
-            if len(buf) >= batch_rows:
-                X = np.stack(buf, 0)
-                if scaler is not None: X = scaler.transform(X)
-                ipca.partial_fit(X); buf = []
-        if buf:
-            X = np.stack(buf, 0)
-            if scaler is not None: X = scaler.transform(X)
-            ipca.partial_fit(X); buf = []
+        try:
+            mat = read_arrow_matrix(apath)  # (C, T)
+        except Exception:
+            continue
 
-        # pass3: kmeans
-        km = MiniBatchKMeans(n_clusters=k, batch_size=4096, random_state=self.seed)
-        buf = []
-        self.log("[Pass3] Fit MiniBatchKMeans")
-        for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total, desc="KMeans", ncols=100):
-            buf.append(vec_fn(raw))
-            if len(buf) >= batch_rows:
-                X = np.stack(buf, 0)
-                if scaler is not None: X = scaler.transform(X)
-                Xp = ipca.transform(X)
-                km.partial_fit(Xp); buf = []
-        if buf:
-            X = np.stack(buf, 0)
-            if scaler is not None: X = scaler.transform(X)
-            Xp = ipca.transform(X)
-            km.partial_fit(Xp)
-
-        # pass4: predict + order
-        labels = np.empty(total, np.int8)
-        order_index: List[Tuple[str, int]] = []
-        buf = []; i = 0
-        self.log("[Pass4] Predict")
-        for sid, eid, raw in tqdm(self.iter_epochs_raw(), total=total, desc="Predict", ncols=100):
-            buf.append(vec_fn(raw))
-            order_index.append((sid, eid))
-            if len(buf) >= batch_rows:
-                X = np.stack(buf, 0)
-                if scaler is not None: X = scaler.transform(X)
-                Xp = ipca.transform(X)
-                labels[i:i+len(buf)] = km.predict(Xp); i += len(buf); buf = []
-        if buf:
-            X = np.stack(buf, 0)
-            if scaler is not None: X = scaler.transform(X)
-            Xp = ipca.transform(X)
-            labels[i:i+len(buf)] = km.predict(Xp)
-
-        return scaler, ipca, km, labels, order_index
-
-    def _pipeline_mean768(self, **kw):
-        return self._pipeline_generic_epoch(self.vec_mean768, out_dim=768, **kw)
-
-    def _pipeline_concat1536(self, **kw):
-        return self._pipeline_generic_epoch(self.vec_concat1536, out_dim=1536, **kw)
-
-    # ---------------- patch-level pipeline ----------------
-    def _pipeline_patch_level(
-            self,
-            patch_feat: str = "mean768",  # "mean768" | "concat1536"
-            channel_agg: str = "mean",  # "mean" | "none"
-            k: int = 2,
-            pca_dim: int = 64,
-            batch_rows: int = 200_000,  # 累计到这么多行再做一次 partial_fit；会与 pca_dim 取 max
-            normalize: bool = True,
-            output_mode: str = "per_patch",  # "per_patch" | "per_channel_patch" | "both"
-    ):
-        """
-        跨所有 subject/epoch 的 patch 级聚类。
-
-        - patch_feat:
-            * "mean768"     : 取 (time,freq) 平均后的 768 维
-            * "concat1536"  : 保留拼接后的 1536 维
-        - channel_agg:
-            * "mean"  : 每 epoch 得到 [15, D]
-            * "none"  : 每 epoch 得到 [4,15,D]，训练时按 (60,D) 压平；预测可输出：
-                - per_channel_patch：60 个 label（索引含通道）
-                - per_patch：对同 patch 的 4 通道做投票得到 15 个 label
-        - output_mode:
-            * "per_patch"（默认）只保存 15 个/epoch；
-            * "per_channel_patch" 保存 60 个/epoch；
-            * "both" 两者都保存（返回 per_patch 为主，同时把 per_channel_patch 也落盘为 .npz）
-        """
-
-        assert output_mode in ("per_patch", "per_channel_patch", "both")
-        total_epochs = self.count_epochs()
-
-        # --------- 工具：构建每个 epoch 的 patch 矩阵 ---------
-        def build(raw: np.ndarray) -> np.ndarray:
-            """
-            返回：
-              channel_agg == 'mean'  →  (15, D)
-              channel_agg == 'none'  →  (60, D) （训练/拟合阶段直接压平）
-            并记录 (对 'none' 的预测阶段) 的 reshape 形状以便还原 4×15。
-            """
-            M = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg=channel_agg)
-            if channel_agg == "mean":  # (15, D)
-                return M
-            else:  # (4,15,D) -> (60,D)
-                D = M.shape[-1]
-                return M.reshape(-1, D)
-
-        # 维度 D
-        # 用第一条样本探测
-        first_raw = next(self.iter_epochs_raw())[2]
-        P0 = build(first_raw)
-        D = P0.shape[-1]
-        if pca_dim > D:
-            self.log(f"[warn] pca_dim={pca_dim} > feature_dim={D}, 改为 pca_dim={D}")
-            pca_dim = D
-
-        # --------- 模型 ---------
-        scaler = StandardScaler() if normalize else None
-        ipca = IncrementalPCA(n_components=pca_dim)
-        km = MiniBatchKMeans(n_clusters=k, batch_size=4096, random_state=self.seed)
-
-        # 每次 partial_fit 的最小样本行数（防止 < n_components）
-        min_chunk = max(pca_dim, 8192)  # 8k 行起跳，按内存自行调整
-        th_scaler = max(min_chunk, batch_rows)
-        th_ipca = max(min_chunk, batch_rows)
-        th_km = max(min_chunk, batch_rows)
-
-        # =========================================================
-        # Pass1: Scaler（按 patch 行累积）
-        # =========================================================
-        if scaler is not None:
-            buf, rows = [], 0
-            self.log(f"\n[Pass1] Fit StandardScaler (patch-level, feat={patch_feat}, agg={channel_agg})")
-            for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="Scaler(patch)", ncols=100):
-                P = build(raw)  # (15,D) or (60,D)
-                buf.append(P);
-                rows += P.shape[0]
-                if rows >= th_scaler:
-                    X = np.vstack(buf)  # (N, D)
-                    scaler.partial_fit(X)
-                    buf, rows = [], 0
-            if rows > 0:
-                X = np.vstack(buf)
-                scaler.partial_fit(X)
-
-        # =========================================================
-        # Pass2: IPCA（按 patch 行累积；批大小 ≥ pca_dim）
-        # =========================================================
-        self.log("[Pass2] Fit IncrementalPCA (patch-level)")
-        buf, rows = [], 0
-        for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="PCA(patch)", ncols=100):
-            P = build(raw)
-            if scaler is not None: P = scaler.transform(P)
-            buf.append(P);
-            rows += P.shape[0]
-            if rows >= th_ipca:
-                X = np.vstack(buf)
-                ipca.partial_fit(X)
-                buf, rows = [], 0
-        if rows >= pca_dim:
-            X = np.vstack(buf)
-            ipca.partial_fit(X)
-        elif rows > 0:
-            self.log(f"[warn] tail rows {rows} < n_components={pca_dim}; skip last IPCA chunk.")
-
-        # =========================================================
-        # Pass3: MiniBatchKMeans（按 patch 行累积）
-        # =========================================================
-        self.log("[Pass3] Fit MiniBatchKMeans (patch-level)")
-        buf, rows = [], 0
-        for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="KMeans(patch)", ncols=100):
-            P = build(raw)
-            if scaler is not None: P = scaler.transform(P)
-            Xp = ipca.transform(P)
-            buf.append(Xp);
-            rows += Xp.shape[0]
-            if rows >= th_km:
-                km.partial_fit(np.vstack(buf))
-                buf, rows = [], 0
-        if rows > 0:
-            km.partial_fit(np.vstack(buf))
-
-        # =========================================================
-        # Pass4: 预测 + 索引
-        # =========================================================
-        self.log("[Pass4] Predict (patch-level)")
-        per_patch_labels: List[int] = []
-        per_patch_index: List[Tuple[str, int, int]] = []  # (sid, eid, pid)
-
-        per_ch_patch_labels: List[int] = []  # 可选
-        per_ch_patch_index: List[Tuple[str, int, int, int]] = []  # (sid, eid, ch, pid)
-
-        for sid, eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="Predict(patch)", ncols=100):
-            if channel_agg == "mean":
-                # (15, D) → 15 labels
-                P = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg="mean")  # (15,D)
-                P2 = scaler.transform(P) if scaler is not None else P
-                Xp = ipca.transform(P2)
-                labs = km.predict(Xp)  # (15,)
-                per_patch_labels.extend(labs.tolist())
-                for pid in range(15):
-                    per_patch_index.append((sid, eid, pid))
-
-            else:
-                # channel_agg == "none": (4,15,D)
-                M = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg="none")  # (4,15,D)
-                P = M.reshape(-1, M.shape[-1])  # (60,D)
-                P2 = scaler.transform(P) if scaler is not None else P
-                Xp = ipca.transform(P2)
-                labs60 = km.predict(Xp).reshape(4, 15)  # (4,15)
-
-                if output_mode in ("per_channel_patch", "both"):
-                    per_ch_patch_labels.extend(labs60.ravel().tolist())
-                    for ch in range(4):
-                        for pid in range(15):
-                            per_ch_patch_index.append((sid, eid, ch, pid))
-
-                if output_mode in ("per_patch", "both"):
-                    # 多数投票 → 15
-                    maj = np.apply_along_axis(lambda a: np.bincount(a).argmax(), 0, labs60)  # (15,)
-                    per_patch_labels.extend(maj.tolist())
-                    for pid in range(15):
-                        per_patch_index.append((sid, eid, pid))
-
-        # ------- 返回与保存（以 per_patch 为主）-------
-        labels_arr = np.array(per_patch_labels, dtype=np.int16)
-        # 索引保存：主 labels（per_patch）
-        np.save(os.path.join(self.save_dir, "patch_labels.npy"), labels_arr)
-        with open(os.path.join(self.save_dir, "patch_index.csv"), "w", encoding="utf-8") as fw:
-            fw.write("subject,epoch,patch\n")
-            for s, e, p in per_patch_index:
-                fw.write(f"{s},{e},{p}\n")
-
-        # 如果需要 per_channel_patch，一并落盘（npz + csv）
-        if output_mode in ("per_channel_patch", "both"):
-            labels_ch = np.array(per_ch_patch_labels, dtype=np.int16)
-            np.save(os.path.join(self.save_dir, "patch_labels_4x15.npy"), labels_ch)
-            with open(os.path.join(self.save_dir, "patch_index_4x15.csv"), "w", encoding="utf-8") as fw:
-                fw.write("subject,epoch,channel,patch\n")
-                for s, e, ch, p in per_ch_patch_index:
-                    fw.write(f"{s},{e},{ch},{p}\n")
-
-        return scaler, ipca, km, labels_arr, per_patch_index
-
-    # ---------------- visualization ----------------
-    def visualize_kmeans_pca2d_epoch(self, save_dir: str, mode: str, sample_n: int = 200_000):
-        import matplotlib.pyplot as plt
-        labels = np.load(os.path.join(save_dir, "labels.npy"))
-        pca = joblib.load(os.path.join(save_dir, "pca.pkl"))
-        scaler_path = os.path.join(save_dir, "scaler.pkl")
-        scaler = joblib.load(scaler_path) if os.path.exists(scaler_path) else None
-
-        feats, idxs = [], []
-        self._rs_count = 0
-        total = self.count_epochs()
-        self.log("\n[Plot] PCA 2D (epoch-level)")
-        for i, (_sid, _eid, raw) in enumerate(tqdm(self.iter_epochs_raw(), total=total, desc="Sample(PCA-epoch)", ncols=100)):
-            if mode == "mean768":
-                v = self.vec_mean768(raw)
-            else:
-                v = self.vec_concat1536(raw)
-            self._reservoir_append(feats, idxs, v, i, cap=sample_n)
-
-        X = np.stack(feats, 0)
-        if scaler is not None:
-            X = scaler.transform(X)
-        Xp = pca.transform(X)[:, :2]
-        y = labels[np.array(idxs, dtype=int)]
-
-        plt.figure(figsize=(8, 8))
-        plt.scatter(Xp[:, 0], Xp[:, 1], c=y, s=3, alpha=0.7, cmap="tab10")
-        plt.title(f"Epoch KMeans@PCA · {mode} · n={len(y)}")
-        plt.tight_layout()
-        out = os.path.join(save_dir, f"kmeans_pca2d_epoch_{mode}.png")
-        plt.savefig(out, dpi=300); plt.close()
-        self.log(f"[plot] Saved: {out}")
-
-    def visualize_umap_epoch(self, save_dir: str, mode: str,
-                             sample_n: int = 100_000,
-                             use_training_space: bool = True,
-                             pca_dim_local: int = 64):
-        if not HAS_UMAP:
-            self.log("[warn] umap-learn not installed; skip UMAP.")
-            return
-        import matplotlib.pyplot as plt
-
-        # sample epoch vectors
-        feats, idxs = [], []
-        self._rs_count = 0
-        total = self.count_epochs()
-
-        def _vec(raw):
-            if mode == "mean768":
-                return self.vec_mean768(raw)
-            return self.vec_concat1536(raw)
-
-        for i, (_sid, _eid, raw) in enumerate(tqdm(self.iter_epochs_raw(), total=total, desc="Sample(UMAP-epoch)", ncols=100)):
-            v = _vec(raw)
-            self._reservoir_append(feats, idxs, v, i, cap=sample_n)
-
-        X = np.stack(feats, 0).astype(np.float32, copy=False)
-        idxs = np.array(idxs, dtype=np.int64)
-
-        # project to training space (scaler + pca) if available
-        scaler_path = os.path.join(save_dir, "scaler.pkl")
-        pca_path = os.path.join(save_dir, "pca.pkl")
-        used_space = "raw"
-        X_u = X
-
-        if use_training_space and os.path.exists(pca_path):
+        # EEG
+        if eeg_idx:
             try:
-                pca = joblib.load(pca_path)
-                if os.path.exists(scaler_path):
-                    scaler = joblib.load(scaler_path)
-                    X_u = scaler.transform(X_u)
-                    used_space = "scaler+pca"
-                else:
-                    used_space = "pca-only"
-                X_u = pca.transform(X_u)
-            except Exception as e:
-                self.log(f"[warn] load training pca/scaler failed: {e}; fallback to local.")
-                use_training_space = False
+                eeg_avg = mat[eeg_idx, :].mean(axis=0)
+                patch = slice_patch(eeg_avg, pid, fs, patch_sec=patch_sec)
+                modal_signals["EEG"][lab].append(patch)
+            except Exception:
+                pass
 
-        if not use_training_space:
-            scaler_local = StandardScaler().fit(X_u)
-            Xs = scaler_local.transform(X_u)
-            if pca_dim_local and pca_dim_local < Xs.shape[1]:
-                X_u = PCA(n_components=pca_dim_local, random_state=self.seed).fit_transform(Xs)
-                used_space = f"local(scaler+pca{pca_dim_local})"
-            else:
-                X_u = Xs
-                used_space = "local(scaler-only)"
-
-        reducer = umap.UMAP(n_neighbors=25, min_dist=0.1, random_state=self.seed)
-        emb = reducer.fit_transform(X_u)
-
-        labels_path = os.path.join(save_dir, "labels.npy")
-        y = None
-        if os.path.exists(labels_path):
-            y_all = np.load(labels_path)
-            if idxs.max() < len(y_all):
-                y = y_all[idxs]
-
-        plt.figure(figsize=(8, 8))
-        if y is None:
-            plt.scatter(emb[:, 0], emb[:, 1], s=3, alpha=0.7)
-        else:
-            plt.scatter(emb[:, 0], emb[:, 1], c=y, s=3, alpha=0.7, cmap="tab10")
-        plt.title(f"UMAP 2D (epoch) · {mode} · n={emb.shape[0]} · space={used_space}")
-        plt.tight_layout()
-        out = os.path.join(save_dir, f"umap2d_epoch_{mode}.png")
-        plt.savefig(out, dpi=300); plt.close()
-        self.log(f"[plot] Saved: {out}")
-
-    # ---------------- diagnostics ----------------
-    def diagnose_epoch(self, save_dir: str, mode: str,
-                       sample_n: int = 100_000,
-                       metrics_sample_n: int = 100_000):
-        """
-        Compute internal metrics (epoch-level) in PCA space used for KMeans.
-        """
-        pca_path = os.path.join(save_dir, "pca.pkl")
-        km_path = os.path.join(save_dir, "kmeans.pkl")
-        lab_path = os.path.join(save_dir, "labels.npy")
-        if not (os.path.exists(pca_path) and os.path.exists(km_path)):
-            self.log("[diagnose] missing models; skip")
-            return
-
-        pca = joblib.load(pca_path)
-        km = joblib.load(km_path)
-        scaler = joblib.load(os.path.join(save_dir, "scaler.pkl")) if os.path.exists(os.path.join(save_dir, "scaler.pkl")) else None
-        labels = np.load(lab_path) if os.path.exists(lab_path) else None
-
-        # sample
-        feats, idxs = [], []
-        self._rs_count = 0
-        total = self.count_epochs()
-
-        def _vec(raw):
-            if mode == "mean768":
-                return self.vec_mean768(raw)
-            return self.vec_concat1536(raw)
-
-        for i, (_sid, _eid, raw) in enumerate(tqdm(self.iter_epochs_raw(), total=total, desc="Diag-sample", ncols=100)):
-            v = _vec(raw)
-            self._reservoir_append(feats, idxs, v, i, cap=max(sample_n, metrics_sample_n))
-
-        X = np.stack(feats, 0).astype(np.float32, copy=False)
-        idxs = np.array(idxs, dtype=np.int64)
-        if scaler is not None:
-            X = scaler.transform(X)
-        Xp = pca.transform(X)
-        if labels is not None and idxs.max() < len(labels):
-            y = labels[idxs]
-        else:
-            y = km.predict(Xp)
-
-        msel = min(metrics_sample_n, Xp.shape[0])
-        Xm, ym = Xp[:msel], y[:msel]
-
-        metrics = {}
-        metrics["n_samples_total"] = int(total)
-        metrics["n_samples_sampled"] = int(Xp.shape[0])
-        metrics["n_metrics_used"] = int(msel)
-        metrics["k"] = int(km.n_clusters)
-
-        uniq, cnts = np.unique(y, return_counts=True)
-        metrics["cluster_counts"] = {int(k): int(v) for k, v in zip(uniq, cnts)}
-        metrics["balance_ratio"] = float(cnts.min() / cnts.max()) if len(cnts) > 1 else 1.0
-
-        metrics["inertia_sample"] = float(
-            np.mean(np.min(((Xm[:, None, :] - km.cluster_centers_[None, :, :]) ** 2).sum(-1), axis=1))
-        )
-
-        cd = ((km.cluster_centers_[:, None, :] - km.cluster_centers_[None, :, :]) ** 2).sum(-1)
-        cd = cd + np.eye(cd.shape[0]) * 1e9
-        metrics["min_center_dist_pca"] = float(np.sqrt(cd.min()))
-
-        try:
-            metrics["silhouette"] = float(silhouette_score(Xm, ym, metric="euclidean"))
-        except Exception as e:
-            metrics["silhouette"] = f"err: {e}"
-        try:
-            metrics["calinski_harabasz"] = float(calinski_harabasz_score(Xm, ym))
-        except Exception as e:
-            metrics["calinski_harabasz"] = f"err: {e}"
-        try:
-            metrics["davies_bouldin"] = float(davies_bouldin_score(Xm, ym))
-        except Exception as e:
-            metrics["davies_bouldin"] = f"err: {e}"
-
-        with open(os.path.join(save_dir, "metrics.json"), "w", encoding="utf-8") as f:
-            json.dump(metrics, f, indent=2)
-        self.log(f"[diagnose] metrics.json saved: {metrics}")
-
-        # PCA-2D plot
-        try:
-            import matplotlib.pyplot as plt
-            Xp2 = Xp[:, :2]
-            plt.figure(figsize=(8, 8))
-            plt.scatter(Xp2[:, 0], Xp2[:, 1], c=y, s=3, alpha=0.8, cmap="tab10")
-            plt.title(f"PCA-2D (epoch) · k={km.n_clusters} · n={Xp2.shape[0]}")
-            plt.tight_layout()
-            out = os.path.join(save_dir, f"pca2d_epoch_{mode}.png")
-            plt.savefig(out, dpi=300); plt.close()
-            self.log(f"[plot] {out}")
-        except Exception as e:
-            self.log(f"[warn] PCA-2D plot failed: {e}")
-
-        # UMAP
-        if HAS_UMAP:
+        # EOG
+        if eog_idx:
             try:
-                self.visualize_umap_epoch(save_dir=save_dir, mode=mode, sample_n=min(sample_n, 200_000),
-                                          use_training_space=True, pca_dim_local=64)
-            except Exception as e:
-                self.log(f"[warn] UMAP plot failed: {e}")
+                eog_avg = mat[eog_idx, :].mean(axis=0)
+                patch = slice_patch(eog_avg, pid, fs, patch_sec=patch_sec)
+                modal_signals["EOG"][lab].append(patch)
+            except Exception:
+                pass
 
-    # ---------------- summarize ----------------
-    def summarize_epoch(self, save_dir: str):
-        labels = np.load(os.path.join(save_dir, "labels.npy"))
-        subs = np.load(os.path.join(save_dir, "subject.npy"), allow_pickle=True).tolist()
-        vals, cnts = np.unique(labels, return_counts=True)
-        self.log("== Cluster counts (epoch) ==")
-        for v, c in zip(vals, cnts):
-            self.log(f"  cluster {v}: {c}")
+        # EMG
+        if emg_idx:
+            try:
+                emg_avg = mat[emg_idx, :].mean(axis=0)
+                patch = slice_patch(emg_avg, pid, fs, patch_sec=patch_sec)
+                modal_signals["EMG"][lab].append(patch)
+            except Exception:
+                pass
 
-    def summarize_patch(self, save_dir: str):
-        labels = np.load(os.path.join(save_dir, "patch_labels.npy"))
-        vals, cnts = np.unique(labels, return_counts=True)
-        self.log("== Cluster counts (patch) ==")
-        for v, c in zip(vals, cnts):
-            self.log(f"  cluster {v}: {c}")
-
-    # ---------------- run ----------------
-    def run(self,
-            save_dir: str,
-            level: str = "epoch",               # "epoch" | "patch"
-            mode: str = "concat1536",           # epoch: "concat1536" | "mean768"
-            k: int = 2,
-            pca_dim: int = 128,
-            batch_rows: int = 200_000,
-            normalize: bool = True,
-            # patch options
-            patch_feat: str = "mean768",        # "mean768" | "concat1536"
-            channel_agg: str = "mean",
-            # viz/diag
-            do_diagnose: bool = True,
-            do_plot: bool = True):
-        os.makedirs(save_dir, exist_ok=True)
-        self.save_dir = save_dir
-        self._init_logger(save_dir)
-        t0 = time.time()
-        self.log(f"Start run: level={level}, mode={mode}, k={k}, pca_dim={pca_dim}, normalize={normalize}")
-        self.log(f"features_dir={self.features_dir}, files={len(self.paths)}, total_epochs={self.count_epochs()}")
-
-        if level == "epoch":
-            if mode == "mean768":
-                scaler, ipca, km, labels, order_index = self._pipeline_mean768(
-                    k=k, pca_dim=min(64, pca_dim), batch_rows=batch_rows, normalize=normalize
-                )
-            elif mode == "concat1536":
-                scaler, ipca, km, labels, order_index = self._pipeline_concat1536(
-                    k=k, pca_dim=pca_dim, batch_rows=batch_rows, normalize=normalize
-                )
-            else:
-                raise ValueError(f"Unknown epoch mode: {mode}")
-
-            if scaler is not None:
-                joblib.dump(scaler, os.path.join(save_dir, "scaler.pkl"))
-            joblib.dump(ipca, os.path.join(save_dir, "pca.pkl"))
-            joblib.dump(km,  os.path.join(save_dir, "kmeans.pkl"))
-            self._save_epoch_labels(save_dir, labels, order_index)
-
-            with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
-                json.dump(dict(level=level, mode=mode, k=k, pca_dim=pca_dim,
-                               batch_rows=batch_rows, normalize=normalize), f, indent=2)
-
-            if do_diagnose:
-                self.diagnose_epoch(save_dir, mode=mode, sample_n=100_000, metrics_sample_n=min(100_000, self.count_epochs()))
-            if do_plot:
-                try:
-                    self.visualize_kmeans_pca2d_epoch(save_dir, mode=mode, sample_n=min(200_000, self.count_epochs()))
-                except Exception as e:
-                    self.log(f"[warn] PCA plot failed: {e}")
-                if HAS_UMAP:
-                    try:
-                        self.visualize_umap_epoch(save_dir, mode=mode, sample_n=100_000, use_training_space=True)
-                    except Exception as e:
-                        self.log(f"[warn] UMAP plot failed: {e}")
-
-            self.summarize_epoch(save_dir)
-
-        elif level == "patch":
-            scaler, ipca, km, labels, order_index = self._pipeline_patch_level(
-                patch_feat=patch_feat,
-                channel_agg=channel_agg,
-                k=k,
-                pca_dim=min(64, pca_dim),
-                batch_rows=batch_rows,
-                normalize=normalize
-            )
-            if scaler is not None:
-                joblib.dump(scaler, os.path.join(save_dir, "scaler.pkl"))
-            joblib.dump(ipca, os.path.join(save_dir, "pca.pkl"))
-            joblib.dump(km,  os.path.join(save_dir, "kmeans.pkl"))
-
-            self._save_patch_labels(save_dir, labels, order_index)
-            with open(os.path.join(save_dir, "config.json"), "w", encoding="utf-8") as f:
-                json.dump(dict(level=level, patch_feat=patch_feat, channel_agg=channel_agg,
-                               k=k, pca_dim=pca_dim, batch_rows=batch_rows, normalize=normalize), f, indent=2)
-
-            self.summarize_patch(save_dir)
-        else:
-            raise ValueError(f"Unknown level: {level}")
-
-        self.log(f"[Done] Total time: {time.time()-t0:.1f}s")
+    out = {}
+    for key in ["EEG", "EOG", "EMG"]:
+        lst0 = modal_signals[key][0]
+        lst1 = modal_signals[key][1]
+        if len(lst0) == 0 or len(lst1) == 0:
+            continue
+        sig0 = np.stack(lst0, axis=0)  # [N0, T]
+        sig1 = np.stack(lst1, axis=0)  # [N1, T]
+        f, psd0 = compute_psd_batch(sig0, fs, nperseg=nperseg)
+        f2, psd1 = compute_psd_batch(sig1, fs, nperseg=nperseg)
+        if f is None or f2 is None:
+            continue
+        if not np.allclose(f, f2):
+            m = min(len(f), len(f2))
+            f, psd0, psd1 = f[:m], psd0[:, :m], psd1[:, :m]
+        out[key] = (f, psd0, psd1)
+    return out
 
 
-# ---------------- CLI ----------------
-def build_argparser():
-    ap = argparse.ArgumentParser(description="REM clustering (epoch-level & patch-level)")
-    ap.add_argument("--features_dir", type=str, required=True)
-    ap.add_argument("--pattern", type=str, default="*.h5")
-    ap.add_argument("--save_dir", type=str, required=True)
+# ----------------------------
+# 绘图（均值±std + p 值）
+# ----------------------------
+def plot_modal_psd_with_pvalue(f, psd0, psd1, title, out_png):
+    """
+    画 2×1：上面是两组 PSD 的均值±标准差；下面是 -log10(p)，并用阴影标出 p<0.05 的区域。
+    """
+    m0, s0 = psd0.mean(axis=0), psd0.std(axis=0)
+    m1, s1 = psd1.mean(axis=0), psd1.std(axis=0)
 
-    ap.add_argument("--level", type=str, default="epoch", choices=["epoch", "patch"])
+    # 逐频点 Welch t-test
+    pvals = np.array([ttest_ind(psd0[:, i], psd1[:, i], equal_var=False).pvalue for i in range(len(f))])
+    sig = pvals < 0.05
 
-    # epoch-level
-    ap.add_argument("--mode", type=str, default="concat1536", choices=["concat1536", "mean768"])
+    fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
-    # patch-level options
-    ap.add_argument("--patch_feat", type=str, default="mean768", choices=["mean768", "concat1536"])
-    ap.add_argument("--channel_agg", type=str, default="mean", choices=["mean", "none"])
+    # 上图：均值±std
+    axes[0].plot(f, m0, label=f"Cluster 0 (n={psd0.shape[0]})")
+    axes[0].fill_between(f, m0 - s0, m0 + s0, alpha=0.2)
+    axes[0].plot(f, m1, label=f"Cluster 1 (n={psd1.shape[0]})")
+    axes[0].fill_between(f, m1 - s1, m1 + s1, alpha=0.2)
+    axes[0].set_ylabel("PSD (dB/Hz)")
+    axes[0].set_title(title)
+    axes[0].legend()
 
-    # shared
-    ap.add_argument("--k", type=int, default=2)
-    ap.add_argument("--pca_dim", type=int, default=128)
-    ap.add_argument("--batch_rows", type=int, default=200_000)
-    ap.add_argument("--normalize", action="store_true")
-    ap.add_argument("--no-normalize", dest="normalize", action="store_false")
-    ap.set_defaults(normalize=True)
+    # 下图：-log10(p) + 显著性阴影
+    y = -np.log10(np.maximum(pvals, 1e-300))
+    axes[1].plot(f, y, label="-log10(p)")
+    axes[1].fill_between(f, 0, y, where=sig, color="red", alpha=0.25, label="p<0.05")
+    axes[1].set_xlabel("Frequency (Hz)")
+    axes[1].set_ylabel("-log10(p)")
+    axes[1].legend()
 
-    ap.add_argument("--no-diagnose", dest="do_diagnose", action="store_false")
-    ap.add_argument("--diagnose", dest="do_diagnose", action="store_true")
-    ap.set_defaults(do_diagnose=True)
+    plt.tight_layout()
+    plt.savefig(out_png, dpi=300)
+    plt.close()
+    return pvals, m0, m1, s0, s1
 
-    ap.add_argument("--no-plot", dest="do_plot", action="store_false")
-    ap.add_argument("--plot", dest="do_plot", action="store_true")
-    ap.set_defaults(do_plot=True)
 
-    return ap
+# ----------------------------
+# 主流程
+# ----------------------------
+def main():
+    ap = argparse.ArgumentParser("Patch-level PSD diagnosis with per-frequency p-values (sample-then-read)")
+    ap.add_argument("--root", required=True, help="原始 .arrow 根目录（<root>/<subject>/<epoch>.arrow）")
+    ap.add_argument("--result_dir", required=True, help="包含 patch_labels.npy 与 patch_index.csv 的目录")
+    ap.add_argument("--fs", type=int, default=100, help="采样率 Hz（默认 100）")
+    ap.add_argument("--nperseg", type=int, default=128, help="Welch nperseg（2s patch 建议 ≤ 200）")
+
+    # 抽样相关
+    ap.add_argument("--sample_mode", type=str, default="label", choices=["label", "label_pid"],
+                    help="'label'：每簇抽样；'label_pid'：对每个(label,pid)桶抽样")
+    ap.add_argument("--per_cluster", type=int, default=5000, help="sample_mode=label 时，每簇抽样上限")
+    ap.add_argument("--per_bucket", type=int, default=300, help="sample_mode=label_pid 时，每个(label,pid)桶抽样上限")
+    ap.add_argument("--seed", type=int, default=42)
+
+    # 通道索引（基于 mat 的第 0 维）；可传多个
+    ap.add_argument("--eeg_idx", type=int, nargs="*", default=[], help="EEG 通道索引，例如 --eeg_idx 0 1")
+    ap.add_argument("--eog_idx", type=int, nargs="*", default=[], help="EOG 通道索引，例如 --eog_idx 2 3")
+    ap.add_argument("--emg_idx", type=int, nargs="*", default=[], help="EMG 通道索引，例如 --emg_idx 4")
+
+    args = ap.parse_args()
+    out_dir = os.path.join(args.result_dir, "diag_patch_psd")
+    os.makedirs(out_dir, exist_ok=True)
+
+    # 读取 patch-level 标签与索引
+    labels_path = os.path.join(args.result_dir, "patch_labels.npy")
+    index_path = os.path.join(args.result_dir, "patch_index.csv")
+    if not (os.path.exists(labels_path) and os.path.exists(index_path)):
+        raise FileNotFoundError("需要 patch_labels.npy 与 patch_index.csv")
+
+    labels = np.load(labels_path)
+    df_idx = pd.read_csv(index_path)  # 期望列：subject,epoch,pid
+    must_cols = {"subject", "epoch", "pid"}
+    if not must_cols.issubset(df_idx.columns):
+        raise ValueError("patch_index.csv 需包含列：subject,epoch,pid")
+
+    if len(labels) != len(df_idx):
+        raise ValueError(f"labels({len(labels)}) 与 index({len(df_idx)}) 行数不一致")
+
+    df_idx["label"] = labels.astype(int)
+
+    # —— 先抽样 ——（此时不去构造所有行的 arrow_path）
+    if args.sample_mode == "label":
+        df_pick = stratified_by_label(df_idx, per_cluster=args.per_cluster, seed=args.seed)
+    else:  # "label_pid"
+        df_pick = stratified_by_label_pid(df_idx, per_bucket=args.per_bucket, seed=args.seed)
+
+    # 仅对抽样后的 df_pick 构造 arrow_path（可选；若不构造，聚合时会懒计算）
+    # 这里采用“按 subject 分组一次性推断宽度，再拼路径”，减少文件系统访问
+    width_cache = {}
+    arrow_paths = []
+    for _, r in df_pick.iterrows():
+        sid = str(r["subject"]); eid = int(r["epoch"])
+        if sid not in width_cache:
+            subj_dir = os.path.join(args.root, sid)
+            width_cache[sid] = infer_zero_width(subj_dir, default=5)
+        apath = os.path.join(args.root, sid, f"{eid:0{width_cache[sid]}d}.arrow")
+        arrow_paths.append(apath)
+    df_pick = df_pick.copy()
+    df_pick["arrow_path"] = arrow_paths
+
+    # —— 计算 PSD（仅基于抽样子集） ——
+    modal_out = aggregate_modal_psd(
+        root=args.root,
+        df_pick=df_pick,
+        fs=args.fs,
+        eeg_idx=args.eeg_idx,
+        eog_idx=args.eog_idx,
+        emg_idx=args.emg_idx,
+        nperseg=args.nperseg,
+        patch_sec=2.0,
+    )
+
+    # —— 绘图与落盘 ——
+    summary = {
+        "sample_mode": args.sample_mode,
+        "per_cluster": args.per_cluster,
+        "per_bucket": args.per_bucket,
+        "seed": args.seed,
+        "fs": args.fs,
+        "nperseg": args.nperseg,
+    }
+
+    for modal in ["EEG", "EOG", "EMG"]:
+        if modal not in modal_out:
+            continue
+        f, psd0, psd1 = modal_out[modal]
+        title = f"{modal} PSD comparison (n0={psd0.shape[0]}, n1={psd1.shape[0]})"
+        out_png = os.path.join(out_dir, f"{modal}_psd_pvalue.png")
+        pvals, m0, m1, s0, s1 = plot_modal_psd_with_pvalue(f, psd0, psd1, title, out_png)
+
+        # 数据落盘
+        np.save(os.path.join(out_dir, f"{modal}_freqs.npy"), f)
+        np.save(os.path.join(out_dir, f"{modal}_pvals.npy"), pvals)
+        np.save(os.path.join(out_dir, f"{modal}_psd_cluster0.npy"), psd0)
+        np.save(os.path.join(out_dir, f"{modal}_psd_cluster1.npy"), psd1)
+
+        df_csv = pd.DataFrame({
+            "freq_hz": f,
+            "mean_psd_c0_db": m0,
+            "std_psd_c0_db": s0,
+            "mean_psd_c1_db": m1,
+            "std_psd_c1_db": s1,
+            "p_value": pvals,
+            "-log10_p": -np.log10(np.maximum(pvals, 1e-300)),
+        })
+        df_csv.to_csv(os.path.join(out_dir, f"{modal}_psd_stats.csv"), index=False)
+
+        summary[modal] = {
+            "n_cluster0": int(psd0.shape[0]),
+            "n_cluster1": int(psd1.shape[0]),
+            "n_freqs": int(len(f)),
+            "png": out_png,
+        }
+
+    with open(os.path.join(out_dir, "summary.json"), "w", encoding="utf-8") as fsum:
+        json.dump(summary, fsum, indent=2)
+
+    print("\n[Done] Outputs saved under:", out_dir)
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
-    args = build_argparser().parse_args()
-
-    am = AnalysisManager(features_dir=args.features_dir,
-                         pattern=args.pattern,
-                         order="patch_channel",
-                         seed=42)
-
-    am.run(save_dir=args.save_dir,
-           level=args.level,
-           mode=args.mode,
-           k=args.k,
-           pca_dim=args.pca_dim,
-           batch_rows=args.batch_rows,
-           normalize=args.normalize,
-           patch_feat=args.patch_feat,
-           channel_agg=args.channel_agg,
-           do_diagnose=args.do_diagnose,
-           do_plot=args.do_plot)
+    main()
