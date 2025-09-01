@@ -122,7 +122,7 @@ def aggregate_modal_psd(root: str,
     for _, row in tqdm(df_pick.iterrows(), total=len(df_pick), desc="Load patches"):
         sid = str(row["subject"])
         eid = int(row["epoch"])
-        pid = int(row["pid"])
+        pid = int(row["patch"])
         lab = int(row["label"])
         apath = row["arrow_path"]
         if not os.path.exists(apath):
@@ -259,32 +259,27 @@ def main():
 
     labels = np.load(labels_path)
     df_idx = pd.read_csv(index_path)  # 期望列：subject,epoch,pid
-    if not set(["subject", "epoch", "pid"]).issubset(df_idx.columns):
+    if not set(["subject", "epoch", "patch"]).issubset(df_idx.columns):
         raise ValueError("patch_index.csv 需包含列：subject,epoch,pid")
 
     if len(labels) != len(df_idx):
         raise ValueError(f"labels({len(labels)}) 与 index({len(df_idx)}) 行数不一致")
 
     df_idx["label"] = labels.astype(int)
-
+    print('统一生成并缓存，避免反复推断')
     # 构造 .arrow 路径（若 index 已含有可用路径，也可跳过）
     # 统一生成并缓存，避免反复推断
     arrow_paths = []
     last_sid, last_width = None, 5
-    for _, r in df_idx.iterrows():
-        sid = str(r["subject"]); eid = int(r["epoch"])
-        if sid != last_sid:
-            subj_dir = os.path.join(args.root, sid)
-            last_width = infer_zero_width(subj_dir, default=5)
-            last_sid = sid
-        apath = os.path.join(args.root, sid, f"{eid:0{last_width}d}.arrow")
-        arrow_paths.append(apath)
-    df_idx["arrow_path"] = arrow_paths
+    df_idx["arrow_path"] = { os.path.join(args.root, str(sid), f"{int(eid):05d}.arrow")
+                             for sid,eid in zip(df_idx["subject"], df_idx["epoch"])}
+    print('分簇抽样')
 
     # 分簇抽样
     g0 = df_idx[df_idx["label"] == 0].sample(n=min(args.per_cluster, (df_idx["label"]==0).sum()), random_state=42)
     g1 = df_idx[df_idx["label"] == 1].sample(n=min(args.per_cluster, (df_idx["label"]==1).sum()), random_state=42)
     df_pick = pd.concat([g0, g1], ignore_index=True)
+    print('聚合并计算 PSD（按模态）')
 
     # 聚合并计算 PSD（按模态）
     modal_out = aggregate_modal_psd(
