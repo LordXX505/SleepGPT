@@ -45,6 +45,7 @@ class AnalysisManager:
         self._total_epochs: Optional[int] = None
         self._rs_count = 0
         self.logger: Optional[logging.Logger] = None
+        self.save_dir = ""
 
     # ---------------- logging ----------------
     def _init_logger(self, save_dir: str):
@@ -284,94 +285,187 @@ class AnalysisManager:
         return self._pipeline_generic_epoch(self.vec_concat1536, out_dim=1536, **kw)
 
     # ---------------- patch-level pipeline ----------------
-    def _pipeline_patch_level(self,
-                              patch_feat: str = "mean768",   # "mean768" | "concat1536"
-                              channel_agg: str = "mean",     # "mean" | "none"
-                              k: int = 2,
-                              pca_dim: int = 64,
-                              batch_rows: int = 200_000,
-                              normalize: bool = True):
+    def _pipeline_patch_level(
+            self,
+            patch_feat: str = "mean768",  # "mean768" | "concat1536"
+            channel_agg: str = "mean",  # "mean" | "none"
+            k: int = 2,
+            pca_dim: int = 64,
+            batch_rows: int = 200_000,  # 累计到这么多行再做一次 partial_fit；会与 pca_dim 取 max
+            normalize: bool = True,
+            output_mode: str = "per_patch",  # "per_patch" | "per_channel_patch" | "both"
+    ):
         """
-        Cluster across ALL patches from all epochs (and all subjects).
-        If channel_agg == "mean": use (15,D) per epoch (i.e., averaged across channels).
-        If channel_agg == "none": use (4,15,D) per epoch → flatten to (60,D).
+        跨所有 subject/epoch 的 patch 级聚类。
+
+        - patch_feat:
+            * "mean768"     : 取 (time,freq) 平均后的 768 维
+            * "concat1536"  : 保留拼接后的 1536 维
+        - channel_agg:
+            * "mean"  : 每 epoch 得到 [15, D]
+            * "none"  : 每 epoch 得到 [4,15,D]，训练时按 (60,D) 压平；预测可输出：
+                - per_channel_patch：60 个 label（索引含通道）
+                - per_patch：对同 patch 的 4 通道做投票得到 15 个 label
+        - output_mode:
+            * "per_patch"（默认）只保存 15 个/epoch；
+            * "per_channel_patch" 保存 60 个/epoch；
+            * "both" 两者都保存（返回 per_patch 为主，同时把 per_channel_patch 也落盘为 .npz）
         """
+
+        assert output_mode in ("per_patch", "per_channel_patch", "both")
         total_epochs = self.count_epochs()
+
+        # --------- 工具：构建每个 epoch 的 patch 矩阵 ---------
+        def build(raw: np.ndarray) -> np.ndarray:
+            """
+            返回：
+              channel_agg == 'mean'  →  (15, D)
+              channel_agg == 'none'  →  (60, D) （训练/拟合阶段直接压平）
+            并记录 (对 'none' 的预测阶段) 的 reshape 形状以便还原 4×15。
+            """
+            M = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg=channel_agg)
+            if channel_agg == "mean":  # (15, D)
+                return M
+            else:  # (4,15,D) -> (60,D)
+                D = M.shape[-1]
+                return M.reshape(-1, D)
+
+        # 维度 D
+        # 用第一条样本探测
+        first_raw = next(self.iter_epochs_raw())[2]
+        P0 = build(first_raw)
+        D = P0.shape[-1]
+        if pca_dim > D:
+            self.log(f"[warn] pca_dim={pca_dim} > feature_dim={D}, 改为 pca_dim={D}")
+            pca_dim = D
+
+        # --------- 模型 ---------
         scaler = StandardScaler() if normalize else None
         ipca = IncrementalPCA(n_components=pca_dim)
         km = MiniBatchKMeans(n_clusters=k, batch_size=4096, random_state=self.seed)
 
-        # ------------ Pass1: fit scaler on patches ------------
+        # 每次 partial_fit 的最小样本行数（防止 < n_components）
+        min_chunk = max(pca_dim, 8192)  # 8k 行起跳，按内存自行调整
+        th_scaler = max(min_chunk, batch_rows)
+        th_ipca = max(min_chunk, batch_rows)
+        th_km = max(min_chunk, batch_rows)
+
+        # =========================================================
+        # Pass1: Scaler（按 patch 行累积）
+        # =========================================================
         if scaler is not None:
-            buf = []; rows = 0
+            buf, rows = [], 0
             self.log(f"\n[Pass1] Fit StandardScaler (patch-level, feat={patch_feat}, agg={channel_agg})")
             for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="Scaler(patch)", ncols=100):
-                P = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg=channel_agg)
-                if channel_agg == "mean":        # (15,D)
-                    buf.append(P); rows += P.shape[0]
-                else:                             # (4,15,D) → (60,D)
-                    P = P.reshape(-1, P.shape[-1])
-                    buf.append(P); rows += P.shape[0]
-                if rows >= batch_rows:
-                    X = np.vstack(buf)           # (N, D)
-                    scaler.partial_fit(X); buf = []; rows = 0
+                P = build(raw)  # (15,D) or (60,D)
+                buf.append(P);
+                rows += P.shape[0]
+                if rows >= th_scaler:
+                    X = np.vstack(buf)  # (N, D)
+                    scaler.partial_fit(X)
+                    buf, rows = [], 0
             if rows > 0:
                 X = np.vstack(buf)
                 scaler.partial_fit(X)
 
-        # ------------ Pass2: fit IPCA on patches ------------
+        # =========================================================
+        # Pass2: IPCA（按 patch 行累积；批大小 ≥ pca_dim）
+        # =========================================================
         self.log("[Pass2] Fit IncrementalPCA (patch-level)")
+        buf, rows = [], 0
         for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="PCA(patch)", ncols=100):
-            P = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg=channel_agg)
-            if channel_agg == "none":
-                P = P.reshape(-1, P.shape[-1])  # (60,D)
-            if scaler is not None:
-                P = scaler.transform(P)
-            ipca.partial_fit(P)
+            P = build(raw)
+            if scaler is not None: P = scaler.transform(P)
+            buf.append(P);
+            rows += P.shape[0]
+            if rows >= th_ipca:
+                X = np.vstack(buf)
+                ipca.partial_fit(X)
+                buf, rows = [], 0
+        if rows >= pca_dim:
+            X = np.vstack(buf)
+            ipca.partial_fit(X)
+        elif rows > 0:
+            self.log(f"[warn] tail rows {rows} < n_components={pca_dim}; skip last IPCA chunk.")
 
-        # ------------ Pass3: fit MiniBatchKMeans on patches ------------
+        # =========================================================
+        # Pass3: MiniBatchKMeans（按 patch 行累积）
+        # =========================================================
         self.log("[Pass3] Fit MiniBatchKMeans (patch-level)")
+        buf, rows = [], 0
         for _sid, _eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="KMeans(patch)", ncols=100):
-            P = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg=channel_agg)
-            if channel_agg == "none":
-                P = P.reshape(-1, P.shape[-1])
-            if scaler is not None:
-                P = scaler.transform(P)
+            P = build(raw)
+            if scaler is not None: P = scaler.transform(P)
             Xp = ipca.transform(P)
-            km.partial_fit(Xp)
+            buf.append(Xp);
+            rows += Xp.shape[0]
+            if rows >= th_km:
+                km.partial_fit(np.vstack(buf))
+                buf, rows = [], 0
+        if rows > 0:
+            km.partial_fit(np.vstack(buf))
 
-        # ------------ Pass4: predict labels for each patch ------------
-        patch_labels: List[int] = []
-        patch_index: List[Tuple[str, int, int]] = []  # (sid, eid, pid)
+        # =========================================================
+        # Pass4: 预测 + 索引
+        # =========================================================
         self.log("[Pass4] Predict (patch-level)")
-        for sid, eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="Predict(patch)", ncols=100):
-            P = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg=channel_agg)
-            if channel_agg == "none":
-                # produce 60 labels with (channel,patch) ordering; we map to pid=[0..14] by patch,
-                # but if you really need per-channel patch ids, extend index to (sid,eid,chan,pid).
-                P = P.reshape(-1, P.shape[-1])   # (60,D)
-                P2 = scaler.transform(P) if scaler is not None else P
-                Xp = ipca.transform(P2)
-                labs = km.predict(Xp).tolist()   # 60 labels
-                # Save with (pid=0..14) replicated per channel? → here store per patch id with channel collapsed by majority
-                # For clarity, we also save raw 60 labels to a separate .npy (optional).
-                # Below we compute per-patch majority across 4 channels:
-                labs_np = np.array(labs, dtype=np.int16).reshape(4, 15)
-                maj = np.apply_along_axis(lambda a: np.bincount(a).argmax(), 0, labs_np)  # (15,)
-                patch_labels.extend(maj.tolist())
-                for pid in range(15):
-                    patch_index.append((sid, eid, pid))
-            else:
-                # (15,D) → 15 labels
-                P2 = scaler.transform(P) if scaler is not None else P
-                Xp = ipca.transform(P2)
-                labs = km.predict(Xp).tolist()
-                patch_labels.extend(labs)
-                for pid in range(15):
-                    patch_index.append((sid, eid, pid))
+        per_patch_labels: List[int] = []
+        per_patch_index: List[Tuple[str, int, int]] = []  # (sid, eid, pid)
 
-        labels_arr = np.array(patch_labels, dtype=np.int16)
-        return scaler, ipca, km, labels_arr, patch_index
+        per_ch_patch_labels: List[int] = []  # 可选
+        per_ch_patch_index: List[Tuple[str, int, int, int]] = []  # (sid, eid, ch, pid)
+
+        for sid, eid, raw in tqdm(self.iter_epochs_raw(), total=total_epochs, desc="Predict(patch)", ncols=100):
+            if channel_agg == "mean":
+                # (15, D) → 15 labels
+                P = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg="mean")  # (15,D)
+                P2 = scaler.transform(P) if scaler is not None else P
+                Xp = ipca.transform(P2)
+                labs = km.predict(Xp)  # (15,)
+                per_patch_labels.extend(labs.tolist())
+                for pid in range(15):
+                    per_patch_index.append((sid, eid, pid))
+
+            else:
+                # channel_agg == "none": (4,15,D)
+                M = self.patches_15xD(raw, patch_feat=patch_feat, channel_agg="none")  # (4,15,D)
+                P = M.reshape(-1, M.shape[-1])  # (60,D)
+                P2 = scaler.transform(P) if scaler is not None else P
+                Xp = ipca.transform(P2)
+                labs60 = km.predict(Xp).reshape(4, 15)  # (4,15)
+
+                if output_mode in ("per_channel_patch", "both"):
+                    per_ch_patch_labels.extend(labs60.ravel().tolist())
+                    for ch in range(4):
+                        for pid in range(15):
+                            per_ch_patch_index.append((sid, eid, ch, pid))
+
+                if output_mode in ("per_patch", "both"):
+                    # 多数投票 → 15
+                    maj = np.apply_along_axis(lambda a: np.bincount(a).argmax(), 0, labs60)  # (15,)
+                    per_patch_labels.extend(maj.tolist())
+                    for pid in range(15):
+                        per_patch_index.append((sid, eid, pid))
+
+        # ------- 返回与保存（以 per_patch 为主）-------
+        labels_arr = np.array(per_patch_labels, dtype=np.int16)
+        # 索引保存：主 labels（per_patch）
+        np.save(os.path.join(self.save_dir, "patch_labels.npy"), labels_arr)
+        with open(os.path.join(self.save_dir, "patch_index.csv"), "w", encoding="utf-8") as fw:
+            fw.write("subject,epoch,patch\n")
+            for s, e, p in per_patch_index:
+                fw.write(f"{s},{e},{p}\n")
+
+        # 如果需要 per_channel_patch，一并落盘（npz + csv）
+        if output_mode in ("per_channel_patch", "both"):
+            labels_ch = np.array(per_ch_patch_labels, dtype=np.int16)
+            np.save(os.path.join(self.save_dir, "patch_labels_4x15.npy"), labels_ch)
+            with open(os.path.join(self.save_dir, "patch_index_4x15.csv"), "w", encoding="utf-8") as fw:
+                fw.write("subject,epoch,channel,patch\n")
+                for s, e, ch, p in per_ch_patch_index:
+                    fw.write(f"{s},{e},{ch},{p}\n")
+
+        return scaler, ipca, km, labels_arr, per_patch_index
 
     # ---------------- visualization ----------------
     def visualize_kmeans_pca2d_epoch(self, save_dir: str, mode: str, sample_n: int = 200_000):
@@ -618,6 +712,7 @@ class AnalysisManager:
             do_diagnose: bool = True,
             do_plot: bool = True):
         os.makedirs(save_dir, exist_ok=True)
+        self.save_dir = save_dir
         self._init_logger(save_dir)
         t0 = time.time()
         self.log(f"Start run: level={level}, mode={mode}, k={k}, pca_dim={pca_dim}, normalize={normalize}")
