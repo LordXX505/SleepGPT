@@ -1443,7 +1443,7 @@ class Model(LightningModule):
         self.epoch_end(stage="validation")
 
     def write_one_epoch(self, save_dir, name, index, stage, feature):
-        if stage != 5:
+        if stage != 4:
             return
         path = os.path.join(save_dir, f"{name}.h5")
         with h5py.File(path, "a") as f:

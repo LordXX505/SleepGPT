@@ -176,8 +176,8 @@ def main():
     ap.add_argument("--separation_k", type=int, default=2, help="tonic 需要与任何事件相隔的 patch 数（默认2，即 4s 间隔）")
 
     # REM 过滤
-    ap.add_argument("--rem_values", nargs="+", default=["REM", "R", "5", 5],
-                    help="判定为 REM 的 stage 值集合（字符串或整数都可以），默认 ['REM','R','5',5]")
+    ap.add_argument("--rem_values", nargs="+", default=["REM", "R", "4", 4],
+                    help="判定为 REM 的 stage 值集合（字符串或整数都可以），默认 ['REM','R','4',4]")
     # 可选：只对清单中的 subject/epoch 生成（例如你已有 REM 清单时）
     ap.add_argument("--restrict_index", type=str, default=None,
                     help="可选 CSV（columns: subject,epoch），仅处理出现在清单内的样本")
