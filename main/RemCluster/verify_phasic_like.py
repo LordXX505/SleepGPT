@@ -36,29 +36,25 @@ def read_arrow_matrix(path: str) -> np.ndarray:
     你的数据结构之前描述为 channel x 3000。
     """
     try:
-        reader = pa.ipc.RecordBatchFileReader(pa.memory_map(path, "r"))
-        tbl = reader.read_all()
+        tables = pa.ipc.RecordBatchFileReader(
+            pa.memory_map(path, "r")
+        ).read_all()
     except Exception as e:
-        raise RuntimeError(f"Error reading PyArrow file {path}: {e}")
+        raise RuntimeError(f"Error reading PyArrow file {file_path}: {e}")
+    data = tables['x'][0]
 
-    # 尝试列名 'x'，否则退化为第 0 列
-    try:
-        col = tbl.column("x")
-    except KeyError:
-        col = tbl.columns[0]
-
-    # 转 numpy (C, T)
-    if isinstance(col, pa.ChunkedArray):
-        arrs = []
-        for chunk in col.chunks:
-            arrs.extend(chunk.to_pylist())
-        mat = np.asarray(arrs, dtype=np.float32)
+    if isinstance(data, pa.ChunkedArray):
+        x = np.array(data.to_pylist())
+    elif isinstance(data, pa.Array) or isinstance(data, pa.ListScalar):
+        x = np.array(data.as_py())
     else:
-        mat = np.asarray(col.to_pylist(), dtype=np.float32)
+        x = np.array(data)
+    x = x.astype(np.float32)
+    x = x * 1e6
 
-    if mat.ndim == 1:
-        mat = mat.reshape(1, -1)
-    return mat  # (C, T)
+    if x.ndim == 1:
+        x = x.reshape(1, -1)
+    return x  # (C, T)
 
 
 # ----------------------------
@@ -68,7 +64,7 @@ def stratified_by_label(df_idx: pd.DataFrame, per_cluster: int, seed: int = 42) 
     """按 label 分层抽样，每个簇最多取 per_cluster 个 patch"""
     rng = np.random.default_rng(seed)
     parts = []
-    for lab, g in df_idx.groupby("label"):
+    for lab, g in tqdm(df_idx.groupby("label")):
         n = min(per_cluster, len(g))
         parts.append(g.sample(n=n, random_state=int(rng.integers(1_000_000_000))))
     out = pd.concat(parts, ignore_index=True)
@@ -79,7 +75,7 @@ def stratified_by_label_pid(df_idx: pd.DataFrame, per_bucket: int, seed: int = 4
     """按 (label, pid) 分层抽样，每个桶最多取 per_bucket 个，覆盖 15 个 patch 位置"""
     rng = np.random.default_rng(seed)
     parts = []
-    for (lab, pid), g in df_idx.groupby(["label", "pid"]):
+    for (lab, pid), g in tqdm(df_idx.groupby(["label", "patch"])):
         n = min(per_bucket, len(g))
         parts.append(g.sample(n=n, random_state=int(rng.integers(1_000_000_000))))
     out = pd.concat(parts, ignore_index=True)
@@ -164,33 +160,35 @@ def aggregate_modal_psd(
         "EMG": {0: [], 1: []},
     }
     width_cache = {}
+    print("\n[Begin] aggregate_modal_psd")
 
     for _, row in tqdm(df_pick.iterrows(), total=len(df_pick), desc="Load patches"):
         sid = str(row["subject"])
         eid = int(row["epoch"])
-        pid = int(row["pid"])
+        pid = int(row["patch"])
         lab = int(row["label"])
 
         apath = row["arrow_path"] if "arrow_path" in row and isinstance(row["arrow_path"], str) else None
         if not apath or not os.path.exists(apath):
             apath = lazy_arrow_path(root, sid, eid, width_cache)
             if apath is None:
-                # 找不到就跳过
+                print(f'Path: root, sid, eid, width_cache [{root, sid, eid, width_cache}] is None', )
                 continue
 
         try:
             mat = read_arrow_matrix(apath)  # (C, T)
         except Exception:
-            continue
-
+            raise RuntimeError(f"Path: apath {apath} is None")
+        flag = False
         # EEG
         if eeg_idx:
             try:
                 eeg_avg = mat[eeg_idx, :].mean(axis=0)
                 patch = slice_patch(eeg_avg, pid, fs, patch_sec=patch_sec)
                 modal_signals["EEG"][lab].append(patch)
-            except Exception:
-                pass
+                flag = True
+            except Exception as e:
+                print(e)
 
         # EOG
         if eog_idx:
@@ -198,8 +196,10 @@ def aggregate_modal_psd(
                 eog_avg = mat[eog_idx, :].mean(axis=0)
                 patch = slice_patch(eog_avg, pid, fs, patch_sec=patch_sec)
                 modal_signals["EOG"][lab].append(patch)
-            except Exception:
-                pass
+                flag = True
+
+            except Exception as e:
+                print(e)
 
         # EMG
         if emg_idx:
@@ -207,9 +207,12 @@ def aggregate_modal_psd(
                 emg_avg = mat[emg_idx, :].mean(axis=0)
                 patch = slice_patch(emg_avg, pid, fs, patch_sec=patch_sec)
                 modal_signals["EMG"][lab].append(patch)
-            except Exception:
-                pass
+                flag = True
+            except Exception as e:
+                print(e)
 
+        if flag is False:
+            raise RuntimeError
     out = {}
     for key in ["EEG", "EOG", "EMG"]:
         lst0 = modal_signals[key][0]
@@ -291,6 +294,7 @@ def main():
     ap.add_argument("--emg_idx", type=int, nargs="*", default=[], help="EMG 通道索引，例如 --emg_idx 4")
 
     args = ap.parse_args()
+    print(f'args: {args}')
     out_dir = os.path.join(args.result_dir, "diag_patch_psd")
     os.makedirs(out_dir, exist_ok=True)
 
@@ -302,9 +306,9 @@ def main():
 
     labels = np.load(labels_path)
     df_idx = pd.read_csv(index_path)  # 期望列：subject,epoch,pid
-    must_cols = {"subject", "epoch", "pid"}
+    must_cols = {"subject", "epoch", "patch"}
     if not must_cols.issubset(df_idx.columns):
-        raise ValueError("patch_index.csv 需包含列：subject,epoch,pid")
+        raise ValueError("patch_index.csv 需包含列：subject,epoch,patch")
 
     if len(labels) != len(df_idx):
         raise ValueError(f"labels({len(labels)}) 与 index({len(df_idx)}) 行数不一致")
@@ -321,13 +325,15 @@ def main():
     # 这里采用“按 subject 分组一次性推断宽度，再拼路径”，减少文件系统访问
     width_cache = {}
     arrow_paths = []
-    for _, r in df_pick.iterrows():
+    for _, r in tqdm(df_pick.iterrows()):
         sid = str(r["subject"]); eid = int(r["epoch"])
         if sid not in width_cache:
             subj_dir = os.path.join(args.root, sid)
-            width_cache[sid] = infer_zero_width(subj_dir, default=5)
+            width_cache[sid] = 5
         apath = os.path.join(args.root, sid, f"{eid:0{width_cache[sid]}d}.arrow")
         arrow_paths.append(apath)
+    print("\n[Done] arrow_paths")
+
     df_pick = df_pick.copy()
     df_pick["arrow_path"] = arrow_paths
 
@@ -342,7 +348,7 @@ def main():
         nperseg=args.nperseg,
         patch_sec=2.0,
     )
-
+    print("\n[Done] aggregate_modal_psd")
     # —— 绘图与落盘 ——
     summary = {
         "sample_mode": args.sample_mode,
@@ -358,6 +364,7 @@ def main():
             continue
         f, psd0, psd1 = modal_out[modal]
         title = f"{modal} PSD comparison (n0={psd0.shape[0]}, n1={psd1.shape[0]})"
+        print(f'Save png title: {title}')
         out_png = os.path.join(out_dir, f"{modal}_psd_pvalue.png")
         pvals, m0, m1, s0, s1 = plot_modal_psd_with_pvalue(f, psd0, psd1, title, out_png)
 
