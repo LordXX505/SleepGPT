@@ -229,20 +229,19 @@ class PseudoLabelValidator:
         os.makedirs(vis_dir, exist_ok=True)
         width_cache: Dict[str, int] = {}
 
-        def _plot_modal(modal: str, idxs: List[int]):
-            # 组装 (N, T) 后画网格子图
-            mats = []
-            titles = []
-            cidx = getattr(self, f"{modal.lower()}_idx")
+        def _plot_modal(modal_name: str, idxs: List[Tuple[str, int, int]], tag: str):
+            """modal_name: 'EEG'/'EOG'/'EMG'; tag: 'cluster0' 等，仅用于标题/文件名。"""
+            cidx = getattr(self, f"{modal_name.lower()}_idx")
             if not cidx:
                 return
-            for (sid, eid, pid) in idxs:
+            mats, titles = [], []
+            for (sid, eid, pid) in idxs[:per_label_show]:
                 p = lazy_arrow_path(self.root, sid, eid, width_cache)
                 if p is None:
                     continue
                 try:
-                    mat = read_arrow_matrix(p)
-                    avg = mat[cidx, :].mean(axis=0)
+                    mat = read_arrow_matrix(p)  # (C, T)
+                    avg = mat[cidx, :].mean(axis=0)  # 合并该模态多个通道
                     seg = slice_patch(avg, pid, self.fs, self.patch_sec)
                     mats.append(seg)
                     titles.append(f"{sid} e{eid} p{pid}")
@@ -250,8 +249,8 @@ class PseudoLabelValidator:
                     continue
             if not mats:
                 return
-            # 画图（每行 4 张）
-            N = min(per_label_show, len(mats))
+
+            N = len(mats)
             cols = 4
             rows = int(np.ceil(N / cols))
             plt.figure(figsize=(4 * cols, 2.2 * rows))
@@ -261,20 +260,20 @@ class PseudoLabelValidator:
                 ax.set_xticks([])
                 ax.set_yticks([])
                 ax.set_title(titles[i], fontsize=8)
-            plt.suptitle(f"{modal} examples", y=0.99)
-            out = os.path.join(vis_dir, f"{modal}_examples.png")
+            plt.suptitle(f"{modal_name} examples · {tag}", y=0.99)
             plt.tight_layout(rect=[0, 0, 1, 0.97])
+            out = os.path.join(vis_dir, f"{modal_name}_{tag}_examples.png")
             plt.savefig(out, dpi=200)
             plt.close()
 
-        # 为每个簇画 EEG/EOG/EMG
+        # 为每个簇分别画
         for lab in (0, 1):
-            idxs = samples[lab][:per_label_show]
+            idxs = samples.get(lab, [])
+            if not idxs:
+                continue
             tag = f"cluster{lab}"
             for modal in ["EEG", "EOG", "EMG"]:
-                cidx = getattr(self, f"{modal.lower()}_idx")
-                if cidx:
-                    _plot_modal(modal=f"{modal}_{tag}", idxs=idxs)
+                _plot_modal(modal_name=modal, idxs=idxs, tag=tag)
 
     # ---------- PSD 分析与 p 值图 ----------
     def psd_compare(self, samples: Dict[int, List[Tuple[str, int, int]]]):
