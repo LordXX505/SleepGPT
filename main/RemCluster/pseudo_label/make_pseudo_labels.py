@@ -64,9 +64,9 @@ def read_arrow_epoch(path: str):
         x = np.array(data.as_py())
     else:
         x = np.array(data)
-    x = x.astype(np.float32)
-    stage = np.array(tbl["stage"]).astype(np.long)
-    return x, stage
+    x = x.astype(np.float32) * 1e6
+    stage = np.array(tbl["stage"]).astype(np.int8)
+    return x, stage[0]
 
 
 # ---------------- Patch / 规则 ----------------
@@ -124,12 +124,14 @@ def build_pseudo_labels_for_epoch(mat: np.ndarray,
 
     has_event = np.zeros(n_patch, dtype=bool)
     is_tonic  = np.zeros(n_patch, dtype=bool)
+    ev_sum = 0
     for pid in range(n_patch):
         p = slice_patch(eog_avg, pid, fs, 2.0)
         ev = detect_eog_deflections(p, fs=fs, amp_th=amp_phasic, max_width_ms=max_width_ms)
+        ev_sum += ev
         has_event[pid] = (ev >= 1)
         is_tonic[pid] = (np.max(np.abs(p)) < amp_tonic)
-
+    print(f'ev_sum: {ev_sum}')
     labels = np.full(n_patch, -1, dtype=np.int8)
     # phasic by consecutive
     if min_consecutive <= 1:
@@ -187,7 +189,7 @@ def main():
 
     # 标准化 REM 值为字符串集合，比较时统一 str(stage)
     rem_allow: Set[str] = set(str(v) for v in args.rem_values)
-
+    print(f'rem_allow: {rem_allow}')
     restrict = None
     if args.restrict_index and os.path.exists(args.restrict_index):
         df = pd.read_csv(args.restrict_index)
@@ -220,9 +222,9 @@ def main():
             apath = os.path.join(subj_dir, f"{eid:0{width}d}.arrow")
             try:
                 mat, stage = read_arrow_epoch(apath)
-            except Exception:
+            except Exception as e:
+                print(f'e: {e}')
                 continue
-
             # 仅处理 REM 期
             if str(stage) not in rem_allow:
                 continue
@@ -251,7 +253,7 @@ def main():
 
             n_epochs_used += 1
             total_epochs_all += 1
-
+        print(f'sid: {sid}, n_epochs_used: {n_epochs_used}, n_phasic: {n_phasic}, n_tonic: {n_tonic}')
         # 记录每个 subject 的计数
         if n_epochs_used > 0:
             rows_subject_log.append((

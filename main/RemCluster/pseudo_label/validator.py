@@ -51,33 +51,25 @@ def lazy_arrow_path(root: str, subject: str, epoch: int, cache: Dict[str, int]) 
         cache[subject] = infer_zero_width(subj_dir, 5)
     width = cache[subject]
     p = os.path.join(subj_dir, f"{epoch:0{width}d}.arrow")
+    if not os.path.exists(p):
+        print(f'p: {p}')
     return p if os.path.exists(p) else None
 
 
 def read_arrow_matrix(path: str) -> np.ndarray:
-    """读取单个 epoch 的原始矩阵，返回 (C, T) float32"""
-    try:
-        reader = pa.ipc.RecordBatchFileReader(pa.memory_map(path, "r"))
-        tbl = reader.read_all()
-    except Exception as e:
-        raise RuntimeError(f"Error reading PyArrow file {path}: {e}")
-
-    try:
-        col = tbl.column("x")
-    except KeyError:
-        col = tbl.columns[0]
-
-    if isinstance(col, pa.ChunkedArray):
-        arrs = []
-        for chunk in col.chunks:
-            arrs.extend(chunk.to_pylist())
-        mat = np.asarray(arrs, dtype=np.float32)
+    """读取单个 epoch：返回 (signal, stage)，signal shape=(C, T)"""
+    reader = pa.ipc.RecordBatchFileReader(pa.memory_map(path, "r"))
+    tbl = reader.read_all()
+    data = tbl['x'][0]
+    if isinstance(data, pa.ChunkedArray):
+        x = np.array(data.to_pylist())
+    elif isinstance(data, pa.Array) or isinstance(data, pa.ListScalar):
+        x = np.array(data.as_py())
     else:
-        mat = np.asarray(col.to_pylist(), dtype=np.float32)
-    if mat.ndim == 1:
-        mat = mat.reshape(1, -1)
-    return mat  # (C, T)
+        x = np.array(data)
+    x = x.astype(np.float32) * 1e6
 
+    return x
 
 def slice_patch(signal_1d: np.ndarray, pid: int, fs: int, patch_sec: float = 2.0) -> np.ndarray:
     """从 30s epoch 中切出第 pid 个 2s patch（0-based）"""
@@ -281,6 +273,7 @@ class PseudoLabelValidator:
         out = {}
         for modal, cidx in [("EEG", self.eeg_idx), ("EOG", self.eog_idx), ("EMG", self.emg_idx)]:
             if not cidx:
+                print(f'[wrong] psd_compare, cidx: {cidx}')
                 continue
 
             data = {0: [], 1: []}
@@ -294,10 +287,13 @@ class PseudoLabelValidator:
                         avg = mat[cidx, :].mean(axis=0)
                         seg = slice_patch(avg, pid, self.fs, self.patch_sec)
                         data[lab].append(seg)
-                    except Exception:
+                    except Exception as e:
+                        print(f'[wrong] psd_compare, e: {e}')
                         continue
 
             if len(data[0]) == 0 or len(data[1]) == 0:
+                print(f'[wrong] psd_compare, data: {len(data[0]), len(data[1])}')
+
                 continue
 
             sig0 = np.stack(data[0], 0)
@@ -313,8 +309,7 @@ class PseudoLabelValidator:
             # 逐频点 t 检验
             pvals = np.array([ttest_ind(psd0[:, i], psd1[:, i], equal_var=False).pvalue for i in range(len(f))])
             sig_mask = pvals < 0.05
-
-            # 绘图
+                                                        # 绘图
             m0, s0 = psd0.mean(0), psd0.std(0)
             m1, s1 = psd1.mean(0), psd1.std(0)
             fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
